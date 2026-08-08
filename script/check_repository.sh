@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "repository check requires ripgrep (rg)" >&2
+  exit 1
+fi
+
 required_files=(
   LICENSE
   README.md

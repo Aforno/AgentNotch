@@ -25,6 +25,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Select Swift 6 toolchain
+        if: matrix.os == 'macos-14'
+        run: sudo xcode-select --switch /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Install repository tooling
+        run: brew install ripgrep
+
       - name: Show toolchain
         run: |
           swift --version
