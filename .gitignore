@@ -1,0 +1,15 @@
+.build/
+dist/
+.DS_Store
+*.xcresult
+.swiftpm/
+DerivedData/
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+.env
+.env.*
+!.env.example
+.firecrawl/
+.grok/

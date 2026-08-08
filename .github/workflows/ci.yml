@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          sw_vers
+          uname -m
+
+      - name: Verify repository hygiene
+        run: ./script/check_repository.sh
+
+      - name: Run debug tests
+        run: swift test
+
+      - name: Run release tests
+        run: swift test -c release
+
+      - name: Verify release package structure
+        if: matrix.os == 'macos-15'
+        run: ./script/package_release.sh --adhoc
