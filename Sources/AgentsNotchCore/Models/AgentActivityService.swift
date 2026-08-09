@@ -12,10 +12,17 @@ public final class AgentActivityService {
         self.sessions = sessions
             .filter { !Self.isOrphanedGrokStart($0) }
             .sorted(by: Self.orderSessions)
+        // Match replaceSessions: seed the temporary attention surface when the
+        // caller restores waiting sessions through the initializer.
+        attentionEvent = latestWaitingAttentionEvent()
     }
 
     public var activeSessions: [AgentSession] {
         sessions.filter(\.isActive)
+    }
+
+    public var activeGroupCount: Int {
+        sessionGroupRoots.filter { groupIsActive(rootID: $0.id) }.count
     }
 
     public var recentSessions: [AgentSession] {
@@ -53,15 +60,15 @@ public final class AgentActivityService {
     /// Inactive children are allowed to fill remaining slots, but they must
     /// not consume the budget that belongs to concurrent active sessions.
     public var listSessions: [AgentSession] {
-        let hierarchical = hierarchicalSessions
-        let activeIDs = Set(hierarchical.filter(\.isActive).map(\.id))
-        let limit = max(3, activeIDs.count)
-        var inactiveSlots = limit - activeIDs.count
+        let roots = sessionGroupRoots
+        let activeRootIDs = Set(roots.filter { groupIsActive(rootID: $0.id) }.map(\.id))
+        let limit = max(3, activeRootIDs.count)
+        var inactiveSlots = limit - activeRootIDs.count
         var result: [AgentSession] = []
         result.reserveCapacity(limit)
 
-        for session in hierarchical {
-            if activeIDs.contains(session.id) {
+        for session in roots {
+            if activeRootIDs.contains(session.id) {
                 result.append(session)
             } else if inactiveSlots > 0 {
                 result.append(session)
@@ -69,6 +76,33 @@ public final class AgentActivityService {
             }
         }
         return result
+    }
+
+    private var sessionGroupRoots: [AgentSession] {
+        let knownIDs = Set(sessions.map(\.id))
+        return hierarchicalSessions.filter { session in
+            guard let parentID = session.parentSessionId else { return true }
+            return !knownIDs.contains(parentID)
+        }
+    }
+
+    private func groupIsActive(rootID: String) -> Bool {
+        sessions.contains { session in
+            session.isActive && belongsToGroup(session, rootID: rootID)
+        }
+    }
+
+    private func belongsToGroup(_ session: AgentSession, rootID: String) -> Bool {
+        var current = session
+        var visited = Set<String>()
+        while visited.insert(current.id).inserted {
+            if current.id == rootID { return true }
+            guard let parentID = current.parentSessionId,
+                  let parent = sessions.first(where: { $0.id == parentID })
+            else { return false }
+            current = parent
+        }
+        return false
     }
 
     public func children(of sessionID: String) -> [AgentSession] {
@@ -95,10 +129,28 @@ public final class AgentActivityService {
             advancesCurrentState = true
         }
 
+        // SessionEnd/Stop only complete the mapped sessionId. Cascade to active
+        // descendants so composite subagent rows do not stay isActive after the
+        // parent ends without a per-child SubagentStop.
+        let cascadedTerminal = advancesCurrentState
+            && (event.resolvedState == .completed || event.resolvedState == .failed)
+        if cascadedTerminal {
+            completeActiveDescendants(
+                of: event.sessionId,
+                as: event.resolvedState,
+                at: event.timestamp
+            )
+        }
+
         sessions.sort(by: Self.orderSessions)
         trimHistory()
         if advancesCurrentState {
-            updateAttentionPresentation(for: event)
+            if cascadedTerminal {
+                // Rebuild attention: a waiting child may have been cascade-completed.
+                attentionEvent = latestWaitingAttentionEvent()
+            } else {
+                updateAttentionPresentation(for: event)
+            }
         }
         onSessionsChanged?(sessions)
     }
@@ -248,6 +300,27 @@ public final class AgentActivityService {
             }
         }
         return result
+    }
+
+    private func completeActiveDescendants(
+        of parentID: String,
+        as state: AgentState,
+        at timestamp: Date
+    ) {
+        let descendantIDs = Set(descendants(of: parentID).map(\.id))
+        guard !descendantIDs.isEmpty else { return }
+        for index in sessions.indices
+            where descendantIDs.contains(sessions[index].id) && sessions[index].isActive
+        {
+            sessions[index].state = state
+            sessions[index].completedAt = timestamp
+            sessions[index].updatedAt = max(sessions[index].updatedAt, timestamp)
+            if state == .completed {
+                sessions[index].currentActivity = "Session ended"
+            } else if state == .failed {
+                sessions[index].currentActivity = "Session failed"
+            }
+        }
     }
 
     private static func orderSessions(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {

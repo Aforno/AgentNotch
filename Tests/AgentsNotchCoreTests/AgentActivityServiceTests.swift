@@ -431,6 +431,35 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testListCollapsesActiveChildrenIntoParentWorkflowRow() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "workflow",
+            provider: .grok,
+            task: "Audit and fix",
+            state: .running,
+            timestamp: base
+        ))
+        for index in 0..<4 {
+            service.ingest(AgentEvent(
+                type: .activity,
+                sessionId: "worker-\(index)",
+                provider: .grok,
+                state: .running,
+                timestamp: base.addingTimeInterval(TimeInterval(index + 1)),
+                parentSessionId: "workflow",
+                agentRole: "audit-\(index)"
+            ))
+        }
+
+        XCTAssertEqual(service.listSessions.map(\.id), ["workflow"])
+        XCTAssertEqual(service.children(of: "workflow").count, 4)
+        XCTAssertEqual(service.activeGroupCount, 1)
+    }
+
+    @MainActor
     func testListSessionsCapsAtThreeIncludingActive() {
         let service = AgentActivityService()
         let base = Date(timeIntervalSince1970: 100)

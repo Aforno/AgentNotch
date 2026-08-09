@@ -34,6 +34,9 @@ public final class UnixSocketServer: @unchecked Sendable {
 
     /// Per-client read deadline so one idle peer cannot stall event delivery.
     private static let clientReadTimeout = timeval(tv_sec: 2, tv_usec: 0)
+    /// Serializes check-unlink-bind across instances so concurrent start() calls
+    /// cannot both observe not-accepting and orphan each other's listener path.
+    private static let startLock = NSLock()
 
     private let socketURL: URL
     private let eventHandler: EventHandler
@@ -75,6 +78,11 @@ public final class UnixSocketServer: @unchecked Sendable {
                 ofItemAtPath: socketURL.deletingLastPathComponent().path
             )
         }
+
+        // Hold the process-wide lock across accept-check, unlink, bind, and listen
+        // so a second starter cannot unlink a path the first just bound.
+        Self.startLock.lock()
+        defer { Self.startLock.unlock() }
 
         // Never steal a live listener. Only unlink a stale path that nothing accepts.
         if isSocketAccepting(at: socketURL.path) {
@@ -177,7 +185,8 @@ public final class UnixSocketServer: @unchecked Sendable {
 
             clientsQueue.async { [weak self] in
                 guard let self else {
-                    Darwin.close(client)
+                    // stop()/deinit already closed every tracked client fd. Closing
+                    // again here races descriptor reuse and can drop another file.
                     return
                 }
                 self.read(client: client)

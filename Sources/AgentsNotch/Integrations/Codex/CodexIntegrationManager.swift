@@ -167,15 +167,22 @@ final class ProviderIntegrationManager {
         var hooks = root["hooks"] as? [String: Any] ?? [:]
 
         for eventName in eventNames {
-            var groups = hooks[eventName] as? [[String: Any]] ?? []
-            groups.removeAll(where: isAgentsNotchGroup)
-            groups.append([
+            let newGroup: [String: Any] = [
                 "hooks": [[
                     "type": "command",
                     "command": quotedCommand,
                     "timeout": hookTimeout(for: eventName),
                 ]],
-            ])
+            ]
+            // Missing key: install cleanly. Non-array/mixed values: leave untouched
+            // so install never destroys the user's pre-existing hooks for that event.
+            if hooks[eventName] == nil {
+                hooks[eventName] = [newGroup]
+                continue
+            }
+            guard var groups = hooks[eventName] as? [[String: Any]] else { continue }
+            groups = groups.compactMap { removeAgentsNotchHandlers(from: $0) }
+            groups.append(newGroup)
             hooks[eventName] = groups
         }
 
@@ -189,8 +196,9 @@ final class ProviderIntegrationManager {
         var hooks = root["hooks"] as? [String: Any] ?? [:]
 
         for eventName in eventNames {
-            var groups = hooks[eventName] as? [[String: Any]] ?? []
-            groups.removeAll(where: isAgentsNotchGroup)
+            // Non-array event values are left intact; never delete the key on cast failure.
+            guard var groups = hooks[eventName] as? [[String: Any]] else { continue }
+            groups = groups.compactMap { removeAgentsNotchHandlers(from: $0) }
             if groups.isEmpty {
                 hooks.removeValue(forKey: eventName)
             } else {
@@ -223,16 +231,52 @@ final class ProviderIntegrationManager {
         else { return false }
         return eventNames.allSatisfy { eventName in
             let groups = hooks[eventName] as? [[String: Any]] ?? []
-            return groups.contains(where: isAgentsNotchGroup)
+            return groups.contains(where: groupContainsAgentsNotchHandler)
         }
     }
 
-    private func isAgentsNotchGroup(_ group: [String: Any]) -> Bool {
+    /// Drops only Agents Notch handlers from a matcher group. Returns nil when the
+    /// group has no handlers left so install/uninstall can remove empty groups.
+    private func removeAgentsNotchHandlers(from group: [String: Any]) -> [String: Any]? {
+        guard var handlers = group["hooks"] as? [[String: Any]] else { return group }
+        handlers.removeAll { handler in
+            guard let command = handler["command"] as? String else { return false }
+            return isAgentsNotchCommand(command)
+        }
+        guard !handlers.isEmpty else { return nil }
+        var updated = group
+        updated["hooks"] = handlers
+        return updated
+    }
+
+    private func groupContainsAgentsNotchHandler(_ group: [String: Any]) -> Bool {
         guard let handlers = group["hooks"] as? [[String: Any]] else { return false }
         return handlers.contains { handler in
             guard let command = handler["command"] as? String else { return false }
-            return command.contains(installedRelayURL.path)
+            return isAgentsNotchCommand(command)
         }
+    }
+
+    /// True when `command` invokes the installed relay binary (as the executable),
+    /// not merely mentions its path in an echo/logging string.
+    private func isAgentsNotchCommand(_ command: String) -> Bool {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == quotedCommand { return true }
+
+        let path = installedRelayURL.path
+        let quotedPath = "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
+        if commandStartsWithExecutable(trimmed, executable: quotedPath)
+            || commandStartsWithExecutable(trimmed, executable: path)
+        {
+            return true
+        }
+        return false
+    }
+
+    private func commandStartsWithExecutable(_ command: String, executable: String) -> Bool {
+        guard command.hasPrefix(executable) else { return false }
+        let rest = command.dropFirst(executable.count)
+        return rest.isEmpty || rest.first?.isWhitespace == true
     }
 
     private func hookTimeout(for eventName: String) -> Int {

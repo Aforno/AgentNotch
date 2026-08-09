@@ -3,8 +3,8 @@ import SwiftUI
 
 struct CollapsedNotchView: View {
     let sessions: [AgentSession]
+    let activeCount: Int
 
-    private var activeCount: Int { sessions.filter(\.isActive).count }
     private var attention: AgentSession? { sessions.first(where: \.needsAttention) }
 
     var body: some View {

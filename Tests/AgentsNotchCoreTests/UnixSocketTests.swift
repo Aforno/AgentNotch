@@ -23,9 +23,13 @@ final class UnixSocketTests: XCTestCase {
             state: .running,
             parentSessionId: "parent",
             agentRole: "reviewer",
-            plan: AgentPlan(steps: [
-                AgentStep(id: "verify", title: "Run tests", status: .inProgress),
-            ]),
+            plan: AgentPlan(
+                title: "Release readiness",
+                explanation: "Verify the complete event survives transport.",
+                steps: [
+                    AgentStep(id: "verify", title: "Run tests", status: .inProgress),
+                ]
+            ),
             workflowUpdate: AgentWorkflowUpdate(
                 id: "release",
                 title: "Release",

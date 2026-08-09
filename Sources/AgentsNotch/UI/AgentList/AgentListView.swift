@@ -3,9 +3,19 @@ import SwiftUI
 
 struct AgentListView: View {
     let sessions: [AgentSession]
+    let relatedSessions: [AgentSession]
     let topInset: CGFloat
     let onOpenSettings: () -> Void
     let onSelect: (String) -> Void
+
+    static func rowsHeight(for sessions: [AgentSession], relatedSessions: [AgentSession]) -> CGFloat {
+        sessions.reduce(0) { height, session in
+            height + AgentRowView.preferredHeight(
+                for: session,
+                children: childSessions(of: session, in: relatedSessions)
+            )
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +34,10 @@ struct AgentListView: View {
                     Button {
                         onSelect(session.id)
                     } label: {
-                        AgentRowView(session: session)
+                        AgentRowView(
+                            session: session,
+                            children: childSessions(of: session)
+                        )
                     }
                     .buttonStyle(.plain)
 
@@ -51,5 +64,13 @@ struct AgentListView: View {
             .help("Settings")
             .accessibilityLabel("Open Settings")
         }
+    }
+
+    private static func childSessions(of session: AgentSession, in sessions: [AgentSession]) -> [AgentSession] {
+        sessions.filter { $0.parentSessionId == session.id }
+    }
+
+    private func childSessions(of session: AgentSession) -> [AgentSession] {
+        Self.childSessions(of: session, in: relatedSessions)
     }
 }

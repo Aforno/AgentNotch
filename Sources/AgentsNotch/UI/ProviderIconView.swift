@@ -2,7 +2,8 @@ import AgentsNotchCore
 import AppKit
 import SwiftUI
 
-/// A compact, monochrome provider mark that follows the surrounding label color.
+/// A compact provider mark. Template assets follow the surrounding label color,
+/// while color-dependent brand artwork keeps its original rendering.
 /// Unknown integrations still get a neutral terminal glyph instead of an empty gap.
 struct ProviderIconView: View {
     let provider: AgentProvider
@@ -13,7 +14,7 @@ struct ProviderIconView: View {
             if let asset = iconAsset, let image = ProviderIconAssets.image(for: asset) {
                 Image(nsImage: image)
                     .resizable()
-                    .renderingMode(.template)
+                    .renderingMode(asset.isTemplate ? .template : .original)
                     .scaledToFit()
             } else {
                 Image(systemName: "terminal")
@@ -28,8 +29,8 @@ struct ProviderIconView: View {
 
     private var iconAsset: ProviderIconAsset? {
         switch provider {
-        case .codex: .init(imageSet: "ProviderCodex", file: "codex.svg")
-        case .claudeCode: .init(imageSet: "ProviderClaudeCode", file: "claude-code.svg")
+        case .codex: .init(imageSet: "ProviderCodex", file: "codex.svg", isTemplate: false)
+        case .claudeCode: .init(imageSet: "ProviderClaudeCode", file: "clawd.svg", isTemplate: false)
         case .grok: .init(imageSet: "ProviderGrok", file: "grok.svg")
         case .openCode: .init(imageSet: "ProviderOpenCode", file: "opencode.svg")
         case .geminiCLI: .init(imageSet: "ProviderGemini", file: "gemini.svg")
@@ -42,13 +43,14 @@ struct ProviderIconView: View {
 private struct ProviderIconAsset: Hashable {
     let imageSet: String
     let file: String
+    var isTemplate = true
 }
 
 private enum ProviderIconAssets {
     private static let cache = NSCache<NSString, NSImage>()
 
     static func image(for asset: ProviderIconAsset) -> NSImage? {
-        let cacheKey = "\(asset.imageSet)/\(asset.file)" as NSString
+        let cacheKey = "\(asset.imageSet)/\(asset.file)/\(asset.isTemplate)" as NSString
         if let cached = cache.object(forKey: cacheKey) {
             return cached
         }
@@ -63,7 +65,7 @@ private enum ProviderIconAssets {
 
         for case let url? in candidates {
             guard let image = NSImage(contentsOf: url) else { continue }
-            image.isTemplate = true
+            image.isTemplate = asset.isTemplate
             cache.setObject(image, forKey: cacheKey)
             return image
         }

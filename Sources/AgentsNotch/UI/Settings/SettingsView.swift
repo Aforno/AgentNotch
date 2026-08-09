@@ -1,36 +1,6 @@
 import AgentsNotchCore
 import SwiftUI
 
-private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general
-    case integrations
-    #if DEBUG
-    case debug
-    #endif
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .general: "General"
-        case .integrations: "Integrations"
-        #if DEBUG
-        case .debug: "Debug"
-        #endif
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .general: "slider.horizontal.3"
-        case .integrations: "point.3.connected.trianglepath.dotted"
-        #if DEBUG
-        case .debug: "hammer"
-        #endif
-        }
-    }
-}
-
 struct SettingsView: View {
     let runtime: AppRuntime
 
@@ -39,303 +9,221 @@ struct SettingsView: View {
     #if DEBUG
     @AppStorage("debugMode") private var debugMode = false
     #endif
-    @State private var selection: SettingsPage = .general
     @State private var launchAtLogin = LaunchAtLoginService.isEnabled
     @State private var launchError: String?
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
+        TabView {
+            generalPane
+                .tabItem {
+                    Label("General", systemImage: "gearshape")
+                }
+
+            integrationsPane
+                .tabItem {
+                    Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+
+            #if DEBUG
+            debugPane
+                .tabItem {
+                    Label("Debug", systemImage: "hammer")
+                }
+            #endif
+        }
+        .frame(width: 540, height: 440)
+    }
+
+    private var generalPane: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SettingsHeading(
+                title: "General",
+                detail: "Control how Agents Notch starts and appears."
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle("Launch Agents Notch at login", isOn: launchBinding)
+                Toggle("Animate notch transitions", isOn: $animationsEnabled)
+            }
 
             Divider()
 
-            ScrollView {
-                pageContent
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(.horizontal, 32)
-                    .padding(.top, 30)
-                    .padding(.bottom, 36)
-            }
-            .scrollIndicators(.hidden)
-            .background(Color(nsColor: .windowBackgroundColor))
-        }
-        .frame(minWidth: 680, idealWidth: 720, minHeight: 500, idealHeight: 540)
-    }
-
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(.tint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Agents Notch")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Settings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 20)
-            .padding(.bottom, 22)
-
-            VStack(spacing: 4) {
-                ForEach(SettingsPage.allCases) { page in
-                    Button {
-                        selection = page
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: page.symbol)
-                                .font(.system(size: 13, weight: .medium))
-                                .frame(width: 18)
-                            Text(page.title)
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                        }
-                        .foregroundStyle(selection == page ? Color.accentColor : .primary)
-                        .padding(.horizontal, 10)
-                        .frame(height: 34)
-                        .background {
-                            if selection == page {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.accentColor.opacity(0.12))
-                            }
-                        }
-                        .contentShape(Rectangle())
+            HStack {
+                Text("Show the notch on:")
+                Spacer()
+                Picker("Show the notch on", selection: $displayPreference) {
+                    ForEach(DisplayPreference.allCases) { preference in
+                        Text(preference.title).tag(preference.rawValue)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selection == page ? .isSelected : [])
                 }
+                .labelsHidden()
+                .frame(width: 180)
             }
-            .padding(.horizontal, 8)
+
+            if let launchError {
+                SettingsMessage(
+                    text: launchError,
+                    symbol: "exclamationmark.triangle.fill",
+                    color: .red
+                )
+            }
 
             Spacer()
-
-            Text("Runs privately on this Mac")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(16)
         }
-        .frame(width: 184)
-        .background(.regularMaterial)
+        .settingsPanePadding()
     }
 
-    @ViewBuilder
-    private var pageContent: some View {
-        switch selection {
-        case .general:
-            generalPage
-        case .integrations:
-            integrationsPage
-        #if DEBUG
-        case .debug:
-            debugPage
-        #endif
-        }
-    }
-
-    private var generalPage: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            PageHeader(
-                title: "General",
-                subtitle: "Choose how Agents Notch behaves and where it appears.",
-                symbol: "slider.horizontal.3"
-            )
-
-            SettingsCard(title: "Behavior") {
-                PreferenceRow(
-                    title: "Launch at login",
-                    detail: "Keep agent activity available after you sign in."
-                ) {
-                    Toggle("Launch at login", isOn: launchBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-
-                SettingsDivider()
-
-                PreferenceRow(
-                    title: "Animations",
-                    detail: "Animate notch expansion and activity changes."
-                ) {
-                    Toggle("Animations", isOn: $animationsEnabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-
-                if let launchError {
-                    InlineMessage(text: launchError, symbol: "exclamationmark.triangle.fill", color: .red)
-                        .padding(.top, 10)
-                }
-            }
-
-            SettingsCard(title: "Display") {
-                PreferenceRow(
-                    title: "Show the notch on",
-                    detail: "Select the screen Agents Notch should follow."
-                ) {
-                    Picker("Display", selection: $displayPreference) {
-                        ForEach(DisplayPreference.allCases) { preference in
-                            Text(preference.title).tag(preference.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: 170)
-                }
-            }
-        }
-    }
-
-    private var integrationsPage: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            PageHeader(
+    private var integrationsPane: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SettingsHeading(
                 title: "Integrations",
-                subtitle: "Connect local coding agents to the activity notch.",
-                symbol: "point.3.connected.trianglepath.dotted"
+                detail: "Connect local coding agents to Agents Notch."
             )
 
-            VStack(spacing: 12) {
-                integrationCard(runtime.codexIntegration)
-                integrationCard(runtime.claudeIntegration)
-                integrationCard(runtime.grokIntegration)
+            VStack(spacing: 0) {
+                integrationRow(runtime.codexIntegration)
+                Divider()
+                    .padding(.leading, 34)
+                integrationRow(runtime.claudeIntegration)
+                Divider()
+                    .padding(.leading, 34)
+                integrationRow(runtime.grokIntegration)
             }
 
-            SettingsCard(title: "Local relay") {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(socketColor.opacity(0.14))
-                        Circle()
-                            .fill(socketColor)
-                            .frame(width: 7, height: 7)
-                    }
-                    .frame(width: 30, height: 30)
+            Divider()
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Event socket")
-                            .font(.system(size: 13, weight: .medium))
-                        Text(runtime.socketStatus)
-                            .font(.caption)
-                            .foregroundStyle(socketColor)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Local Relay")
+                    .font(.headline)
+
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(socketColor)
+                        .frame(width: 7, height: 7)
+
+                    Text(runtime.socketStatus)
+                        .foregroundStyle(.secondary)
 
                     Spacer()
 
                     Text("~/.agentsnotch/agent.sock")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
 
                 if let error = runtime.socketError {
-                    InlineMessage(text: error, symbol: "exclamationmark.triangle.fill", color: .red)
-                        .padding(.top, 12)
+                    SettingsMessage(
+                        text: error,
+                        symbol: "exclamationmark.triangle.fill",
+                        color: .red
+                    )
+                } else {
+                    Text("Events stay on this Mac and are delivered through the local socket.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            InlineMessage(
-                text: "Agent events stay on this Mac and are delivered only through the local relay.",
-                symbol: "lock.fill",
-                color: .secondary
-            )
+            Spacer(minLength: 0)
         }
+        .settingsPanePadding()
     }
 
     @ViewBuilder
-    private func integrationCard(_ integration: ProviderIntegrationManager) -> some View {
-        SettingsCard {
-            HStack(spacing: 14) {
-                ProviderIconView(provider: integration.provider, size: 21)
-                    .foregroundStyle(.primary)
-                    .frame(width: 38, height: 38)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    private func integrationRow(_ integration: ProviderIntegrationManager) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ProviderIconView(provider: integration.provider, size: 20)
+                .foregroundStyle(.primary)
+                .frame(width: 24, height: 24)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(integration.provider.displayName)
-                        .font(.system(size: 14, weight: .semibold))
-                    StatusBadge(status: integration.status)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(integration.provider.displayName)
+                    .fontWeight(.medium)
+
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(statusColor(for: integration.status))
+                        .frame(width: 6, height: 6)
+                    Text(integration.status.title)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if integration.status != .notInstalled,
+                   let instructions = integration.trustInstructions {
+                    Text(instructions)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 16)
-
-                if integration.status == .notInstalled {
-                    Button("Install") { integration.install() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                } else {
-                    Button {
-                        integration.refreshStatus()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Refresh status")
-                    .accessibilityLabel("Refresh \(integration.provider.displayName) status")
-
-                    Button("Remove", role: .destructive) { integration.uninstall() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                if let error = integration.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
             }
 
-            if integration.status != .notInstalled, let instructions = integration.trustInstructions {
-                SettingsDivider()
-                    .padding(.vertical, 11)
-                InlineMessage(text: instructions, symbol: "info.circle.fill", color: .secondary)
-            }
+            Spacer(minLength: 12)
 
-            if let error = integration.lastError {
-                InlineMessage(text: error, symbol: "exclamationmark.triangle.fill", color: .red)
-                    .padding(.top, 12)
+            if integration.status == .notInstalled {
+                Button("Install") {
+                    integration.install()
+                }
+            } else {
+                Button {
+                    integration.refreshStatus()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh status")
+                .accessibilityLabel("Refresh \(integration.provider.displayName) status")
+
+                Button("Remove", role: .destructive) {
+                    integration.uninstall()
+                }
             }
         }
+        .controlSize(.small)
+        .padding(.vertical, 8)
     }
 
     #if DEBUG
-    private var debugPage: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            PageHeader(
+    private var debugPane: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SettingsHeading(
                 title: "Debug",
-                subtitle: "Preview agent states and structured activity without a live session.",
-                symbol: "hammer"
+                detail: "Preview agent states without a live session."
             )
 
-            SettingsCard(title: "Simulator") {
-                PreferenceRow(
-                    title: "Enable debug simulator",
-                    detail: "Adds temporary sessions to the notch for testing."
-                ) {
-                    Toggle("Enable debug simulator", isOn: debugModeBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-            }
+            Toggle("Enable debug simulator", isOn: debugModeBinding)
 
             if debugMode {
-                DebugActionCard(title: "Agent states") {
-                    DebugAction("Running") { runtime.simulator.simulate(.running) }
-                    DebugAction("Editing") { runtime.simulator.simulate(.editing) }
-                    DebugAction("Needs approval") { runtime.simulator.simulate(.waitingForUser) }
-                    DebugAction("Completed") { runtime.simulator.simulate(.completed) }
-                    DebugAction("Failed") { runtime.simulator.simulate(.failed) }
+                Divider()
+
+                SettingsButtonGroup(title: "Agent States") {
+                    Button("Running") { runtime.simulator.simulate(.running) }
+                    Button("Editing") { runtime.simulator.simulate(.editing) }
+                    Button("Needs Approval") { runtime.simulator.simulate(.waitingForUser) }
+                    Button("Completed") { runtime.simulator.simulate(.completed) }
+                    Button("Failed") { runtime.simulator.simulate(.failed) }
                 }
 
-                DebugActionCard(title: "Structured activity") {
-                    DebugAction("Plan progress") { runtime.simulator.simulatePlan() }
-                    DebugAction("Workflow steps") { runtime.simulator.simulateWorkflow() }
-                    DebugAction("Subagent hierarchy") { runtime.simulator.simulateSubagents() }
-                    DebugAction("Concurrent demo") { runtime.simulator.runConcurrentDemo() }
-                    DebugAction("Clear sessions", role: .destructive) { runtime.simulator.reset() }
+                SettingsButtonGroup(title: "Structured Activity") {
+                    Button("Plan") { runtime.simulator.simulatePlan() }
+                    Button("Workflow") { runtime.simulator.simulateWorkflow() }
+                    Button("Subagents") { runtime.simulator.simulateSubagents() }
+                    Button("Concurrent") { runtime.simulator.runConcurrentDemo() }
+                    Button("Clear", role: .destructive) { runtime.simulator.reset() }
                 }
             }
+
+            Spacer()
         }
-        .animation(.easeInOut(duration: 0.18), value: debugMode)
+        .settingsPanePadding()
     }
 
     private var debugModeBinding: Binding<Bool> {
@@ -369,5 +257,74 @@ struct SettingsView: View {
 
     private var socketColor: Color {
         runtime.socketStatus == "Listening" ? .green : .orange
+    }
+
+    private func statusColor(for status: ProviderIntegrationStatus) -> Color {
+        switch status {
+        case .ready: .green
+        case .installedNeedsTrust: .orange
+        case .notInstalled: .secondary
+        case .unavailable: .red
+        }
+    }
+}
+
+private struct SettingsHeading: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.headline)
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct SettingsMessage: View {
+    let text: String
+    let symbol: String
+    let color: Color
+
+    var body: some View {
+        Label(text, systemImage: symbol)
+            .font(.caption)
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+}
+
+#if DEBUG
+private struct SettingsButtonGroup<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            HStack(spacing: 8) {
+                content
+            }
+            .controlSize(.small)
+        }
+    }
+}
+#endif
+
+private extension View {
+    func settingsPanePadding() -> some View {
+        padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
     }
 }

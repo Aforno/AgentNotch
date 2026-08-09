@@ -148,7 +148,11 @@ struct AgentRelationshipsView: View {
                 ForEach(children) { child in
                     relationshipButton(
                         session: child,
-                        label: child.agentRole?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Subagent",
+                        label: child.agentRole?
+                            .replacingOccurrences(of: "_", with: " ")
+                            .replacingOccurrences(of: "-", with: " ")
+                            .replacingOccurrences(of: ":", with: " ")
+                            .capitalized ?? "Subagent",
                         systemImage: "arrow.turn.down.right"
                     )
                 }

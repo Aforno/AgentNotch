@@ -27,7 +27,11 @@ struct AgentDetailView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                 if session.isSubagent {
-                    Text(session.agentRole?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Subagent")
+                    Text(session.agentRole?
+                        .replacingOccurrences(of: "_", with: " ")
+                        .replacingOccurrences(of: "-", with: " ")
+                        .replacingOccurrences(of: ":", with: " ")
+                        .capitalized ?? "Subagent")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.5))
                         .padding(.horizontal, 6)

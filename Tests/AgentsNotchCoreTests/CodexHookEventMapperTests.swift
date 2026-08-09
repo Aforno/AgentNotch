@@ -104,6 +104,41 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertNil(AgentHookEventMapper.map(payload, provider: .grok))
     }
 
+    func testGrokParentSubagentStartDoesNotMasqueradeAsChild() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_parent",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "subagent_start"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.sessionId, "grok:grok_parent")
+        XCTAssertNil(event.parentSessionId)
+        XCTAssertNil(event.task)
+        XCTAssertEqual(event.activity, "Running subagents")
+        XCTAssertEqual(event.state, .running)
+    }
+
+    func testExplicitParentRelationshipKeepsGrokChildSessionIdentity() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_child",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "pre_tool_use",
+          "toolName": "grep",
+          "parentSessionId": "grok_parent",
+          "description": "audit:core-models"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.sessionId, "grok:grok_child")
+        XCTAssertEqual(event.parentSessionId, "grok:grok_parent")
+        XCTAssertEqual(event.agentRole, "audit:core-models")
+    }
+
     func testGrokPromptCreatesSessionWithoutSessionStart() throws {
         let payload = try decode("""
         {

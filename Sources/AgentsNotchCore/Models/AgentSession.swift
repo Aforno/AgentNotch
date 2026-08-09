@@ -45,14 +45,22 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     @discardableResult
     public mutating func apply(_ event: AgentEvent) -> Bool {
         let isTerminal = state == .completed || state == .failed
+        let eventIsTerminal = event.resolvedState == .completed || event.resolvedState == .failed
+        // Waiting notifications that arrive after a terminal state must not reopen it.
         let isLateWaitingNotification = isTerminal && event.resolvedState == .waitingForUser
-        let advancesCurrentState = event.timestamp >= updatedAt && !isLateWaitingNotification
+        // Symmetric reorder case: concurrent ingest can apply a later-timestamp
+        // waiting event before an earlier completed/failed. Terminal still wins
+        // over waiting so the session cannot stick on waitingForUser forever.
+        let isReorderedTerminalVsWaiting = state == .waitingForUser && eventIsTerminal
+        let advancesCurrentState =
+            (event.timestamp >= updatedAt || isReorderedTerminalVsWaiting) && !isLateWaitingNotification
         if advancesCurrentState {
             provider = event.provider
             if let task = event.task?.nonEmpty { self.task = task }
             if let activity = event.activity?.nonEmpty { currentActivity = activity }
             state = event.resolvedState
-            updatedAt = event.timestamp
+            // Keep session clocks monotonic when an older terminal overrides waiting.
+            updatedAt = max(updatedAt, event.timestamp)
             // Treat empty/whitespace cwd as absent so hook defaults of "" cannot
             // wipe a previously stored absolute path.
             if let directory = event.workingDirectory?.nonEmpty {
@@ -75,20 +83,23 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 recentFiles.insert(file, at: 0)
                 recentFiles = Array(recentFiles.prefix(6))
             }
+
+            // Plan/workflow follow the same session-time gate as state/files so a
+            // reordered stale update_goal or plan snapshot cannot rewrite execution
+            // UI while live state stays on a newer event.
+            if let eventPlan = event.plan {
+                if let currentPlan = plan {
+                    if eventPlan.updatedAt >= currentPlan.updatedAt {
+                        plan = eventPlan
+                    }
+                } else {
+                    plan = eventPlan
+                }
+            }
+            applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         } else if task == "Untitled task", let task = event.task?.nonEmpty {
             self.task = task
         }
-
-        if let eventPlan = event.plan {
-            if let currentPlan = plan {
-                if eventPlan.updatedAt >= currentPlan.updatedAt {
-                    plan = eventPlan
-                }
-            } else {
-                plan = eventPlan
-            }
-        }
-        applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
 
         recentEvents.append(event)
         recentEvents.sort { $0.timestamp > $1.timestamp }

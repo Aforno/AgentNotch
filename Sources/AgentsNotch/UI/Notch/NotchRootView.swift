@@ -68,9 +68,13 @@ struct NotchRootView: View {
         case .temporary:
             return NotchLayout(width: 370, height: geometry.notchHeight + 48, radius: 18)
         case .list:
-            let count = max(visibleSessions.count, 1)
             let contentHeight = DynamicIslandSpacing.expandedTop
-                + CGFloat(count) * DynamicIslandSpacing.rowHeight
+                + (visibleSessions.isEmpty
+                    ? DynamicIslandSpacing.rowHeight
+                    : AgentListView.rowsHeight(
+                        for: visibleSessions,
+                        relatedSessions: activity.sessions
+                    ))
                 + DynamicIslandSpacing.expandedBottom
             return NotchLayout(width: 424, height: geometry.notchHeight + contentHeight, radius: 20)
         case .detail:
@@ -199,7 +203,10 @@ struct NotchRootView: View {
         switch presentation {
         case .collapsed:
             if hasActiveAgents {
-                CollapsedNotchView(sessions: activity.activeSessions)
+                CollapsedNotchView(
+                    sessions: activity.activeSessions,
+                    activeCount: activity.activeGroupCount
+                )
             }
 
         case .temporary:
@@ -218,6 +225,7 @@ struct NotchRootView: View {
         case .list:
             AgentListView(
                 sessions: visibleSessions,
+                relatedSessions: activity.sessions,
                 topInset: geometry.notchHeight + DynamicIslandSpacing.expandedTop,
                 onOpenSettings: { runtime.openSettings() },
                 onSelect: { id in

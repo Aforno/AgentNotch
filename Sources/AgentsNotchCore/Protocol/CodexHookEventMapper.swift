@@ -4,6 +4,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var sessionId: String
     public var transcriptPath: String?
     public var cwd: String
+    public var workspaceRoot: String?
     public var hookEventName: String
     public var model: String?
     public var turnId: String?
@@ -14,6 +15,8 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var toolInput: JSONValue?
     public var agentId: String?
     public var agentType: String?
+    public var parentSessionId: String?
+    public var description: String?
     public var lastAssistantMessage: String?
     public var notificationType: String?
     public var error: String?
@@ -21,7 +24,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case sessionId, sessionIdSnake = "session_id"
         case transcriptPath, transcriptPathSnake = "transcript_path"
-        case cwd
+        case cwd, workspaceRoot, workspaceRootSnake = "workspace_root"
         case hookEventName, hookEventNameSnake = "hook_event_name"
         case model
         case turnId, turnIdSnake = "turn_id"
@@ -30,6 +33,8 @@ public struct AgentHookPayload: Decodable, Sendable {
         case toolInput, toolInputSnake = "tool_input"
         case agentId, agentIdSnake = "agent_id"
         case agentType, agentTypeSnake = "agent_type"
+        case parentSessionId, parentSessionIdSnake = "parent_session_id"
+        case description
         case lastAssistantMessage, lastAssistantMessageSnake = "last_assistant_message"
         case notificationType, notificationTypeSnake = "notification_type"
         case error
@@ -40,6 +45,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         sessionId = try values.decodeEither(String.self, forKey: .sessionId, or: .sessionIdSnake)
         transcriptPath = try values.decodeEitherIfPresent(String.self, forKey: .transcriptPath, or: .transcriptPathSnake)
         cwd = try values.decodeIfPresent(String.self, forKey: .cwd) ?? ""
+        workspaceRoot = try values.decodeEitherIfPresent(String.self, forKey: .workspaceRoot, or: .workspaceRootSnake)
         hookEventName = try values.decodeEither(String.self, forKey: .hookEventName, or: .hookEventNameSnake)
         model = try values.decodeIfPresent(String.self, forKey: .model)
         turnId = try values.decodeEitherIfPresent(String.self, forKey: .turnId, or: .turnIdSnake)
@@ -50,6 +56,8 @@ public struct AgentHookPayload: Decodable, Sendable {
         toolInput = try values.decodeEitherIfPresent(JSONValue.self, forKey: .toolInput, or: .toolInputSnake)
         agentId = try values.decodeEitherIfPresent(String.self, forKey: .agentId, or: .agentIdSnake)
         agentType = try values.decodeEitherIfPresent(String.self, forKey: .agentType, or: .agentTypeSnake)
+        parentSessionId = try values.decodeEitherIfPresent(String.self, forKey: .parentSessionId, or: .parentSessionIdSnake)
+        description = try values.decodeIfPresent(String.self, forKey: .description)
         lastAssistantMessage = try values.decodeEitherIfPresent(String.self, forKey: .lastAssistantMessage, or: .lastAssistantMessageSnake)
         notificationType = try values.decodeEitherIfPresent(String.self, forKey: .notificationType, or: .notificationTypeSnake)
         error = try values.decodeIfPresent(String.self, forKey: .error)
@@ -69,9 +77,9 @@ public enum AgentHookEventMapper {
             nativeSessionId = payload.sessionId
         }
         let sessionId = "\(provider.rawValue):\(nativeSessionId)"
-        let parentSessionId = payload.agentId?.isEmpty == false
-            ? "\(provider.rawValue):\(payload.sessionId)"
-            : nil
+        let nativeParentSessionId = payload.parentSessionId?.nonEmpty
+            ?? (payload.agentId?.isEmpty == false ? payload.sessionId : nil)
+        let parentSessionId = nativeParentSessionId.map { "\(provider.rawValue):\($0)" }
 
         let baseMetadata = [
             "model": payload.model,
@@ -163,12 +171,12 @@ public enum AgentHookEventMapper {
                 metadata: baseMetadata
             )
 
-        case "Notification" where payload.notificationType == "permission_prompt" || payload.notificationType == "idle_prompt":
+        case "Notification" where isWaitingNotification(payload.notificationType):
             event = AgentEvent(
                 type: .waiting,
                 sessionId: sessionId,
                 provider: provider,
-                activity: payload.notificationType == "permission_prompt" ? "Needs approval" : "Waiting for input",
+                activity: waitingNotificationActivity(for: payload.notificationType),
                 state: .waitingForUser,
                 timestamp: now,
                 workingDirectory: payload.cwd.nonEmpty,
@@ -212,29 +220,63 @@ public enum AgentHookEventMapper {
             )
 
         case "SubagentStart":
-            event = AgentEvent(
-                type: .started,
-                sessionId: sessionId,
-                provider: provider,
-                task: payload.agentType.map { "\($0.capitalized) subagent" } ?? "\(provider.displayName) subagent",
-                activity: "Subagent started",
-                state: .starting,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
-            )
+            if provider == .grok, payload.agentId?.nonEmpty == nil, parentSessionId == nil {
+                // Grok fires this hook in the parent and puts the parent's ID in
+                // sessionId. The child later emits its own lifecycle/tool hooks.
+                // Keep the parent alive without turning it into a fake child row.
+                event = AgentEvent(
+                    type: .activity,
+                    sessionId: sessionId,
+                    provider: provider,
+                    activity: "Running subagents",
+                    state: .running,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            } else {
+                let role = payload.description?.nonEmpty
+                    ?? payload.agentType?.nonEmpty.map { $0.capitalized }
+                event = AgentEvent(
+                    type: .started,
+                    sessionId: sessionId,
+                    provider: provider,
+                    task: role.map { "\($0) subagent" } ?? "\(provider.displayName) subagent",
+                    activity: "Subagent started",
+                    state: .starting,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            }
 
         case "SubagentStop":
-            event = AgentEvent(
-                type: .completed,
-                sessionId: sessionId,
-                provider: provider,
-                activity: "Subagent completed",
-                state: .completed,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
-            )
+            if provider == .grok, payload.agentId?.nonEmpty == nil, parentSessionId == nil {
+                // Mirror SubagentStart: Grok parent-scoped SubagentStop uses the
+                // parent sessionId without agent_id. Completing the parent would
+                // end the turn while other subagents may still be live.
+                event = AgentEvent(
+                    type: .activity,
+                    sessionId: sessionId,
+                    provider: provider,
+                    activity: "Subagent completed",
+                    state: .running,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            } else {
+                event = AgentEvent(
+                    type: .completed,
+                    sessionId: sessionId,
+                    provider: provider,
+                    activity: "Subagent completed",
+                    state: .completed,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            }
 
         default:
             event = nil
@@ -242,7 +284,7 @@ public enum AgentHookEventMapper {
 
         guard var event else { return nil }
         event.parentSessionId = parentSessionId
-        event.agentRole = payload.agentType
+        event.agentRole = payload.description?.nonEmpty ?? payload.agentType
         return event
     }
 
@@ -307,6 +349,25 @@ public enum AgentHookEventMapper {
             return true
         default:
             return false
+        }
+    }
+
+    /// Claude Code Notification matchers that mean the agent is blocked on the user.
+    private static func isWaitingNotification(_ type: String?) -> Bool {
+        switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "permission_prompt", "idle_prompt", "agent_needs_input", "elicitation_dialog":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func waitingNotificationActivity(for type: String?) -> String {
+        switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "permission_prompt", "elicitation_dialog":
+            return "Needs approval"
+        default:
+            return "Waiting for input"
         }
     }
 

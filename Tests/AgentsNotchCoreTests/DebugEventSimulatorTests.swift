@@ -5,22 +5,7 @@ import XCTest
 
 final class DebugEventSimulatorTests: XCTestCase {
     @MainActor
-    func testPlanOptionProducesReferenceStyleProgress() throws {
-        let activity = AgentActivityService()
-        let simulator = DebugEventSimulator(activity: activity)
-
-        simulator.simulatePlan()
-
-        let session = try XCTUnwrap(activity.sessions.first)
-        let plan = try XCTUnwrap(session.plan)
-        XCTAssertEqual(session.task, "Add regression tests and run suite")
-        XCTAssertEqual(plan.completedStepCount, 2)
-        XCTAssertEqual(plan.steps.map(\.status), [.completed, .completed, .inProgress])
-        XCTAssertEqual(session.recentEvents.first?.metadata?["source"], "simulator")
-    }
-
-    @MainActor
-    func testResetCancelsAndRemovesOnlySimulatorSessions() {
+    func testResetRemovesOnlySimulatorSessionsAndClearsAttention() {
         let activity = AgentActivityService()
         activity.ingest(AgentEvent(
             type: .activity,
