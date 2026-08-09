@@ -8,13 +8,17 @@ struct AgentRowView: View {
     static let executionRowHeight: CGFloat = 62
 
     static func preferredHeight(for session: AgentSession, children: [AgentSession]) -> CGFloat {
-        hasExecutionSummary(for: session, children: children)
+        hasSecondarySummary(for: session, children: children)
             ? executionRowHeight
             : DynamicIslandSpacing.rowHeight
     }
 
-    private static func hasExecutionSummary(for session: AgentSession, children: [AgentSession]) -> Bool {
-        session.plan?.steps.isEmpty == false || !session.workflows.isEmpty || !children.isEmpty
+    private static func hasSecondarySummary(for session: AgentSession, children: [AgentSession]) -> Bool {
+        // Workflow progress is presented inline with its current stage. Keeping
+        // those rows at the standard height avoids repeating workflow context
+        // across two lines.
+        guard session.workflows.isEmpty else { return false }
+        return session.plan?.steps.isEmpty == false || !children.isEmpty
     }
 
     var body: some View {
@@ -35,17 +39,21 @@ struct AgentRowView: View {
                     .foregroundStyle(.white)
                     .frame(width: session.isSubagent ? 78 : 62, alignment: .leading)
 
-                Text(session.currentActivity)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(1)
+                if let workflow = session.workflows.first {
+                    WorkflowInlineSummary(workflow: workflow, children: children)
+                } else {
+                    Text(session.currentActivity)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.68))
+                        .lineLimit(1)
+                }
 
                 Spacer(minLength: DynamicIslandSpacing.related)
 
                 StateIndicator(state: session.state, size: 12)
             }
 
-            if hasExecutionSummary {
+            if hasSecondarySummary {
                 AgentRowExecutionSummary(session: session, children: children)
                     .padding(.leading, session.isSubagent ? 34 : 24)
             }
@@ -67,15 +75,64 @@ struct AgentRowView: View {
             .capitalized ?? "Subagent"
     }
 
-    private var hasExecutionSummary: Bool {
-        Self.hasExecutionSummary(for: session, children: children)
+    private var hasSecondarySummary: Bool {
+        Self.hasSecondarySummary(for: session, children: children)
     }
 
     private var accessibilityLabel: String {
         let identity = session.isSubagent
             ? "\(subagentLabel) subagent"
             : session.provider.displayName
+        if let workflow = session.workflows.first {
+            let active = children.filter(\.isActive).count
+            let agents = active == 1 ? "1 active agent" : "\(active) active agents"
+            return "\(identity), \(workflow.rowProgress), \(workflow.rowStage), \(agents), \(session.state.displayName)"
+        }
         return "\(identity), \(session.currentActivity), \(session.state.displayName)"
+    }
+}
+
+private struct WorkflowInlineSummary: View {
+    let workflow: AgentWorkflow
+    let children: [AgentSession]
+
+    var body: some View {
+        HStack(spacing: DynamicIslandSpacing.related) {
+            Text(workflow.rowProgress)
+            Text(workflow.rowStage)
+                .lineLimit(1)
+
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.branch")
+                Text("\(activeAgentCount) active")
+            }
+            .foregroundStyle(.white.opacity(0.46))
+        }
+        .font(.system(size: 12, weight: .regular))
+        .foregroundStyle(.white.opacity(0.68))
+        .lineLimit(1)
+    }
+
+    private var activeAgentCount: Int {
+        children.filter(\.isActive).count
+    }
+}
+
+private extension AgentWorkflow {
+    var rowProgress: String {
+        guard !steps.isEmpty else { return status.displayName }
+        let completed = steps.filter { $0.status == .completed }.count
+        return "\(completed)/\(steps.count)"
+    }
+
+    var rowStage: String {
+        let current = steps.first {
+            $0.status == .inProgress || $0.status == .failed || $0.status == .blocked
+        }
+        if let current { return current.title }
+        if status == .completed, let final = steps.last { return final.title }
+        if let pending = steps.first(where: { $0.status == .pending }) { return pending.title }
+        return status.displayName
     }
 }
 
@@ -92,14 +149,6 @@ private struct AgentRowExecutionSummary: View {
                 }
             }
 
-            if let workflow = session.workflows.first {
-                HStack(spacing: 4) {
-                    Image(systemName: "point.3.connected.trianglepath.dotted")
-                    Text(workflowSummary(workflow))
-                        .lineLimit(1)
-                }
-            }
-
             if !children.isEmpty {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.triangle.branch")
@@ -112,12 +161,6 @@ private struct AgentRowExecutionSummary: View {
         }
         .font(.system(size: 9, weight: .medium))
         .foregroundStyle(.white.opacity(0.42))
-    }
-
-    private func workflowSummary(_ workflow: AgentWorkflow) -> String {
-        guard !workflow.steps.isEmpty else { return workflow.status.displayName }
-        let completed = workflow.steps.filter { $0.status == .completed }.count
-        return "\(completed)/\(workflow.steps.count) workflow"
     }
 
     private var childSummary: String {
