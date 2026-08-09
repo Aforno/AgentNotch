@@ -14,6 +14,32 @@ private struct NotchLayout: Equatable {
     let radius: CGFloat
 }
 
+private extension AnyTransition {
+    /// Content inside the notch fades through a light blur and settles from a
+    /// subtle scale, echoing the Dynamic Island's material feel.
+    static let notchContent: AnyTransition = .asymmetric(
+        insertion: .opacity
+            .combined(with: .scale(scale: 0.96, anchor: .top))
+            .combined(with: .modifier(
+                active: NotchBlurModifier(radius: 6),
+                identity: NotchBlurModifier(radius: 0)
+            )),
+        removal: .opacity
+            .combined(with: .modifier(
+                active: NotchBlurModifier(radius: 8),
+                identity: NotchBlurModifier(radius: 0)
+            ))
+    )
+}
+
+private struct NotchBlurModifier: ViewModifier {
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        content.blur(radius: radius)
+    }
+}
+
 struct NotchRootView: View {
     let runtime: AppRuntime
     let geometry: DisplayGeometry
@@ -139,10 +165,23 @@ struct NotchRootView: View {
 
             content
                 .padding(.top, contentTopPadding)
+                .transition(.notchContent)
+                .id(contentTransitionID)
         }
         .frame(width: shownWidth, height: shownHeight, alignment: .top)
         .clipShape(NotchShape(bottomRadius: shownRadius))
         .contentShape(NotchShape(bottomRadius: shownRadius))
+    }
+
+    /// Identity for the morphing content so presentation changes cross-fade
+    /// (blur + scale) instead of snapping between subtrees.
+    private var contentTransitionID: String {
+        switch presentation {
+        case .collapsed: return "collapsed"
+        case .temporary: return "temporary"
+        case .list: return "list"
+        case let .detail(id): return "detail-\(id)"
+        }
     }
 
     private var contentTopPadding: CGFloat {
@@ -175,7 +214,13 @@ struct NotchRootView: View {
             onSizeChange(container, false)
 
             let expanding = newValue.width > from.width || newValue.height > from.height
-            withAnimation(.easeInOut(duration: expanding ? 0.24 : 0.19)) {
+            // A gentle spring reads as "Dynamic Island": a hint of overshoot
+            // when growing, and a slightly tighter, faster settle when
+            // shrinking so collapse never feels bouncy.
+            let animation: Animation = expanding
+                ? .spring(response: 0.38, dampingFraction: 0.78)
+                : .spring(response: 0.30, dampingFraction: 0.92)
+            withAnimation(animation) {
                 applyDrawnLayout(newValue, animated: true)
             } completion: {
                 guard generation == sizeGeneration else { return }
@@ -214,7 +259,7 @@ struct NotchRootView: View {
             if let event = activity.attentionEvent {
                 Button {
                     guard activity.sessions.contains(where: { $0.id == event.sessionId }) else { return }
-                    selectedSessionID = event.sessionId
+                    withPresentationAnimation { selectedSessionID = event.sessionId }
                 } label: {
                     TemporaryActivityView(event: event)
                         .frame(height: 32)
@@ -230,7 +275,7 @@ struct NotchRootView: View {
                 topInset: geometry.notchHeight + DynamicIslandSpacing.expandedTop,
                 onOpenSettings: { runtime.openSettings() },
                 onSelect: { id in
-                    selectedSessionID = id
+                    withPresentationAnimation { selectedSessionID = id }
                 }
             )
 
@@ -240,8 +285,8 @@ struct NotchRootView: View {
                     session: session,
                     parent: activity.parent(of: session),
                     children: activity.children(of: session.id),
-                    onBack: { selectedSessionID = nil },
-                    onSelectSession: { selectedSessionID = $0 },
+                    onBack: { withPresentationAnimation { selectedSessionID = nil } },
+                    onSelectSession: { id in withPresentationAnimation { selectedSessionID = id } },
                     onOpen: { runtime.open(session) }
                 )
             }
@@ -269,7 +314,21 @@ struct NotchRootView: View {
                 return
             }
             guard !Task.isCancelled, isPointerInside == hovering else { return }
-            isHovering = hovering
+            withPresentationAnimation {
+                isHovering = hovering
+            }
+        }
+    }
+
+    /// Presentation is derived state, so the swap between content subtrees
+    /// only animates when the state driving it changes inside a transaction.
+    private func withPresentationAnimation(_ change: () -> Void) {
+        if animationsEnabled {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.85), change)
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction, change)
         }
     }
 
