@@ -69,6 +69,7 @@ final class ProviderIntegrationManager {
         case .codex: "Open /hooks in Codex once to review and trust the installed lifecycle hooks."
         case .claudeCode: "Open /hooks in Claude Code to inspect the installed lifecycle hooks."
         case .grok: "Open /hooks in Grok to inspect the installed lifecycle hooks."
+        case .geminiCLI: "Open /hooks panel in Gemini CLI to inspect the installed lifecycle hooks."
         default: nil
         }
     }
@@ -133,6 +134,10 @@ final class ProviderIntegrationManager {
             homeDirectoryURL
                 .appendingPathComponent(".grok/hooks", isDirectory: true)
                 .appendingPathComponent("agentsnotch.json")
+        case .geminiCLI:
+            homeDirectoryURL
+                .appendingPathComponent(".gemini", isDirectory: true)
+                .appendingPathComponent("settings.json")
         default:
             homeDirectoryURL
                 .appendingPathComponent(".agentsnotch/integrations", isDirectory: true)
@@ -148,6 +153,8 @@ final class ProviderIntegrationManager {
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "Notification", "Stop", "StopFailure", "SessionEnd", "SubagentStart", "SubagentStop"]
         case .grok:
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied", "Notification", "Stop", "StopFailure", "SessionEnd", "SubagentStart", "SubagentStop"]
+        case .geminiCLI:
+            ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"]
         default:
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"]
         }
@@ -324,7 +331,9 @@ final class ProviderIntegrationManager {
     }
 
     private func hookTimeout(for eventName: String) -> Int {
-        provider == .codex ? CodexHookConfiguration.timeout(for: eventName) : 5
+        if provider == .codex { return CodexHookConfiguration.timeout(for: eventName) }
+        if provider == .geminiCLI { return 5_000 }
+        return 5
     }
 
     private func updateInstalledRelayIfNeeded() throws {

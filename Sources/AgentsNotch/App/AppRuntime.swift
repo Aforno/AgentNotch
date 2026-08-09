@@ -6,11 +6,21 @@ import Observation
 @Observable
 @MainActor
 final class AppRuntime {
+    enum SelfTestStatus: Equatable {
+        case idle
+        case running
+        case passed(Date)
+        case failed(String)
+    }
+
     let activity: AgentActivityService
     let codexIntegration: ProviderIntegrationManager
     let claudeIntegration: ProviderIntegrationManager
     let grokIntegration: ProviderIntegrationManager
+    let geminiIntegration: ProviderIntegrationManager
     let providerAdapters: [HookProviderAdapter]
+    let notifications: AgentNotificationService
+    let updates: UpdateService
     #if DEBUG
     let simulator: DebugEventSimulator
     #endif
@@ -18,12 +28,19 @@ final class AppRuntime {
     private(set) var socketStatus = "Starting"
     private(set) var socketError: String?
     private(set) var persistenceError: String?
+    private(set) var lastEventReceivedAt: [AgentProvider: Date] = [:]
+    private(set) var requestedSessionID: String?
+    private(set) var selfTestStatuses: [AgentProvider: SelfTestStatus] = [:]
+    var openActivityCenterHandler: (() -> Void)?
+    var openOnboardingHandler: (() -> Void)?
     weak var panelController: NotchPanelController?
 
     private let persistence: SessionPersistence
     private let socketURL: URL
     private let monitorProviders: Bool
     private let grokHome: URL
+    private let historyRetentionDays: () -> Int?
+    private let originActivation = OriginActivationService()
     private var socketServer: UnixSocketServer?
     /// Coalesces rapid session writes so an older snapshot cannot overwrite a newer one.
     private var persistTask: Task<Void, Never>?
@@ -36,21 +53,31 @@ final class AppRuntime {
         persistence: SessionPersistence = SessionPersistence(),
         socketURL: URL = AgentSocketLocation.defaultURL,
         monitorProviders: Bool = true,
-        grokHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".grok")
+        grokHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".grok"),
+        historyRetentionDays: @escaping () -> Int? = {
+            UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int
+        }
     ) {
         self.persistence = persistence
         self.socketURL = socketURL
         self.monitorProviders = monitorProviders
         self.grokHome = grokHome
+        self.historyRetentionDays = historyRetentionDays
         activity = AgentActivityService()
         codexIntegration = ProviderIntegrationManager(provider: .codex)
         claudeIntegration = ProviderIntegrationManager(provider: .claudeCode)
         grokIntegration = ProviderIntegrationManager(provider: .grok)
-        providerAdapters = [codexIntegration, claudeIntegration, grokIntegration]
+        geminiIntegration = ProviderIntegrationManager(provider: .geminiCLI)
+        providerAdapters = [codexIntegration, claudeIntegration, grokIntegration, geminiIntegration]
             .map(HookProviderAdapter.init)
+        notifications = AgentNotificationService()
+        updates = UpdateService()
         #if DEBUG
         simulator = DebugEventSimulator(activity: activity)
         #endif
+        notifications.onOpenSession = { [weak self] sessionID in
+            self?.presentSession(sessionID)
+        }
     }
 
     func start() async {
@@ -88,6 +115,7 @@ final class AppRuntime {
         // Waiting rows are preserved because the user may still owe input.
         activity.completeUnverifiedActiveSessions()
         reconcileGrokSessionContext()
+        pruneHistory()
         #if DEBUG
         // Simulator state is intentionally ephemeral. This also removes rows
         // written by older debug builds before simulator persistence was split.
@@ -107,7 +135,7 @@ final class AppRuntime {
         let bufferedEvents = startupEvents
         startupEvents.removeAll(keepingCapacity: true)
         for event in bufferedEvents {
-            activity.ingest(event)
+            process(event, notify: false)
         }
 
         if monitorProviders {
@@ -116,6 +144,7 @@ final class AppRuntime {
                 try? await adapter.startMonitoring()
             }
         }
+        updates.checkAutomaticallyIfNeeded()
     }
 
     func stop() {
@@ -153,7 +182,25 @@ final class AppRuntime {
         if isRestoring {
             startupEvents.append(event)
         } else {
-            activity.ingest(event)
+            process(event, notify: true)
+        }
+    }
+
+    private func process(_ event: AgentEvent, notify: Bool) {
+        let previousState = activity.sessions.first { $0.id == event.sessionId }?.state
+        activity.ingest(event)
+        pruneHistory()
+        if event.metadata?["source"] != "self-test" {
+            lastEventReceivedAt[event.provider] = Date()
+        }
+        guard let session = activity.sessions.first(where: { $0.id == event.sessionId }) else { return }
+
+        if session.state == .waitingForUser, previousState != .waitingForUser, notify {
+            notifications.deliverAttention(for: session, waitingCount: activity.attentionCount)
+        } else if session.state == .failed, previousState != .failed, notify {
+            notifications.deliverFailure(for: session)
+        } else if previousState == .waitingForUser, session.state != .waitingForUser {
+            notifications.removeNotification(for: session.id)
         }
     }
 
@@ -211,18 +258,111 @@ final class AppRuntime {
 
     private var persistableSessions: [AgentSession] {
         #if DEBUG
-        activity.sessions.filter { !DebugEventSimulator.isSimulated($0) }
+        activity.sessions.filter { !DebugEventSimulator.isSimulated($0) && !Self.isSelfTest($0) }
         #else
-        activity.sessions
+        activity.sessions.filter { !Self.isSelfTest($0) }
         #endif
     }
 
+    private static func isSelfTest(_ session: AgentSession) -> Bool {
+        session.recentEvents.contains { $0.metadata?["source"] == "self-test" }
+    }
+
     func open(_ session: AgentSession) {
-        if let applicationURL = session.applicationURL {
-            NSWorkspace.shared.open(applicationURL)
-        } else if let directory = session.workingDirectory {
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: directory)])
+        originActivation.open(session)
+    }
+
+    func openFile(_ path: String) {
+        originActivation.openFile(path)
+    }
+
+    func presentSession(_ sessionID: String) {
+        guard activity.sessions.contains(where: { $0.id == sessionID }) else { return }
+        requestedSessionID = sessionID
+        if panelController?.isSurfaceEnabled == true {
+            panelController?.show()
+        } else {
+            openActivityCenter()
         }
+    }
+
+    func consumeRequestedSession(_ sessionID: String) {
+        guard requestedSessionID == sessionID else { return }
+        requestedSessionID = nil
+    }
+
+    func runSelfTest(for provider: AgentProvider) {
+        guard selfTestStatuses[provider] != .running else { return }
+        guard let integration = integration(for: provider) else {
+            selfTestStatuses[provider] = .failed("This provider does not support relay self-tests.")
+            return
+        }
+        integration.prepareForMonitoring()
+        guard !integration.status.canInstall else {
+            selfTestStatuses[provider] = .failed(
+                integration.lastError ?? "Install the provider hooks before testing the relay."
+            )
+            return
+        }
+
+        selfTestStatuses[provider] = .running
+        let nativeSessionID = "self-test:\(UUID().uuidString)"
+        let sessionID = "\(provider.rawValue):\(nativeSessionID)"
+        let payload: Data
+        do {
+            payload = try relaySelfTestPayload(provider: provider, sessionID: nativeSessionID)
+        } catch {
+            selfTestStatuses[provider] = .failed(error.localizedDescription)
+            return
+        }
+        let executableURL = integration.installedRelayURL
+        let socketURL = socketURL
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.detached {
+                    try RelaySelfTestRunner.run(
+                        executableURL: executableURL,
+                        provider: provider,
+                        socketURL: socketURL,
+                        payload: payload
+                    )
+                }.value
+                for _ in 0..<20 {
+                    if activity.sessions.contains(where: { $0.id == sessionID }) {
+                        activity.removeSession(id: sessionID)
+                        selfTestStatuses[provider] = .passed(Date())
+                        return
+                    }
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                selfTestStatuses[provider] = .failed("The installed relay did not deliver the test event.")
+            } catch {
+                selfTestStatuses[provider] = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    func clearHistory() {
+        activity.clearRecent()
+    }
+
+    func applyHistoryRetention(days: Int) {
+        guard days > 0 else { return }
+        activity.pruneCompleted(olderThan: TimeInterval(days * 24 * 60 * 60))
+    }
+
+    func refreshNotchSurface() {
+        panelController?.refreshPreferences()
+    }
+
+    func openActivityCenter() {
+        openActivityCenterHandler?()
+    }
+
+    func openOnboarding() {
+        openOnboardingHandler?()
     }
 
     func openSettings() {
@@ -245,5 +385,82 @@ final class AppRuntime {
             }
         }
         return nil
+    }
+
+    private func pruneHistory() {
+        guard let configuredDays = historyRetentionDays(), configuredDays > 0 else { return }
+        let days = max(1, configuredDays)
+        activity.pruneCompleted(olderThan: TimeInterval(days * 24 * 60 * 60))
+    }
+
+    private func integration(for provider: AgentProvider) -> ProviderIntegrationManager? {
+        switch provider {
+        case .codex: codexIntegration
+        case .claudeCode: claudeIntegration
+        case .grok: grokIntegration
+        case .geminiCLI: geminiIntegration
+        default: nil
+        }
+    }
+
+    private func relaySelfTestPayload(provider: AgentProvider, sessionID: String) throws -> Data {
+        let hookEventName = switch provider {
+        case .geminiCLI: "BeforeAgent"
+        case .grok: "user_prompt_submit"
+        default: "UserPromptSubmit"
+        }
+        return try JSONSerialization.data(withJSONObject: [
+            "session_id": sessionID,
+            "cwd": FileManager.default.homeDirectoryForCurrentUser.path,
+            "hook_event_name": hookEventName,
+            "prompt": "Connection self-test",
+        ])
+    }
+}
+
+private enum RelaySelfTestRunner {
+    static func run(
+        executableURL: URL,
+        provider: AgentProvider,
+        socketURL: URL,
+        payload: Data
+    ) throws {
+        let process = Process()
+        let input = Pipe()
+        let completed = DispatchSemaphore(value: 0)
+        process.executableURL = executableURL
+        process.arguments = [
+            "--provider", provider.rawValue,
+            "--socket", socketURL.path,
+            "--self-test",
+        ]
+        process.standardInput = input
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { _ in completed.signal() }
+
+        try process.run()
+        try input.fileHandleForWriting.write(contentsOf: payload)
+        try input.fileHandleForWriting.close()
+
+        guard completed.wait(timeout: .now() + 3) == .success else {
+            process.terminate()
+            throw RelaySelfTestError.timedOut
+        }
+        guard process.terminationStatus == 0 else {
+            throw RelaySelfTestError.failed(process.terminationStatus)
+        }
+    }
+}
+
+private enum RelaySelfTestError: LocalizedError {
+    case timedOut
+    case failed(Int32)
+
+    var errorDescription: String? {
+        switch self {
+        case .timedOut: "The installed relay self-test timed out."
+        case let .failed(status): "The installed relay exited with status \(status)."
+        }
     }
 }

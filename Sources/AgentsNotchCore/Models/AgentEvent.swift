@@ -24,6 +24,7 @@ public struct AgentEvent: Codable, Identifiable, Hashable, Sendable {
     public var workingDirectory: String?
     public var file: String?
     public var applicationURL: URL?
+    public var origin: AgentOrigin?
     public var metadata: [String: String]?
     public var parentSessionId: String?
     public var agentRole: String?
@@ -43,6 +44,7 @@ public struct AgentEvent: Codable, Identifiable, Hashable, Sendable {
         workingDirectory: String? = nil,
         file: String? = nil,
         applicationURL: URL? = nil,
+        origin: AgentOrigin? = nil,
         metadata: [String: String]? = nil,
         parentSessionId: String? = nil,
         agentRole: String? = nil,
@@ -61,6 +63,7 @@ public struct AgentEvent: Codable, Identifiable, Hashable, Sendable {
         self.workingDirectory = workingDirectory
         self.file = file
         self.applicationURL = applicationURL
+        self.origin = origin
         self.metadata = metadata
         self.parentSessionId = parentSessionId
         self.agentRole = agentRole

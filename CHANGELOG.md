@@ -6,6 +6,25 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Activity Center with searchable, filterable local session history and
+  detailed plans, workflows, relationships, files, and events.
+- First-run setup, integration health checks, and menu-bar access for displays
+  without a hardware notch.
+- Observer-only Gemini CLI integration using its official lifecycle hooks.
+- Optional actionable macOS notifications for waiting and failed agents.
+- Source-application handoff using optional terminal and application origin
+  metadata captured by the local relay.
+- Configurable history retention, virtual-notch support, pointer-display
+  following, and GitHub release checks.
+
+### Changed
+
+- Multiple waiting sessions now form an explicit attention queue while routine
+  activity remains collapsed.
+- Parent rows surface waiting or failed descendant state.
+
 ## [0.1.0] - 2026-08-08
 
 ### Added

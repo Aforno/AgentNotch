@@ -22,7 +22,9 @@ struct AgentRowView: View {
                 .foregroundStyle(.white)
                 .frame(width: session.isSubagent ? 78 : 62, alignment: .leading)
 
-            if let workflow = session.workflows.first {
+            if let attention = groupAttentionSession {
+                AttentionInlineSummary(session: attention)
+            } else if let workflow = session.workflows.first {
                 ExecutionInlineSummary(
                     progress: workflow.rowProgress,
                     stage: workflow.rowStage,
@@ -44,7 +46,7 @@ struct AgentRowView: View {
 
             Spacer(minLength: DynamicIslandSpacing.related)
 
-            StateIndicator(state: session.state, size: 12)
+            StateIndicator(state: groupState, size: 12)
         }
         .padding(.horizontal, DynamicIslandSpacing.outer)
         .frame(height: DynamicIslandSpacing.rowHeight, alignment: .center)
@@ -64,20 +66,60 @@ struct AgentRowView: View {
         let identity = session.isSubagent
             ? "\(subagentLabel) subagent"
             : session.provider.displayName
+        if let attention = groupAttentionSession {
+            return "\(identity), \(attention.currentActivity), \(groupState.displayName)"
+        }
         if let workflow = session.workflows.first {
             let active = subagents.filter(\.isActive).count
             let agents = active == 1 ? "1 active agent" : "\(active) active agents"
-            return "\(identity), \(workflow.rowProgress), \(workflow.rowStage), \(agents), \(session.state.displayName)"
+            return "\(identity), \(workflow.rowProgress), \(workflow.rowStage), \(agents), \(groupState.displayName)"
         }
         if let plan = session.plan, !plan.steps.isEmpty {
-            return "\(identity), \(plan.rowProgress), \(plan.rowStage), \(session.state.displayName)"
+            return "\(identity), \(plan.rowProgress), \(plan.rowStage), \(groupState.displayName)"
         }
         if !subagents.isEmpty {
             let active = subagents.filter(\.isActive).count
             let subagents = active == 1 ? "1 active subagent" : "\(active) active subagents"
-            return "\(identity), \(session.currentActivity), \(subagents), \(session.state.displayName)"
+            return "\(identity), \(session.currentActivity), \(subagents), \(groupState.displayName)"
         }
-        return "\(identity), \(session.currentActivity), \(session.state.displayName)"
+        return "\(identity), \(session.currentActivity), \(groupState.displayName)"
+    }
+
+    private var groupAttentionSession: AgentSession? {
+        ([session] + subagents)
+            .filter { $0.state == .waitingForUser }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .first
+    }
+
+    private var groupState: AgentState {
+        if groupAttentionSession != nil { return .waitingForUser }
+        if session.state == .failed || subagents.contains(where: { $0.state == .failed }) { return .failed }
+        return session.state
+    }
+}
+
+private struct AttentionInlineSummary: View {
+    let session: AgentSession
+
+    var body: some View {
+        HStack(spacing: DynamicIslandSpacing.related) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark")
+            Text(label)
+                .lineLimit(1)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(.orange)
+    }
+
+    private var label: String {
+        guard let role = session.agentRole else { return session.currentActivity }
+        let name = role
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: ":", with: " ")
+            .capitalized
+        return "\(name) needs input"
     }
 }
 

@@ -47,6 +47,20 @@ public final class AgentActivityService {
         sessions.filter { !$0.isActive }
     }
 
+    public var attentionSessions: [AgentSession] {
+        sessions
+            .filter { $0.state == .waitingForUser }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                return lhs.id < rhs.id
+            }
+    }
+
+    public var attentionSession: AgentSession? {
+        attentionEvent.flatMap { event in sessions.first { $0.id == event.sessionId } }
+            ?? attentionSessions.first
+    }
+
     /// Parent sessions followed by their descendants. A child that needs
     /// attention promotes its whole agent group without losing the hierarchy.
     public var hierarchicalSessions: [AgentSession] {
@@ -128,7 +142,7 @@ public final class AgentActivityService {
     }
 
     public var attentionCount: Int {
-        sessions.filter(\.needsAttention).count
+        attentionSessions.count
     }
 
     public func ingest(_ event: AgentEvent) {
@@ -172,7 +186,6 @@ public final class AgentActivityService {
         }
 
         sessions.sort(by: Self.orderSessions)
-        trimHistory()
         if advancesCurrentState {
             if cascadedTerminal {
                 // Rebuild attention: a waiting child may have been cascade-completed.
@@ -189,7 +202,6 @@ public final class AgentActivityService {
             .filter { !Self.isOrphanedGrokStart($0) }
         normalizeRestoredIdentities()
         self.sessions.sort(by: Self.orderSessions)
-        trimHistory()
         // Restoring from disk has no live event stream; rebuild the temporary
         // attention surface from any session that is still waiting for input.
         attentionEvent = latestWaitingAttentionEvent()
@@ -205,7 +217,6 @@ public final class AgentActivityService {
             sessions.append(AgentSession(event: event))
         }
         sessions.sort(by: Self.orderSessions)
-        trimHistory()
         onSessionsChanged?(sessions)
     }
 
@@ -234,10 +245,12 @@ public final class AgentActivityService {
     }
 
     public func pruneCompleted(olderThan age: TimeInterval, now: Date = Date()) {
+        let previousCount = sessions.count
         sessions.removeAll { session in
             guard let completedAt = session.completedAt else { return false }
             return now.timeIntervalSince(completedAt) > age
         }
+        guard sessions.count != previousCount else { return }
         onSessionsChanged?(sessions)
     }
 
@@ -255,7 +268,6 @@ public final class AgentActivityService {
         }
         guard changed else { return }
         sessions.sort(by: Self.orderSessions)
-        trimHistory()
         attentionEvent = latestWaitingAttentionEvent()
         onSessionsChanged?(sessions)
     }
@@ -301,12 +313,6 @@ public final class AgentActivityService {
             parentSessionId: session.parentSessionId,
             agentRole: session.agentRole
         )
-    }
-
-    private func trimHistory() {
-        let active = sessions.filter(\.isActive)
-        let recent = sessions.filter { !$0.isActive }.prefix(20)
-        sessions = (active + recent).sorted(by: Self.orderSessions)
     }
 
     private func appendHierarchy(

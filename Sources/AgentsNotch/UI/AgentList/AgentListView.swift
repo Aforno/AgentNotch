@@ -6,6 +6,7 @@ struct AgentListView: View {
     let relatedSessions: [AgentSession]
     let topInset: CGFloat
     let onOpenSettings: () -> Void
+    let onOpenActivityCenter: () -> Void
     let onSelect: (String) -> Void
 
     static func rowsHeight(for sessions: [AgentSession], relatedSessions _: [AgentSession]) -> CGFloat {
@@ -47,17 +48,29 @@ struct AgentListView: View {
         .padding(.top, topInset)
         .padding(.bottom, DynamicIslandSpacing.expandedBottom)
         .overlay(alignment: .topTrailing) {
-            Button(action: onOpenSettings) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.58))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+            HStack(spacing: 0) {
+                Button(action: onOpenActivityCenter) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.58))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .help("Activity Center")
+                .accessibilityLabel("Open Activity Center")
+
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.58))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .help("Settings")
+                .accessibilityLabel("Open Settings")
             }
             .buttonStyle(.plain)
             .padding(.trailing, DynamicIslandSpacing.standard)
-            .help("Settings")
-            .accessibilityLabel("Open Settings")
         }
     }
 

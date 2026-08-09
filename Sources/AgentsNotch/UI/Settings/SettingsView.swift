@@ -6,11 +6,20 @@ struct SettingsView: View {
 
     @AppStorage("animationsEnabled") private var animationsEnabled = true
     @AppStorage("displayPreference") private var displayPreference = DisplayPreference.primary.rawValue
+    @AppStorage("attentionNotificationsEnabled") private var attentionNotificationsEnabled = false
+    @AppStorage("attentionNotificationSoundEnabled") private var attentionNotificationSoundEnabled = false
+    @AppStorage("failureNotificationsEnabled") private var failureNotificationsEnabled = false
+    @AppStorage("historyRetentionDays") private var historyRetentionDays = 30
+    @AppStorage("notchEnabled") private var notchEnabled = true
+    @AppStorage("showVirtualNotch") private var showVirtualNotch = false
+    @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = false
     #if DEBUG
     @AppStorage("debugMode") private var debugMode = false
     #endif
     @State private var launchAtLogin = LaunchAtLoginService.isEnabled
     @State private var launchError: String?
+    @State private var notificationError: String?
+    @State private var confirmsClearHistory = false
 
     var body: some View {
         TabView {
@@ -31,53 +40,119 @@ struct SettingsView: View {
                 }
             #endif
         }
-        .frame(width: 540, height: 440)
+        .frame(width: 580, height: 560)
         .onAppear {
             launchAtLogin = LaunchAtLoginService.isEnabled
         }
+        .onChange(of: historyRetentionDays) { _, days in
+            runtime.applyHistoryRetention(days: days)
+        }
+        .onChange(of: automaticallyCheckForUpdates) { _, enabled in
+            if enabled { runtime.updates.checkAutomaticallyIfNeeded() }
+        }
+        .onChange(of: displayPreference) { _, _ in runtime.refreshNotchSurface() }
+        .onChange(of: notchEnabled) { _, _ in runtime.refreshNotchSurface() }
+        .onChange(of: showVirtualNotch) { _, _ in runtime.refreshNotchSurface() }
     }
 
     private var generalPane: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SettingsHeading(
-                title: "General",
-                detail: "Control how Agents Notch starts and appears."
-            )
-
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Launch Agents Notch at login", isOn: launchBinding)
-                Toggle("Animate notch transitions", isOn: $animationsEnabled)
-            }
-
-            Divider()
-
-            HStack {
-                Text("Show the notch on:")
-                Spacer()
-                Picker("Show the notch on", selection: $displayPreference) {
-                    ForEach(DisplayPreference.allCases) { preference in
-                        Text(preference.title).tag(preference.rawValue)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 180)
-            }
-
-            if let launchError {
-                SettingsMessage(
-                    text: launchError,
-                    symbol: "exclamationmark.triangle.fill",
-                    color: .red
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsHeading(
+                    title: "General",
+                    detail: "Control how Agents Notch starts, alerts, and stores local history."
                 )
-            }
 
-            Spacer()
+                GroupBox("Application") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Launch Agents Notch at login", isOn: launchBinding)
+                        Toggle("Animate notch transitions", isOn: $animationsEnabled)
+                        Toggle("Show notch surface", isOn: $notchEnabled)
+                        Toggle("Show a virtual notch on displays without hardware", isOn: $showVirtualNotch)
+                        Toggle("Automatically check GitHub for updates", isOn: $automaticallyCheckForUpdates)
+
+                        HStack {
+                            Text("Show the notch on:")
+                            Spacer()
+                            Picker("Show the notch on", selection: $displayPreference) {
+                                ForEach(DisplayPreference.allCases) { preference in
+                                    Text(preference.title).tag(preference.rawValue)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 190)
+                        }
+                        HStack {
+                            Text("Version \(runtime.updates.currentVersion)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            updateControl
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+
+                GroupBox("Attention") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Show macOS notifications when an agent needs input", isOn: notificationBinding)
+                        Toggle("Play notification sound", isOn: $attentionNotificationSoundEnabled)
+                            .disabled(!attentionNotificationsEnabled)
+                        Toggle("Also notify when an agent fails", isOn: $failureNotificationsEnabled)
+                            .disabled(!attentionNotificationsEnabled)
+                        Text("Routine activity and completions remain collapsed.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+
+                GroupBox("Local History") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Keep completed sessions")
+                            Spacer()
+                            Picker("Keep completed sessions", selection: $historyRetentionDays) {
+                                Text("7 days").tag(7)
+                                Text("30 days").tag(30)
+                                Text("90 days").tag(90)
+                                Text("1 year").tag(365)
+                            }
+                            .labelsHidden()
+                            .frame(width: 120)
+                        }
+                        HStack {
+                            Button("Open Activity Center") { runtime.openActivityCenter() }
+                            Button("Show Setup") { runtime.openOnboarding() }
+                            Spacer()
+                            Button("Clear Completed History", role: .destructive) {
+                                confirmsClearHistory = true
+                            }
+                            .disabled(runtime.activity.recentSessions.isEmpty)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+
+                if let launchError {
+                    SettingsMessage(text: launchError, symbol: "exclamationmark.triangle.fill", color: .red)
+                }
+                if let notificationError {
+                    SettingsMessage(text: notificationError, symbol: "bell.slash.fill", color: .orange)
+                }
+            }
+            .settingsPanePadding()
         }
-        .settingsPanePadding()
+        .confirmationDialog("Clear completed session history?", isPresented: $confirmsClearHistory) {
+            Button("Clear History", role: .destructive) { runtime.clearHistory() }
+        } message: {
+            Text("Active and waiting sessions will be kept.")
+        }
     }
 
     private var integrationsPane: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
             SettingsHeading(
                 title: "Integrations",
                 detail: "Connect local coding agents to Agents Notch."
@@ -91,6 +166,9 @@ struct SettingsView: View {
                 Divider()
                     .padding(.leading, 34)
                 integrationRow(runtime.grokIntegration)
+                Divider()
+                    .padding(.leading, 34)
+                integrationRow(runtime.geminiIntegration)
             }
 
             Divider()
@@ -136,9 +214,9 @@ struct SettingsView: View {
                 }
             }
 
-            Spacer(minLength: 0)
+            }
+            .settingsPanePadding()
         }
-        .settingsPanePadding()
     }
 
     @ViewBuilder
@@ -176,6 +254,12 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }
+
+                if let lastEvent = runtime.lastEventReceivedAt[integration.provider] {
+                    Text("Last event \(lastEvent.formatted(.relative(presentation: .named)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: 12)
@@ -185,6 +269,8 @@ struct SettingsView: View {
                     integration.install()
                 }
             } else {
+                selfTestControl(for: integration.provider)
+
                 Button {
                     integration.refreshStatus()
                 } label: {
@@ -200,6 +286,23 @@ struct SettingsView: View {
         }
         .controlSize(.small)
         .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func selfTestControl(for provider: AgentProvider) -> some View {
+        switch runtime.selfTestStatuses[provider] ?? .idle {
+        case .idle:
+            Button("Test") { runtime.runSelfTest(for: provider) }
+        case .running:
+            ProgressView().controlSize(.small).frame(width: 34)
+        case .passed:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .help("Installed relay delivered a local test event")
+        case let .failed(message):
+            Button("Retry") { runtime.runSelfTest(for: provider) }
+                .help(message)
+        }
     }
 
     #if DEBUG
@@ -266,8 +369,51 @@ struct SettingsView: View {
         )
     }
 
+    private var notificationBinding: Binding<Bool> {
+        Binding(
+            get: { attentionNotificationsEnabled },
+            set: { enabled in
+                if !enabled {
+                    attentionNotificationsEnabled = false
+                    notificationError = nil
+                    return
+                }
+                Task { @MainActor in
+                    let granted = await runtime.notifications.setEnabled(true)
+                    attentionNotificationsEnabled = granted
+                    notificationError = granted
+                        ? nil
+                        : "Notifications are disabled in System Settings. The notch will still show attention states."
+                }
+            }
+        )
+    }
+
     private var socketColor: Color {
         runtime.socketStatus == "Listening" ? .green : .orange
+    }
+
+    @ViewBuilder
+    private var updateControl: some View {
+        switch runtime.updates.state {
+        case .idle:
+            Button("Check for Updates") { Task { await runtime.updates.check() } }
+        case .checking:
+            ProgressView().controlSize(.small)
+        case .upToDate:
+            Label("Up to date", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case .noRelease:
+            Label("No releases yet", systemImage: "shippingbox")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case let .available(version, _):
+            Button("Download \(version)") { runtime.updates.openAvailableRelease() }
+        case let .failed(message):
+            Button("Retry") { Task { await runtime.updates.check() } }
+                .help(message)
+        }
     }
 
     private func statusColor(for status: ProviderIntegrationStatus) -> Color {

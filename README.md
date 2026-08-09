@@ -8,7 +8,7 @@ calls, file edits, and completions stay collapsed.
 > **Project status:** pre-1.0 public beta. The local protocol is versioned, but
 > UI details and provider lifecycle mappings may still evolve before 1.0.
 
-Built-in integrations support Codex, Claude Code, and Grok. The UI is
+Built-in integrations support Codex, Claude Code, Grok, and Gemini CLI. The UI is
 provider-neutral: every integration ultimately sends the same `AgentEvent`
 values to the local socket.
 
@@ -40,8 +40,9 @@ This builds both executables in the debug configuration, stages an ad-hoc signed
 and verifies that both its process and private event socket stay available. The
 Codex desktop Run action is wired to the same script.
 
-Hover the notch until it fully expands, then click the gear in its upper-right
-corner to open Settings.
+On first launch, the setup window can install and test each provider observer.
+Afterward, use the menu-bar item or press Command-1 to open Activity Center.
+Hover the notch until it fully expands to see the last three updated sessions.
 
 In **debug builds only**, open **Settings → Debug → Enable debug simulator** to
 simulate single states, plan progress, workflow steps, subagent hierarchies, or
@@ -52,7 +53,7 @@ the Debug settings tab, and related wiring.
 
 ## Provider integrations
 
-Open **Settings → Integrations** and install Codex, Claude, Grok, or any
+Open **Settings → Integrations** and install Codex, Claude, Grok, Gemini, or any
 combination of them. Agents Notch:
 
 1. copies its small relay to `~/.agentsnotch/bin/agentsnotch-hook`;
@@ -62,18 +63,18 @@ combination of them. Agents Notch:
    mode `0600`.
 
 The configuration locations are `~/.codex/hooks.json` for Codex,
-`~/.claude/settings.json` for Claude Code, and
-`~/.grok/hooks/agentsnotch.json` for Grok. Open `/hooks` in the corresponding
-provider to inspect the installed entries; Codex also requires new command
-hooks to be trusted. The hooks do not return a decision, inject context, or
-block a tool. The relay always exits successfully, even when Agents Notch is
-not running.
+`~/.claude/settings.json` for Claude Code,
+`~/.grok/hooks/agentsnotch.json` for Grok, and `~/.gemini/settings.json` for
+Gemini CLI. Open `/hooks` in providers that expose that command to inspect the
+installed entries; Codex also requires new command hooks to be trusted. The
+hooks do not return a decision, inject context, or block a tool. The relay
+always exits successfully, even when Agents Notch is not running.
 
 The adapters use each provider's documented session, prompt, tool, permission,
 notification, stop, and subagent lifecycle events. The relay accepts the
-snake_case payload used by Codex and Claude Code as well as Grok's camelCase
-payload. It deliberately does not parse provider transcripts. Tools that do not
-pass through a provider's local hook path cannot currently be shown as
+snake_case payload used by Codex, Claude Code, and Gemini CLI as well as Grok's
+camelCase payload. It deliberately does not parse provider transcripts. Tools
+that do not pass through a provider's local hook path cannot currently be shown as
 fine-grained activity.
 
 Grok sessions become visible on their first agent-turn event. Grok also emits a
@@ -84,6 +85,21 @@ which the app intentionally ignores because no agent task has begun.
 - [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
 - [Claude Code hooks reference](https://code.claude.com/docs/en/hooks)
 - [Grok hooks reference](https://docs.x.ai/build/features/hooks)
+- [Gemini CLI hooks reference](https://geminicli.com/docs/hooks/reference/)
+
+## Activity and attention
+
+The notch remains quiet for routine activity and expands automatically only
+when an agent is waiting for a permission or answer. Multiple waiting sessions
+form an attention queue. Optional macOS notifications provide an **Open
+Session** action, while the menu-bar item remains available on displays without
+a hardware notch.
+
+Activity Center keeps local session history with provider and status filters,
+search, plans, workflows, parent/child agents, recent files, and event details.
+Use **Open Origin** to reactivate the source application captured by the relay;
+when that application is unavailable, Agents Notch reveals the working
+directory in Finder. Completed-history retention is configurable in Settings.
 
 ## Local event protocol
 
@@ -104,6 +120,13 @@ close the connection. Payloads larger than 1 MiB are discarded. Protocol v1:
   "workingDirectory": "/Users/me/project",
   "file": null,
   "applicationURL": null,
+  "origin": {
+    "bundleIdentifier": "com.apple.Terminal",
+    "processIdentifier": 12345,
+    "terminalProgram": "Apple_Terminal",
+    "terminalSessionIdentifier": "…",
+    "tty": "/dev/ttys001"
+  },
   "metadata": null,
   "parentSessionId": null,
   "agentRole": null,
@@ -141,6 +164,9 @@ do not need to provide them.
 - `workflowUpdate` is a partial lifecycle update identified by a stable `id`.
   It can set a workflow's `title`, `status`, and ordered `steps` without
   resending fields that have not changed.
+- `origin` is optional launch context captured by the local relay. It lets the
+  app reactivate the source terminal or IDE without making the event invalid
+  when a provider cannot supply origin metadata.
 
 The built-in hook mapper translates Codex `update_plan` calls into plan
 snapshots, `create_goal`/`update_goal` calls into workflow updates, and native
@@ -162,11 +188,13 @@ implement the few lines needed to connect and write newline-delimited JSON.
   hooks.
 
 `AgentProviderAdapter` defines `startMonitoring`, `stopMonitoring`, and
-`discoverSessions`. Future OpenCode, Gemini CLI, and Cursor adapters can
+`discoverSessions`. Future OpenCode and Cursor adapters can
 translate their native events into `AgentEvent` without changing the notch UI.
 
-All state and recent-session persistence stays local. There is no networking,
-analytics, source upload, or remote telemetry.
+All activity state and recent-session persistence stays local. There is no
+analytics, source upload, or remote telemetry. If update checking is enabled,
+the app makes an HTTPS request to GitHub Releases at most once per day; manual
+checks use the same endpoint. Notifications are opt-in and delivered by macOS.
 
 ## Remove Agents Notch
 

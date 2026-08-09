@@ -13,6 +13,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var recentFiles: [String]
     public var recentEvents: [AgentEvent]
     public var applicationURL: URL?
+    public var origin: AgentOrigin?
     public var parentSessionId: String?
     public var agentRole: String?
     public var plan: AgentPlan?
@@ -31,6 +32,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         recentFiles = event.file?.nonEmpty.map { [$0] } ?? []
         recentEvents = [event]
         applicationURL = event.applicationURL
+        origin = event.origin
         parentSessionId = event.parentSessionId
         agentRole = event.agentRole
         plan = event.plan
@@ -75,6 +77,9 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 workingDirectory = directory
             }
             applicationURL = event.applicationURL ?? applicationURL
+            if let eventOrigin = event.origin, !eventOrigin.isEmpty {
+                origin = eventOrigin
+            }
             parentSessionId = event.parentSessionId ?? parentSessionId
             agentRole = event.agentRole ?? agentRole
 
@@ -232,7 +237,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, provider, task, currentActivity, state, startedAt, updatedAt, completedAt
-        case workingDirectory, recentFiles, recentEvents, applicationURL
+        case workingDirectory, recentFiles, recentEvents, applicationURL, origin
         case parentSessionId, agentRole, plan, workflows
     }
 
@@ -254,6 +259,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 .prefix(10)
         )
         applicationURL = try values.decodeIfPresent(URL.self, forKey: .applicationURL)
+        origin = try values.decodeIfPresent(AgentOrigin.self, forKey: .origin)
         parentSessionId = try values.decodeIfPresent(String.self, forKey: .parentSessionId)
         agentRole = try values.decodeIfPresent(String.self, forKey: .agentRole)
         plan = try values.decodeIfPresent(AgentPlan.self, forKey: .plan)

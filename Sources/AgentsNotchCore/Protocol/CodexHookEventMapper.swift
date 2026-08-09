@@ -36,6 +36,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var description: String?
     public var lastAssistantMessage: String?
     public var notificationType: String?
+    public var notificationMessage: String?
     public var error: String?
     public var timestamp: Date?
 
@@ -55,6 +56,8 @@ public struct AgentHookPayload: Decodable, Sendable {
         case description
         case lastAssistantMessage, lastAssistantMessageSnake = "last_assistant_message"
         case notificationType, notificationTypeSnake = "notification_type"
+        case notificationMessage = "message"
+        case promptResponse, promptResponseSnake = "prompt_response"
         case error
         case timestamp, createdAt, createdAtSnake = "created_at"
     }
@@ -79,6 +82,9 @@ public struct AgentHookPayload: Decodable, Sendable {
         description = try values.decodeIfPresent(String.self, forKey: .description)
         lastAssistantMessage = try values.decodeEitherIfPresent(String.self, forKey: .lastAssistantMessage, or: .lastAssistantMessageSnake)
         notificationType = try values.decodeEitherIfPresent(String.self, forKey: .notificationType, or: .notificationTypeSnake)
+        notificationMessage = try values.decodeIfPresent(String.self, forKey: .notificationMessage)
+        let promptResponse = try values.decodeEitherIfPresent(String.self, forKey: .promptResponse, or: .promptResponseSnake)
+        lastAssistantMessage = lastAssistantMessage ?? promptResponse
         error = try values.decodeIfPresent(String.self, forKey: .error)
         timestamp = values.decodeFlexibleDateIfPresent(forKeys: [.timestamp, .createdAt, .createdAtSnake])
     }
@@ -196,7 +202,10 @@ public enum AgentHookEventMapper {
                 type: .waiting,
                 sessionId: sessionId,
                 provider: provider,
-                activity: waitingNotificationActivity(for: payload.notificationType),
+                activity: waitingNotificationActivity(
+                    for: payload.notificationType,
+                    message: payload.notificationMessage
+                ),
                 state: .waitingForUser,
                 timestamp: now,
                 workingDirectory: payload.cwd.nonEmpty,
@@ -378,16 +387,19 @@ public enum AgentHookEventMapper {
     /// Claude Code Notification matchers that mean the agent is blocked on the user.
     private static func isWaitingNotification(_ type: String?) -> Bool {
         switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "permission_prompt", "idle_prompt", "agent_needs_input", "elicitation_dialog":
+        case "permission_prompt", "idle_prompt", "agent_needs_input", "elicitation_dialog", "toolpermission", "tool_permission":
             return true
         default:
             return false
         }
     }
 
-    private static func waitingNotificationActivity(for type: String?) -> String {
+    private static func waitingNotificationActivity(for type: String?, message: String?) -> String {
+        if let message = message?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
+            return concise(message, limit: 90)
+        }
         switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "permission_prompt", "elicitation_dialog":
+        case "permission_prompt", "elicitation_dialog", "toolpermission", "tool_permission":
             return "Needs approval"
         default:
             return "Waiting for input"
@@ -465,13 +477,17 @@ public enum AgentHookEventMapper {
         switch eventName.replacingOccurrences(of: "_", with: "").lowercased() {
         case "sessionstart": "SessionStart"
         case "userpromptsubmit": "UserPromptSubmit"
+        case "beforeagent": "UserPromptSubmit"
         case "pretooluse": "PreToolUse"
+        case "beforetool": "PreToolUse"
         case "posttooluse": "PostToolUse"
+        case "aftertool": "PostToolUse"
         case "posttoolusefailure": "PostToolUseFailure"
         case "permissionrequest": "PermissionRequest"
         case "permissiondenied": "PermissionDenied"
         case "notification": "Notification"
         case "stop": "Stop"
+        case "afteragent": "Stop"
         case "stopfailure": "StopFailure"
         case "sessionend": "SessionEnd"
         case "subagentstart": "SubagentStart"

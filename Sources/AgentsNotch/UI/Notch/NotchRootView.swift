@@ -70,7 +70,9 @@ struct NotchRootView: View {
             return .detail(selectedSessionID)
         }
         if isHovering { return .list }
-        if let event = activity.attentionEvent { return .temporary(event.id) }
+        if let session = activity.attentionSession {
+            return .temporary(session.recentEvents.first?.id ?? UUID())
+        }
         return .collapsed
     }
 
@@ -93,7 +95,7 @@ struct NotchRootView: View {
                 radius: min(10, (geometry.notchHeight + 2) * 0.32)
             )
         case .temporary:
-            return NotchLayout(width: 370, height: geometry.notchHeight + 48, radius: 18)
+            return NotchLayout(width: 392, height: geometry.notchHeight + 56, radius: 18)
         case .list:
             let contentHeight = DynamicIslandSpacing.expandedTop
                 + (visibleSessions.isEmpty
@@ -150,6 +152,12 @@ struct NotchRootView: View {
             guard let selectedSessionID,
                   !isVisibleDetailSession(selectedSessionID) else { return }
             self.selectedSessionID = nil
+        }
+        .onChange(of: runtime.requestedSessionID) { _, sessionID in
+            guard let sessionID,
+                  activity.sessions.contains(where: { $0.id == sessionID }) else { return }
+            withPresentationAnimation { selectedSessionID = sessionID }
+            runtime.consumeRequestedSession(sessionID)
         }
         .accessibilityElement(children: .contain)
     }
@@ -256,13 +264,15 @@ struct NotchRootView: View {
             }
 
         case .temporary:
-            if let event = activity.attentionEvent {
+            if let session = activity.attentionSession {
                 Button {
-                    guard activity.sessions.contains(where: { $0.id == event.sessionId }) else { return }
-                    withPresentationAnimation { selectedSessionID = event.sessionId }
+                    withPresentationAnimation { selectedSessionID = session.id }
                 } label: {
-                    TemporaryActivityView(event: event)
-                        .frame(height: 32)
+                    TemporaryActivityView(
+                        session: session,
+                        waitingCount: activity.attentionCount
+                    )
+                        .frame(height: 40)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -274,6 +284,7 @@ struct NotchRootView: View {
                 relatedSessions: activity.sessions,
                 topInset: geometry.notchHeight + DynamicIslandSpacing.expandedTop,
                 onOpenSettings: { runtime.openSettings() },
+                onOpenActivityCenter: { runtime.openActivityCenter() },
                 onSelect: { id in
                     withPresentationAnimation { selectedSessionID = id }
                 }

@@ -6,7 +6,8 @@ final class NotchPanelController: NSWindowController {
     private let runtime: AppRuntime
     private var geometry: DisplayGeometry
     private var screenObserver: NSObjectProtocol?
-    private var defaultsObserver: NSObjectProtocol?
+    private var globalPointerObserver: Any?
+    private var localPointerObserver: Any?
     private var resizeTask: Task<Void, Never>?
 
     init(runtime: AppRuntime) {
@@ -25,6 +26,7 @@ final class NotchPanelController: NSWindowController {
         configure(panel)
         installContent(in: panel)
         observeDisplayChanges()
+        observePointerDisplayChanges()
     }
 
     @available(*, unavailable)
@@ -35,10 +37,20 @@ final class NotchPanelController: NSWindowController {
     deinit {
         resizeTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
-        if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
+        if let globalPointerObserver { NSEvent.removeMonitor(globalPointerObserver) }
+        if let localPointerObserver { NSEvent.removeMonitor(localPointerObserver) }
+    }
+
+    var isSurfaceEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "notchEnabled")
+            && (geometry.hasPhysicalNotch || UserDefaults.standard.bool(forKey: "showVirtualNotch"))
     }
 
     func show() {
+        guard isSurfaceEnabled else {
+            window?.orderOut(nil)
+            return
+        }
         let hasActiveAgents = !runtime.activity.activeSessions.isEmpty
         let compactEarWidth = DynamicIslandSpacing.compactEarWidth(
             for: runtime.activity.activeGroupCount
@@ -48,6 +60,29 @@ final class NotchPanelController: NSWindowController {
             height: geometry.notchHeight + (hasActiveAgents ? 2 : 0)
         )
         window?.orderFrontRegardless()
+    }
+
+    /// Applies the three preferences that affect panel visibility or display
+    /// placement. If the current display is unchanged, keep the AppKit frame
+    /// owned by NotchRootView so an expanded list/detail is never clipped back
+    /// to compact dimensions by an unrelated preference write.
+    func refreshPreferences() {
+        guard let screen = DisplayResolver.preferredScreen() else { return }
+        let updated = DisplayGeometry.detect(on: screen)
+        let geometryChanged = updated != geometry
+        if geometryChanged {
+            geometry = updated
+            if let panel = window as? NSPanel { installContent(in: panel) }
+        }
+        guard isSurfaceEnabled else {
+            window?.orderOut(nil)
+            return
+        }
+        if geometryChanged {
+            show()
+        } else if window?.isVisible != true {
+            show()
+        }
     }
 
     func updateSize(_ size: CGSize, animated: Bool) {
@@ -109,21 +144,38 @@ final class NotchPanelController: NSWindowController {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshDisplay() }
         }
-        defaultsObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
+    }
+
+    private func observePointerDisplayChanges() {
+        globalPointerObserver = NSEvent.addGlobalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshDisplay() }
+            Task { @MainActor in self?.refreshPointerDisplayIfNeeded() }
+        }
+        localPointerObserver = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+        ) { [weak self] event in
+            MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
+            return event
         }
     }
 
-    private func refreshDisplay() {
+    private func refreshPointerDisplayIfNeeded() {
+        guard UserDefaults.standard.string(forKey: "displayPreference") == DisplayPreference.pointer.rawValue,
+              let screen = DisplayResolver.preferredScreen(),
+              screen.frame != geometry.screenFrame else { return }
+        refreshDisplay(force: true)
+    }
+
+    private func refreshDisplay(force: Bool = false) {
         guard let screen = DisplayResolver.preferredScreen() else { return }
         let updated = DisplayGeometry.detect(on: screen)
-        guard updated != geometry else { return }
-        geometry = updated
-        if let panel = window as? NSPanel { installContent(in: panel) }
+        let geometryChanged = updated != geometry
+        guard force || geometryChanged else { return }
+        if geometryChanged {
+            geometry = updated
+            if let panel = window as? NSPanel { installContent(in: panel) }
+        }
         show()
     }
 
