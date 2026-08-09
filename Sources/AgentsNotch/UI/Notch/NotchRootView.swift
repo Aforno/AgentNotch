@@ -120,9 +120,9 @@ struct NotchRootView: View {
         .onChange(of: layout) { _, newValue in
             applyLayoutChange(to: newValue)
         }
-        .onChange(of: activity.sessions.map(\.id)) { _, sessionIDs in
+        .onChange(of: visibleSessions.map(\.id)) { _, _ in
             guard let selectedSessionID,
-                  !sessionIDs.contains(selectedSessionID) else { return }
+                  !isVisibleDetailSession(selectedSessionID) else { return }
             self.selectedSessionID = nil
         }
         .accessibilityElement(children: .contain)
@@ -251,7 +251,12 @@ struct NotchRootView: View {
     private func updateHoverIntent(_ hovering: Bool) {
         isPointerInside = hovering
         hoverIntentTask?.cancel()
-        guard selectedSessionID == nil else { return }
+        guard selectedSessionID == nil else {
+            // Detail presentation masks hover presentation. Still track the
+            // pointer so Back returns to list only while the pointer is inside.
+            isHovering = hovering
+            return
+        }
         guard hovering != isHovering else { return }
 
         // Small asymmetric delays prevent the changing panel boundary from
@@ -266,5 +271,16 @@ struct NotchRootView: View {
             guard !Task.isCancelled, isPointerInside == hovering else { return }
             isHovering = hovering
         }
+    }
+
+    private func isVisibleDetailSession(_ sessionID: String) -> Bool {
+        let visibleRootIDs = Set(visibleSessions.map(\.id))
+        var currentID: String? = sessionID
+        var visited = Set<String>()
+        while let id = currentID, visited.insert(id).inserted {
+            if visibleRootIDs.contains(id) { return true }
+            currentID = activity.sessions.first(where: { $0.id == id })?.parentSessionId
+        }
+        return false
     }
 }

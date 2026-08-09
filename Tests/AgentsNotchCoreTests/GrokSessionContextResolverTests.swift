@@ -65,4 +65,38 @@ final class GrokSessionContextResolverTests: XCTestCase {
         XCTAssertEqual(context.workflowUpdate?.title, "audit-and-fix")
         XCTAssertEqual(context.workflowUpdate?.steps?.map(\.status), [.completed, .inProgress, .pending])
     }
+
+    func testRejectsSessionIDPathTraversal() throws {
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AgentsNotch-GrokTraversal-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let workflowDirectory = temporary
+            .appendingPathComponent("leak/workflows/run", isDirectory: true)
+        try FileManager.default.createDirectory(at: workflowDirectory, withIntermediateDirectories: true)
+        try Data("""
+        {
+          "version": 4,
+          "state": {
+            "run_id": "secret-run",
+            "name": "secret",
+            "objective": "SECRET",
+            "status": "active",
+            "phases": [],
+            "current_phase": ""
+          }
+        }
+        """.utf8).write(to: workflowDirectory.appendingPathComponent("state.json"))
+        let bucket = temporary.appendingPathComponent("sessions/%2Ftmp%2FAgentsNotch", isDirectory: true)
+        try FileManager.default.createDirectory(at: bucket, withIntermediateDirectories: true)
+
+        let context = GrokSessionContextResolver.resolve(
+            sessionId: "../../leak",
+            workspaceRoot: "/tmp/AgentsNotch",
+            grokHome: temporary
+        )
+
+        XCTAssertNil(context.workflowOwnerSessionId)
+        XCTAssertNil(context.workflowTask)
+        XCTAssertNil(context.workflowUpdate)
+    }
 }

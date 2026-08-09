@@ -50,7 +50,7 @@ struct AgentRowView: View {
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(session.state == .failed ? .red : .orange)
                     } else {
-                        Text(elapsed(from: session.startedAt, to: context.date))
+                        Text(elapsed(from: session.startedAt, to: session.completedAt ?? context.date))
                             .font(.system(size: 10, weight: .medium, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.35))
                     }

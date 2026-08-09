@@ -63,6 +63,17 @@ public enum GrokSessionContextResolver {
         fallbackRole: String?,
         grokHome: URL
     ) -> GrokSessionContext {
+        guard isSafePathComponent(sessionId) else {
+            return GrokSessionContext(
+                parentSessionId: fallbackParent,
+                agentRole: fallbackRole,
+                workflowOwnerSessionId: nil,
+                workflowTask: nil,
+                workflowPhase: nil,
+                workflowState: nil,
+                workflowUpdate: nil
+            )
+        }
         let fileManager = FileManager.default
         let paths = workspacePaths
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -228,6 +239,15 @@ public enum GrokSessionContextResolver {
         URL(fileURLWithPath: path).standardized.path.addingPercentEncoding(
             withAllowedCharacters: .alphanumerics
         ) ?? path
+    }
+
+    private static func isSafePathComponent(_ value: String) -> Bool {
+        !value.isEmpty
+            && value != "."
+            && value != ".."
+            && !value.contains("/")
+            && !value.contains("\\")
+            && !value.contains("\0")
     }
 }
 

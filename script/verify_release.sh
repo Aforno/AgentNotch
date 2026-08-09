@@ -50,16 +50,20 @@ if [[ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
   exit 1
 fi
 
-if ! file "$APP_BINARY" | grep -q 'arm64'; then
+APP_FILE_DESCRIPTION="$(file "$APP_BINARY")"
+HOOK_FILE_DESCRIPTION="$(file "$HOOK_BINARY")"
+if [[ "$APP_FILE_DESCRIPTION" != *arm64* ]]; then
   echo "release app must contain an arm64 executable" >&2
   exit 1
 fi
-if ! file "$HOOK_BINARY" | grep -q 'arm64'; then
+if [[ "$HOOK_FILE_DESCRIPTION" != *arm64* ]]; then
   echo "release hook must contain an arm64 executable" >&2
   exit 1
 fi
 
-if strings "$APP_BINARY" | grep -Fq 'Enable debug simulator'; then
+# Do not use grep -q here: under pipefail it exits before strings finishes,
+# strings receives SIGPIPE (141), and the condition incorrectly fails open.
+if strings "$APP_BINARY" | grep -F 'Enable debug simulator' >/dev/null; then
   echo "release app contains debug-only simulator UI" >&2
   exit 1
 fi

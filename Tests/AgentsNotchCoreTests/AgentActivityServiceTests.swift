@@ -181,12 +181,114 @@ final class AgentActivityServiceTests: XCTestCase {
             task: "Continue the task",
             activity: "Thinking",
             state: .thinking,
-            timestamp: completedAt.addingTimeInterval(1)
+            timestamp: completedAt.addingTimeInterval(1),
+            metadata: ["hookEvent": "user_prompt_submit"]
         ))
 
         XCTAssertEqual(service.sessions[0].state, .thinking)
         XCTAssertEqual(service.sessions[0].task, "Continue the task")
         XCTAssertNil(service.sessions[0].completedAt)
+    }
+
+    @MainActor
+    func testCompletedSessionIgnoresDelayedRoutineActivityAtSameOrLaterTime() {
+        let service = AgentActivityService()
+        let completedAt = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "terminal",
+            provider: .grok,
+            state: .completed,
+            timestamp: completedAt
+        ))
+
+        for (index, eventType) in [AgentEventType.activity, .toolStarted, .toolCompleted, .fileChanged].enumerated() {
+            service.ingest(AgentEvent(
+                type: eventType,
+                sessionId: "terminal",
+                provider: .grok,
+                state: .running,
+                timestamp: completedAt.addingTimeInterval(TimeInterval(index))
+            ))
+        }
+
+        XCTAssertEqual(service.sessions[0].state, .completed)
+        XCTAssertEqual(service.sessions[0].completedAt, completedAt)
+        XCTAssertEqual(service.sessions[0].recentEvents.count, 5)
+    }
+
+    @MainActor
+    func testFutureTimestampCannotPinSessionAheadOfCompletion() {
+        let service = AgentActivityService()
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "clock-skew",
+            provider: .codex,
+            state: .running,
+            timestamp: Date().addingTimeInterval(10_000_000)
+        ))
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "clock-skew",
+            provider: .codex,
+            state: .completed,
+            timestamp: Date()
+        ))
+
+        XCTAssertEqual(service.sessions[0].state, .completed)
+    }
+
+    @MainActor
+    func testLateChildCannotRemainActiveUnderCompletedParent() {
+        let service = AgentActivityService()
+        let completedAt = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "parent",
+            provider: .codex,
+            state: .completed,
+            timestamp: completedAt
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "late-child",
+            provider: .codex,
+            state: .running,
+            timestamp: completedAt.addingTimeInterval(1),
+            parentSessionId: "parent"
+        ))
+
+        let child = service.sessions.first { $0.id == "late-child" }
+        XCTAssertEqual(child?.state, .completed)
+        XCTAssertFalse(child?.isActive ?? true)
+    }
+
+    @MainActor
+    func testColdStartPreservesWaitingAttentionWhileCompletingUnverifiedRunners() {
+        let base = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "approval",
+                provider: .codex,
+                activity: "Needs approval",
+                state: .waitingForUser,
+                timestamp: base
+            )),
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "runner",
+                provider: .grok,
+                state: .running,
+                timestamp: base.addingTimeInterval(1)
+            )),
+        ])
+
+        service.completeUnverifiedActiveSessions()
+
+        XCTAssertEqual(service.sessions.first { $0.id == "approval" }?.state, .waitingForUser)
+        XCTAssertEqual(service.sessions.first { $0.id == "runner" }?.state, .completed)
+        XCTAssertEqual(service.attentionEvent?.sessionId, "approval")
     }
 
     @MainActor
@@ -485,7 +587,7 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testListSessionsShowsEveryActiveWhenMoreThanThree() {
+    func testListSessionsAlwaysShowsOnlyThreeMostRecentlyUpdatedGroups() {
         let service = AgentActivityService()
         let base = Date(timeIntervalSince1970: 100)
         for index in 0..<4 {
@@ -505,11 +607,33 @@ final class AgentActivityServiceTests: XCTestCase {
             timestamp: base.addingTimeInterval(20)
         ))
 
-        XCTAssertEqual(service.listSessions.count, 4)
-        XCTAssertEqual(Set(service.listSessions.map(\.id)), [
-            "active-0", "active-1", "active-2", "active-3"
-        ])
-        XCTAssertFalse(service.listSessions.contains { $0.id == "done" })
+        XCTAssertEqual(service.listSessions.map(\.id), ["done", "active-3", "active-2"])
+    }
+
+    @MainActor
+    func testRelationshipCycleStillProducesVisibleActiveGroup() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "a",
+            provider: .codex,
+            state: .running,
+            timestamp: base,
+            parentSessionId: "b"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "b",
+            provider: .codex,
+            state: .running,
+            timestamp: base.addingTimeInterval(1),
+            parentSessionId: "a"
+        ))
+
+        XCTAssertEqual(service.activeGroupCount, 1)
+        XCTAssertEqual(service.listSessions.count, 1)
+        XCTAssertTrue(["a", "b"].contains(service.listSessions[0].id))
     }
 
     @MainActor
@@ -533,5 +657,106 @@ final class AgentActivityServiceTests: XCTestCase {
         XCTAssertFalse(decoded.isSubagent)
         XCTAssertNil(decoded.plan)
         XCTAssertTrue(decoded.workflows.isEmpty)
+    }
+
+    @MainActor
+    func testLateStartCorrectsSessionStartTimeWithoutRegressingState() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "ordered-start",
+            provider: .codex,
+            state: .running,
+            timestamp: base.addingTimeInterval(10)
+        ))
+        service.ingest(AgentEvent(
+            type: .started,
+            sessionId: "ordered-start",
+            provider: .codex,
+            state: .starting,
+            timestamp: base
+        ))
+
+        XCTAssertEqual(service.sessions[0].startedAt, base)
+        XCTAssertEqual(service.sessions[0].state, .running)
+    }
+
+    @MainActor
+    func testEqualTimestampRoutineEventCannotClearWaitingAttention() {
+        let service = AgentActivityService()
+        let timestamp = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "attention",
+            provider: .codex,
+            state: .waitingForUser,
+            timestamp: timestamp
+        ))
+        service.ingest(AgentEvent(
+            type: .toolCompleted,
+            sessionId: "attention",
+            provider: .codex,
+            state: .running,
+            timestamp: timestamp
+        ))
+
+        XCTAssertEqual(service.sessions[0].state, .waitingForUser)
+        XCTAssertEqual(service.attentionEvent?.sessionId, "attention")
+    }
+
+    @MainActor
+    func testProviderCollisionCreatesSeparateCanonicalSession() {
+        let service = AgentActivityService()
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "shared-native-id",
+            provider: .codex,
+            state: .running
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "shared-native-id",
+            provider: .grok,
+            state: .running
+        ))
+
+        XCTAssertEqual(service.sessions.count, 2)
+        XCTAssertEqual(Set(service.sessions.map(\.id)), ["codex:shared-native-id", "grok:shared-native-id"])
+        XCTAssertEqual(Set(service.sessions.map(\.provider)), [.codex, .grok])
+    }
+
+    @MainActor
+    func testRestoreCanonicalizesCrossProviderAndDuplicateIdentities() {
+        let base = Date(timeIntervalSince1970: 100)
+        let codexOlder = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "shared",
+            provider: .codex,
+            task: "old",
+            state: .running,
+            timestamp: base
+        ))
+        let codexNewer = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "shared",
+            provider: .codex,
+            task: "new",
+            state: .running,
+            timestamp: base.addingTimeInterval(2)
+        ))
+        let grok = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "shared",
+            provider: .grok,
+            state: .running,
+            timestamp: base.addingTimeInterval(1)
+        ))
+
+        let service = AgentActivityService(sessions: [codexOlder, codexNewer, grok])
+
+        XCTAssertEqual(service.sessions.count, 2)
+        XCTAssertEqual(Set(service.sessions.map(\.id)), ["codex:shared", "grok:shared"])
+        XCTAssertEqual(service.sessions.first(where: { $0.provider == .codex })?.task, "new")
     }
 }

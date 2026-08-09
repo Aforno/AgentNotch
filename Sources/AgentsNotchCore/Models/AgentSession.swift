@@ -1,7 +1,7 @@
 import Foundation
 
 public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
-    public let id: String
+    public var id: String
     public var provider: AgentProvider
     public var task: String
     public var currentActivity: String
@@ -44,16 +44,24 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 
     @discardableResult
     public mutating func apply(_ event: AgentEvent) -> Bool {
+        startedAt = min(startedAt, event.timestamp)
         let isTerminal = state == .completed || state == .failed
         let eventIsTerminal = event.resolvedState == .completed || event.resolvedState == .failed
-        // Waiting notifications that arrive after a terminal state must not reopen it.
-        let isLateWaitingNotification = isTerminal && event.resolvedState == .waitingForUser
+        // A terminal session may begin another turn, but only an explicit lifecycle
+        // event proves that. Delayed tool, workflow, notification, or file events
+        // are history and must never resurrect a completed row.
+        let terminalTransitionIsAllowed = !isTerminal || eventIsTerminal || event.explicitlyResumesSession
         // Symmetric reorder case: concurrent ingest can apply a later-timestamp
         // waiting event before an earlier completed/failed. Terminal still wins
         // over waiting so the session cannot stick on waitingForUser forever.
         let isReorderedTerminalVsWaiting = state == .waitingForUser && eventIsTerminal
-        let advancesCurrentState =
-            (event.timestamp >= updatedAt || isReorderedTerminalVsWaiting) && !isLateWaitingNotification
+        let sameTimeKeepsAttention = event.timestamp == updatedAt
+            && state == .waitingForUser
+            && !eventIsTerminal
+            && !event.explicitlyResumesSession
+        let advancesCurrentState = (event.timestamp >= updatedAt || isReorderedTerminalVsWaiting)
+            && terminalTransitionIsAllowed
+            && !sameTimeKeepsAttention
         if advancesCurrentState {
             provider = event.provider
             if let task = event.task?.nonEmpty { self.task = task }
@@ -107,6 +115,14 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         return advancesCurrentState
     }
 
+    public mutating func completeFromParent(as terminalState: AgentState, at timestamp: Date) {
+        guard terminalState == .completed || terminalState == .failed, isActive else { return }
+        state = terminalState
+        completedAt = timestamp
+        updatedAt = max(updatedAt, timestamp)
+        currentActivity = terminalState == .failed ? "Session failed" : "Session ended"
+    }
+
     private mutating func applyWorkflowUpdate(_ update: AgentWorkflowUpdate?, at timestamp: Date) {
         guard let update else { return }
         if let index = workflows.firstIndex(where: { $0.id == update.id }) {
@@ -145,13 +161,31 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         updatedAt = try values.decode(Date.self, forKey: .updatedAt)
         completedAt = try values.decodeIfPresent(Date.self, forKey: .completedAt)
         workingDirectory = try values.decodeIfPresent(String.self, forKey: .workingDirectory)
-        recentFiles = try values.decode([String].self, forKey: .recentFiles)
-        recentEvents = try values.decode([AgentEvent].self, forKey: .recentEvents)
+        recentFiles = Array(try values.decode([String].self, forKey: .recentFiles).prefix(6))
+        recentEvents = Array(
+            try values.decode([AgentEvent].self, forKey: .recentEvents)
+                .sorted { $0.timestamp > $1.timestamp }
+                .prefix(10)
+        )
         applicationURL = try values.decodeIfPresent(URL.self, forKey: .applicationURL)
         parentSessionId = try values.decodeIfPresent(String.self, forKey: .parentSessionId)
         agentRole = try values.decodeIfPresent(String.self, forKey: .agentRole)
         plan = try values.decodeIfPresent(AgentPlan.self, forKey: .plan)
-        workflows = try values.decodeIfPresent([AgentWorkflow].self, forKey: .workflows) ?? []
+        workflows = Array(
+            (try values.decodeIfPresent([AgentWorkflow].self, forKey: .workflows) ?? [])
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(6)
+        )
+    }
+}
+
+private extension AgentEvent {
+    var explicitlyResumesSession: Bool {
+        if type == .started { return true }
+        guard let hookEvent = metadata?["hookEvent"] else { return false }
+        return hookEvent
+            .replacingOccurrences(of: "_", with: "")
+            .lowercased() == "userpromptsubmit"
     }
 }
 

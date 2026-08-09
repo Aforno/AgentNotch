@@ -32,6 +32,9 @@ struct SettingsView: View {
             #endif
         }
         .frame(width: 540, height: 440)
+        .onAppear {
+            launchAtLogin = LaunchAtLoginService.isEnabled
+        }
     }
 
     private var generalPane: some View {
@@ -123,6 +126,14 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                if let error = runtime.persistenceError {
+                    SettingsMessage(
+                        text: error,
+                        symbol: "externaldrive.badge.exclamationmark",
+                        color: .orange
+                    )
+                }
             }
 
             Spacer(minLength: 0)
@@ -169,8 +180,8 @@ struct SettingsView: View {
 
             Spacer(minLength: 12)
 
-            if integration.status == .notInstalled {
-                Button("Install") {
+            if integration.status.canInstall {
+                Button(integration.status == .notInstalled ? "Install" : "Retry") {
                     integration.install()
                 }
             } else {
@@ -245,7 +256,7 @@ struct SettingsView: View {
             set: { value in
                 do {
                     try LaunchAtLoginService.setEnabled(value)
-                    launchAtLogin = value
+                    launchAtLogin = LaunchAtLoginService.isEnabled
                     launchError = nil
                 } catch {
                     launchAtLogin = LaunchAtLoginService.isEnabled

@@ -16,6 +16,13 @@ enum ProviderIntegrationStatus: Equatable {
         case let .unavailable(message): message
         }
     }
+
+    var canInstall: Bool {
+        switch self {
+        case .notInstalled, .unavailable: true
+        case .installedNeedsTrust, .ready: false
+        }
+    }
 }
 
 @Observable
@@ -152,19 +159,29 @@ final class ProviderIntegrationManager {
         return "'\(path)' --provider '\(providerName)'"
     }
 
-    private func readRootConfiguration() throws -> [String: Any] {
-        guard fileManager.fileExists(atPath: hooksURL.path) else { return [:] }
+    private struct RootConfiguration {
+        var root: [String: Any]
+        let originalData: Data?
+    }
+
+    private func readRootConfiguration() throws -> RootConfiguration {
+        guard fileManager.fileExists(atPath: hooksURL.path) else {
+            return RootConfiguration(root: [:], originalData: nil)
+        }
         let data = try Data(contentsOf: hooksURL)
-        guard !data.isEmpty else { return [:] }
+        guard !data.isEmpty else {
+            return RootConfiguration(root: [:], originalData: data)
+        }
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ProviderIntegrationError.invalidHooksFile(hooksURL.path)
         }
-        return root
+        return RootConfiguration(root: root, originalData: data)
     }
 
     private func installHookConfiguration() throws {
-        var root = try readRootConfiguration()
-        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        let configuration = try readRootConfiguration()
+        var root = configuration.root
+        var hooks = try hooksDictionary(in: root)
 
         for eventName in eventNames {
             let newGroup: [String: Any] = [
@@ -174,28 +191,35 @@ final class ProviderIntegrationManager {
                     "timeout": hookTimeout(for: eventName),
                 ]],
             ]
-            // Missing key: install cleanly. Non-array/mixed values: leave untouched
-            // so install never destroys the user's pre-existing hooks for that event.
             if hooks[eventName] == nil {
                 hooks[eventName] = [newGroup]
                 continue
             }
-            guard var groups = hooks[eventName] as? [[String: Any]] else { continue }
+            guard var groups = hooks[eventName] as? [[String: Any]] else {
+                throw ProviderIntegrationError.invalidHookEvent(eventName, hooksURL.path)
+            }
             groups = groups.compactMap { removeAgentsNotchHandlers(from: $0) }
             groups.append(newGroup)
             hooks[eventName] = groups
         }
 
         root["hooks"] = hooks
-        try writeRootConfiguration(root)
+        try writeRootConfiguration(root, expectedData: configuration.originalData)
+        guard hookConfigurationContainsRelay() else {
+            throw ProviderIntegrationError.incompleteInstallation
+        }
     }
 
     private func removeHookConfiguration() throws {
         guard fileManager.fileExists(atPath: hooksURL.path) else { return }
-        var root = try readRootConfiguration()
-        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        let configuration = try readRootConfiguration()
+        var root = configuration.root
+        guard root["hooks"] != nil else { return }
+        var hooks = try hooksDictionary(in: root)
 
-        for eventName in eventNames {
+        // Scan every event key so uninstall also removes provider-owned hooks
+        // written by an older Agents Notch event schema.
+        for eventName in Array(hooks.keys) {
             // Non-array event values are left intact; never delete the key on cast failure.
             guard var groups = hooks[eventName] as? [[String: Any]] else { continue }
             groups = groups.compactMap { removeAgentsNotchHandlers(from: $0) }
@@ -206,10 +230,18 @@ final class ProviderIntegrationManager {
             }
         }
         root["hooks"] = hooks
-        try writeRootConfiguration(root)
+        try writeRootConfiguration(root, expectedData: configuration.originalData)
     }
 
-    private func writeRootConfiguration(_ root: [String: Any]) throws {
+    private func hooksDictionary(in root: [String: Any]) throws -> [String: Any] {
+        guard let value = root["hooks"] else { return [:] }
+        guard let hooks = value as? [String: Any] else {
+            throw ProviderIntegrationError.invalidHooksSection(hooksURL.path)
+        }
+        return hooks
+    }
+
+    private func writeRootConfiguration(_ root: [String: Any], expectedData: Data?) throws {
         let destination = hooksURL.resolvingSymlinksInPath()
         let existingPermissions = (try? fileManager.attributesOfItem(atPath: destination.path))?[.posixPermissions]
         try fileManager.createDirectory(
@@ -217,6 +249,12 @@ final class ProviderIntegrationManager {
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+        let currentData = fileManager.fileExists(atPath: destination.path)
+            ? try Data(contentsOf: destination)
+            : nil
+        guard currentData == expectedData else {
+            throw ProviderIntegrationError.configurationChanged(hooksURL.path)
+        }
         let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: destination, options: .atomic)
         try fileManager.setAttributes(
@@ -226,8 +264,8 @@ final class ProviderIntegrationManager {
     }
 
     private func hookConfigurationContainsRelay() -> Bool {
-        guard let root = try? readRootConfiguration(),
-              let hooks = root["hooks"] as? [String: Any]
+        guard let configuration = try? readRootConfiguration(),
+              let hooks = try? hooksDictionary(in: configuration.root)
         else { return false }
         return eventNames.allSatisfy { eventName in
             let groups = hooks[eventName] as? [[String: Any]] ?? []
@@ -265,10 +303,16 @@ final class ProviderIntegrationManager {
 
         let path = installedRelayURL.path
         let quotedPath = "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
-        if commandStartsWithExecutable(trimmed, executable: quotedPath)
-            || commandStartsWithExecutable(trimmed, executable: path)
-        {
-            return true
+        for executable in [quotedPath, path] where commandStartsWithExecutable(trimmed, executable: executable) {
+            let remainder = String(trimmed.dropFirst(executable.count))
+            let providerForms = [
+                "--provider '\(provider.rawValue)'",
+                "--provider \"\(provider.rawValue)\"",
+                "--provider \(provider.rawValue)",
+            ]
+            if providerForms.contains(where: remainder.contains) { return true }
+            // Older helpers omitted --provider and therefore used the Codex default.
+            return provider == .codex && !remainder.contains("--provider")
         }
         return false
     }
@@ -317,6 +361,10 @@ final class ProviderIntegrationManager {
 private enum ProviderIntegrationError: LocalizedError {
     case relayMissing
     case invalidHooksFile(String)
+    case invalidHooksSection(String)
+    case invalidHookEvent(String, String)
+    case configurationChanged(String)
+    case incompleteInstallation
 
     var errorDescription: String? {
         switch self {
@@ -324,6 +372,14 @@ private enum ProviderIntegrationError: LocalizedError {
             "The bundled agent relay could not be found. Launch the packaged Agents Notch app."
         case let .invalidHooksFile(path):
             "The existing \(path) file is not a JSON object."
+        case let .invalidHooksSection(path):
+            "The existing hooks value in \(path) is not a JSON object."
+        case let .invalidHookEvent(event, path):
+            "The existing \(event) hooks in \(path) are not an array."
+        case let .configurationChanged(path):
+            "\(path) changed while Agents Notch was updating it. Try again."
+        case .incompleteInstallation:
+            "One or more required lifecycle hooks could not be installed."
         }
     }
 }

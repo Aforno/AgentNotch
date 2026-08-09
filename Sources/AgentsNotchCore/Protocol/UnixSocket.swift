@@ -34,11 +34,13 @@ public final class UnixSocketServer: @unchecked Sendable {
 
     /// Per-client read deadline so one idle peer cannot stall event delivery.
     private static let clientReadTimeout = timeval(tv_sec: 2, tv_usec: 0)
+    private static let maximumConcurrentClients = 64
     /// Serializes check-unlink-bind across instances so concurrent start() calls
     /// cannot both observe not-accepting and orphan each other's listener path.
     private static let startLock = NSLock()
 
     private let socketURL: URL
+    private let maximumPayloadBytes: Int
     private let eventHandler: EventHandler
     private let queue = DispatchQueue(label: "com.agentsnotch.socket.listener", qos: .utility)
     /// Concurrent so one slow client read does not block others for the full timeout.
@@ -56,8 +58,13 @@ public final class UnixSocketServer: @unchecked Sendable {
     /// Accepted client fds still being read; closed on stop so weak-self races cannot leak them.
     private var clientFDs: Set<Int32> = []
 
-    public init(socketURL: URL = AgentSocketLocation.defaultURL, eventHandler: @escaping EventHandler) {
+    public init(
+        socketURL: URL = AgentSocketLocation.defaultURL,
+        maximumPayloadBytes: Int = 1_048_576,
+        eventHandler: @escaping EventHandler
+    ) {
         self.socketURL = socketURL
+        self.maximumPayloadBytes = max(1, maximumPayloadBytes)
         self.eventHandler = eventHandler
     }
 
@@ -83,6 +90,24 @@ public final class UnixSocketServer: @unchecked Sendable {
         // so a second starter cannot unlink a path the first just bound.
         Self.startLock.lock()
         defer { Self.startLock.unlock() }
+
+        // `startLock` coordinates servers in this process. A persistent advisory
+        // lock file closes the same check/unlink/bind race when two packaged app
+        // processes launch concurrently.
+        let lockPath = socketURL.path + ".lock"
+        let lockFD = Darwin.open(lockPath, O_CREAT | O_RDWR, mode_t(0o600))
+        guard lockFD >= 0 else { throw AgentSocketError.systemCall("open", errno) }
+        var processLock = flock()
+        processLock.l_type = Int16(F_WRLCK)
+        processLock.l_whence = Int16(SEEK_SET)
+        defer {
+            processLock.l_type = Int16(F_UNLCK)
+            _ = Darwin.fcntl(lockFD, F_SETLK, &processLock)
+            Darwin.close(lockFD)
+        }
+        guard Darwin.fcntl(lockFD, F_SETLKW, &processLock) == 0 else {
+            throw AgentSocketError.systemCall("fcntl(F_SETLKW)", errno)
+        }
 
         // Never steal a live listener. Only unlink a stale path that nothing accepts.
         if isSocketAccepting(at: socketURL.path) {
@@ -140,10 +165,11 @@ public final class UnixSocketServer: @unchecked Sendable {
 
         clientsLock.lock()
         let openClients = clientFDs
-        clientFDs.removeAll()
         clientsLock.unlock()
         for client in openClients {
-            Darwin.close(client)
+            // Wake blocked readers; the owning reader closes the descriptor
+            // exactly once after it leaves read(). This avoids fd-reuse races.
+            _ = Darwin.shutdown(client, SHUT_RDWR)
         }
 
         // Only unlink if the path still refers to the socket we bound.
@@ -180,13 +206,18 @@ public final class UnixSocketServer: @unchecked Sendable {
             )
 
             clientsLock.lock()
+            guard clientFDs.count < Self.maximumConcurrentClients else {
+                clientsLock.unlock()
+                Darwin.close(client)
+                continue
+            }
             clientFDs.insert(client)
             clientsLock.unlock()
 
             clientsQueue.async { [weak self] in
                 guard let self else {
-                    // stop()/deinit already closed every tracked client fd. Closing
-                    // again here races descriptor reuse and can drop another file.
+                    // No reader took ownership before server deallocation.
+                    Darwin.close(client)
                     return
                 }
                 self.read(client: client)
@@ -206,9 +237,10 @@ public final class UnixSocketServer: @unchecked Sendable {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 8_192)
 
-        while data.count < 1_048_576 {
+        while data.count <= maximumPayloadBytes {
             let count = Darwin.read(client, &buffer, buffer.count)
             if count > 0 {
+                guard data.count + count <= maximumPayloadBytes else { return }
                 data.append(buffer, count: count)
             } else {
                 break

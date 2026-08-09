@@ -17,14 +17,28 @@ final class AppRuntime {
 
     private(set) var socketStatus = "Starting"
     private(set) var socketError: String?
+    private(set) var persistenceError: String?
     weak var panelController: NotchPanelController?
 
-    private let persistence = SessionPersistence()
+    private let persistence: SessionPersistence
+    private let socketURL: URL
+    private let monitorProviders: Bool
     private var socketServer: UnixSocketServer?
     /// Coalesces rapid session writes so an older snapshot cannot overwrite a newer one.
     private var persistTask: Task<Void, Never>?
+    private var lifecycleGeneration = 0
+    private var acceptsEvents = false
+    private var isRestoring = false
+    private var startupEvents: [AgentEvent] = []
 
-    init() {
+    init(
+        persistence: SessionPersistence = SessionPersistence(),
+        socketURL: URL = AgentSocketLocation.defaultURL,
+        monitorProviders: Bool = true
+    ) {
+        self.persistence = persistence
+        self.socketURL = socketURL
+        self.monitorProviders = monitorProviders
         activity = AgentActivityService()
         codexIntegration = ProviderIntegrationManager(provider: .codex)
         claudeIntegration = ProviderIntegrationManager(provider: .claudeCode)
@@ -37,29 +51,19 @@ final class AppRuntime {
     }
 
     func start() async {
-        let saved = await persistence.load()
-        let restoredActives = saved.contains(where: \.isActive)
-        activity.replaceSessions(saved)
-        // Hook adapters cannot verify process liveness. Complete restored actives
-        // so a missed Stop/SessionEnd cannot leave sessions active forever; later
-        // hook events resume a session if the provider is still running.
-        activity.completeUnverifiedActiveSessions()
-        reconcileGrokSessionContext()
-        #if DEBUG
-        // Simulator state is intentionally ephemeral. This also removes rows
-        // written by older debug builds before simulator persistence was split.
-        simulator.reset()
-        #endif
-        if persistableSessions.count != saved.count || restoredActives {
-            await persistence.save(persistableSessions)
-        }
-        activity.onSessionsChanged = { [weak self] _ in
-            self?.schedulePersist()
-        }
+        guard !acceptsEvents else { return }
+        lifecycleGeneration += 1
+        let generation = lifecycleGeneration
+        acceptsEvents = true
+        isRestoring = true
+        startupEvents.removeAll(keepingCapacity: true)
 
-        let activity = activity
-        let server = UnixSocketServer { event in
-            Task { @MainActor in activity.ingest(event) }
+        // Bind before any awaited restore work. Hooks emitted during startup are
+        // buffered and replayed after the persisted snapshot is installed.
+        let server = UnixSocketServer(socketURL: socketURL) { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.receive(event, generation: generation)
+            }
         }
         do {
             try server.start()
@@ -71,14 +75,59 @@ final class AppRuntime {
             socketError = error.localizedDescription
         }
 
-        for adapter in providerAdapters {
-            try? await adapter.startMonitoring()
+        let loadResult = await persistence.load()
+        guard acceptsEvents, generation == lifecycleGeneration else { return }
+        let saved = loadResult.sessions
+        persistenceError = loadResult.recoveryMessage
+        activity.replaceSessions(saved)
+        // Hook adapters cannot verify process liveness. Complete restored running
+        // sessions so a missed Stop/SessionEnd cannot leave rows active forever.
+        // Waiting rows are preserved because the user may still owe input.
+        activity.completeUnverifiedActiveSessions()
+        reconcileGrokSessionContext()
+        #if DEBUG
+        // Simulator state is intentionally ephemeral. This also removes rows
+        // written by older debug builds before simulator persistence was split.
+        simulator.reset()
+        #endif
+        // Always save the reconciled snapshot. This persists restored Grok
+        // relationships and recreates a clean file after corruption recovery.
+        let saveError = await persistence.save(persistableSessions)
+        guard acceptsEvents, generation == lifecycleGeneration else { return }
+        if let error = saveError {
+            persistenceError = error
+        }
+        activity.onSessionsChanged = { [weak self] _ in
+            self?.schedulePersist()
+        }
+        isRestoring = false
+        let bufferedEvents = startupEvents
+        startupEvents.removeAll(keepingCapacity: true)
+        for event in bufferedEvents {
+            activity.ingest(event)
+        }
+
+        if monitorProviders {
+            for adapter in providerAdapters {
+                guard acceptsEvents, generation == lifecycleGeneration else { return }
+                try? await adapter.startMonitoring()
+            }
         }
     }
 
     func stop() {
+        lifecycleGeneration += 1
+        acceptsEvents = false
+        isRestoring = false
+        startupEvents.removeAll()
+        activity.onSessionsChanged = nil
         persistTask?.cancel()
         persistTask = nil
+        do {
+            try persistence.saveSynchronously(persistableSessions)
+        } catch {
+            persistenceError = "Could not save session history: \(error.localizedDescription)"
+        }
         socketServer?.stop()
         socketServer = nil
     }
@@ -90,7 +139,18 @@ final class AppRuntime {
             // Yield so a burst of ingests collapses into one write of the latest state.
             await Task.yield()
             guard !Task.isCancelled else { return }
-            await persistence.save(persistableSessions)
+            if let error = await persistence.save(persistableSessions) {
+                persistenceError = error
+            }
+        }
+    }
+
+    private func receive(_ event: AgentEvent, generation: Int) {
+        guard acceptsEvents, generation == lifecycleGeneration else { return }
+        if isRestoring {
+            startupEvents.append(event)
+        } else {
+            activity.ingest(event)
         }
     }
 

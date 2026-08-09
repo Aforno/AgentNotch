@@ -11,7 +11,9 @@ public final class AgentActivityService {
     public init(sessions: [AgentSession] = []) {
         self.sessions = sessions
             .filter { !Self.isOrphanedGrokStart($0) }
-            .sorted(by: Self.orderSessions)
+        attentionEvent = nil
+        normalizeRestoredIdentities()
+        self.sessions.sort(by: Self.orderSessions)
         // Match replaceSessions: seed the temporary attention surface when the
         // caller restores waiting sessions through the initializer.
         attentionEvent = latestWaitingAttentionEvent()
@@ -53,37 +55,32 @@ public final class AgentActivityService {
         return result
     }
 
-    /// Sessions for the expanded notch list: the latest 3 (active sessions
-    /// count toward that cap). When more than 3 are active, every active
-    /// session is shown so concurrent work is never hidden.
-    ///
-    /// Inactive children are allowed to fill remaining slots, but they must
-    /// not consume the budget that belongs to concurrent active sessions.
+    /// Sessions for the expanded notch list: the three most recently updated
+    /// agent groups. Active work still drives the collapsed count, but never
+    /// expands this list beyond the explicit three-row presentation policy.
     public var listSessions: [AgentSession] {
-        let roots = sessionGroupRoots
-        let activeRootIDs = Set(roots.filter { groupIsActive(rootID: $0.id) }.map(\.id))
-        let limit = max(3, activeRootIDs.count)
-        var inactiveSlots = limit - activeRootIDs.count
-        var result: [AgentSession] = []
-        result.reserveCapacity(limit)
-
-        for session in roots {
-            if activeRootIDs.contains(session.id) {
-                result.append(session)
-            } else if inactiveSlots > 0 {
-                result.append(session)
-                inactiveSlots -= 1
-            }
-        }
-        return result
+        Array(sessionGroupRoots.sorted(by: orderGroupsByRecency).prefix(3))
     }
 
     private var sessionGroupRoots: [AgentSession] {
         let knownIDs = Set(sessions.map(\.id))
-        return hierarchicalSessions.filter { session in
+        var roots = hierarchicalSessions.filter { session in
             guard let parentID = session.parentSessionId else { return true }
             return !knownIDs.contains(parentID)
         }
+        var covered = Set<String>()
+        for root in roots {
+            covered.insert(root.id)
+            covered.formUnion(descendants(of: root.id).map(\.id))
+        }
+        // A malformed relationship cycle has no natural root. Promote one
+        // member of each uncovered component so active work remains visible.
+        for session in hierarchicalSessions where !covered.contains(session.id) {
+            roots.append(session)
+            covered.insert(session.id)
+            covered.formUnion(descendants(of: session.id).map(\.id))
+        }
+        return roots
     }
 
     private func groupIsActive(rootID: String) -> Bool {
@@ -120,6 +117,18 @@ public final class AgentActivityService {
 
     public func ingest(_ event: AgentEvent) {
         guard event.protocolVersion == 1 else { return }
+        var event = event
+        let now = Date()
+        if event.timestamp > now.addingTimeInterval(300) {
+            // The socket is local but extensible. A malformed clock must not pin
+            // a session in the future and make every later terminal event stale.
+            event.timestamp = now
+            if event.plan?.updatedAt ?? .distantPast > now {
+                event.plan?.updatedAt = now
+            }
+        }
+
+        event = canonicalizedIdentity(for: event)
 
         let advancesCurrentState: Bool
         if let index = sessions.firstIndex(where: { $0.id == event.sessionId }) {
@@ -128,6 +137,10 @@ public final class AgentActivityService {
             sessions.append(AgentSession(event: event))
             advancesCurrentState = true
         }
+
+        // A parent may finish before a concurrently delivered child event. Do
+        // not create a permanently active child underneath a terminal parent.
+        completeSessionIfParentIsTerminal(event.sessionId, at: event.timestamp)
 
         // SessionEnd/Stop only complete the mapped sessionId. Cascade to active
         // descendants so composite subagent rows do not stay isActive after the
@@ -158,7 +171,8 @@ public final class AgentActivityService {
     public func replaceSessions(_ sessions: [AgentSession]) {
         self.sessions = sessions
             .filter { !Self.isOrphanedGrokStart($0) }
-            .sorted(by: Self.orderSessions)
+        normalizeRestoredIdentities()
+        self.sessions.sort(by: Self.orderSessions)
         trimHistory()
         // Restoring from disk has no live event stream; rebuild the temporary
         // attention surface from any session that is still waiting for input.
@@ -197,19 +211,21 @@ public final class AgentActivityService {
         onSessionsChanged?(sessions)
     }
 
-    /// Hook-driven sessions cannot be verified after a cold start: adapters do
-    /// not poll provider processes. Mark restored actives completed so a missed
-    /// Stop/SessionEnd cannot leave rows active forever. Later hook events
-    /// resume a session if the agent is still live.
+    /// Hook-driven running sessions cannot be verified after a cold start.
+    /// Preserve waiting sessions because the provider may still be blocked on
+    /// an approval or answer that will not emit another hook until it is given.
     public func completeUnverifiedActiveSessions() {
         var changed = false
-        for index in sessions.indices where sessions[index].isActive {
+        for index in sessions.indices
+            where sessions[index].isActive && sessions[index].state != .waitingForUser
+        {
             sessions[index].state = .completed
             sessions[index].completedAt = sessions[index].updatedAt
             changed = true
         }
         guard changed else { return }
         sessions.sort(by: Self.orderSessions)
+        trimHistory()
         attentionEvent = latestWaitingAttentionEvent()
         onSessionsChanged?(sessions)
     }
@@ -321,6 +337,96 @@ public final class AgentActivityService {
                 sessions[index].currentActivity = "Session failed"
             }
         }
+    }
+
+    private func completeSessionIfParentIsTerminal(_ sessionID: String, at timestamp: Date) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              let parentID = sessions[index].parentSessionId,
+              let parent = sessions.first(where: { $0.id == parentID }),
+              parent.state == .completed || parent.state == .failed
+        else { return }
+        sessions[index].completeFromParent(as: parent.state, at: max(parent.updatedAt, timestamp))
+    }
+
+    private func canonicalizedIdentity(for event: AgentEvent) -> AgentEvent {
+        let collidingIndices = sessions.indices.filter {
+            sessions[$0].id == event.sessionId && sessions[$0].provider != event.provider
+        }
+        guard !collidingIndices.isEmpty else {
+            return event
+        }
+        var event = event
+        let prefix = "\(event.provider.rawValue):"
+        let originalID = event.sessionId
+        for index in collidingIndices {
+            let existingProvider = sessions[index].provider
+            let existingPrefix = "\(existingProvider.rawValue):"
+            let canonicalID = sessions[index].id.hasPrefix(existingPrefix)
+                ? sessions[index].id
+                : existingPrefix + sessions[index].id
+            sessions[index].id = canonicalID
+            for childIndex in sessions.indices
+                where sessions[childIndex].provider == existingProvider
+                    && sessions[childIndex].parentSessionId == originalID
+            {
+                sessions[childIndex].parentSessionId = canonicalID
+            }
+            if attentionEvent?.provider == existingProvider,
+               attentionEvent?.sessionId == originalID
+            {
+                attentionEvent?.sessionId = canonicalID
+            }
+        }
+        if !event.sessionId.hasPrefix(prefix) {
+            event.sessionId = prefix + event.sessionId
+        }
+        if let parentID = event.parentSessionId,
+           sessions.contains(where: { $0.id == parentID && $0.provider != event.provider }),
+           !parentID.hasPrefix(prefix)
+        {
+            event.parentSessionId = prefix + parentID
+        }
+        return event
+    }
+
+    private func normalizeRestoredIdentities() {
+        let providerCounts = Dictionary(grouping: sessions, by: \.id)
+            .mapValues { Set($0.map(\.provider)).count }
+        let originalIDs = sessions.map(\.id)
+        for index in sessions.indices where providerCounts[originalIDs[index], default: 0] > 1 {
+            let prefix = "\(sessions[index].provider.rawValue):"
+            if !sessions[index].id.hasPrefix(prefix) {
+                sessions[index].id = prefix + sessions[index].id
+            }
+        }
+        for index in sessions.indices {
+            guard let parentID = sessions[index].parentSessionId,
+                  providerCounts[parentID, default: 0] > 1
+            else { continue }
+            let prefix = "\(sessions[index].provider.rawValue):"
+            if !parentID.hasPrefix(prefix) {
+                sessions[index].parentSessionId = prefix + parentID
+            }
+        }
+
+        // Corrupt/legacy history may contain duplicate rows for the same
+        // provider identity. Keep the newest snapshot deterministically.
+        var newestByIdentity: [String: AgentSession] = [:]
+        for session in sessions {
+            let key = session.provider.rawValue + "\0" + session.id
+            if let existing = newestByIdentity[key], existing.updatedAt >= session.updatedAt {
+                continue
+            }
+            newestByIdentity[key] = session
+        }
+        sessions = Array(newestByIdentity.values)
+    }
+
+    private func orderGroupsByRecency(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
+        let lhsUpdatedAt = ([lhs] + descendants(of: lhs.id)).map(\.updatedAt).max() ?? lhs.updatedAt
+        let rhsUpdatedAt = ([rhs] + descendants(of: rhs.id)).map(\.updatedAt).max() ?? rhs.updatedAt
+        if lhsUpdatedAt != rhsUpdatedAt { return lhsUpdatedAt > rhsUpdatedAt }
+        return lhs.id < rhs.id
     }
 
     private static func orderSessions(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {

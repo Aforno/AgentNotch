@@ -96,6 +96,37 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testUninstallRemovesProviderOwnedLegacyEventHooks() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .codex)
+        manager.install()
+        let hooksURL = fixture.home
+            .appendingPathComponent(".codex", isDirectory: true)
+            .appendingPathComponent("hooks.json")
+        var root = try Self.readJSON(at: hooksURL)
+        var hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        hooks["LegacyLifecycleEvent"] = [[
+            "hooks": [
+                ["type": "command", "command": "echo preserve"],
+                [
+                    "type": "command",
+                    "command": "'\(manager.installedRelayURL.path)' --provider 'codex'",
+                ],
+            ],
+        ]]
+        root["hooks"] = hooks
+        try Self.writeJSON(root, to: hooksURL)
+
+        manager.uninstall()
+
+        let removedRoot = try Self.readJSON(at: hooksURL)
+        let removedHooks = try XCTUnwrap(removedRoot["hooks"] as? [String: Any])
+        let legacy = try XCTUnwrap(removedHooks["LegacyLifecycleEvent"] as? [[String: Any]])
+        XCTAssertEqual(Self.commands(in: legacy), ["echo preserve"])
+    }
+
+    @MainActor
     func testInstallRefusesToOverwriteInvalidRootConfiguration() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -115,6 +146,83 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertNotNil(manager.lastError)
         XCTAssertEqual(try Data(contentsOf: hooksURL), original)
+    }
+
+    @MainActor
+    func testInstallRefusesToReplaceInvalidHooksSection() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let hooksURL = fixture.home
+            .appendingPathComponent(".codex", isDirectory: true)
+            .appendingPathComponent("hooks.json")
+        try FileManager.default.createDirectory(
+            at: hooksURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let original = Data("{\"hooks\":[\"preserve me\"],\"theme\":\"dark\"}".utf8)
+        try original.write(to: hooksURL)
+
+        let manager = fixture.manager(provider: .codex)
+        manager.install()
+
+        XCTAssertEqual(manager.status, .unavailable("Installation failed"))
+        XCTAssertEqual(try Data(contentsOf: hooksURL), original)
+    }
+
+    @MainActor
+    func testInstallFailsInsteadOfReportingPartialMalformedEventConfiguration() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let hooksURL = fixture.home
+            .appendingPathComponent(".codex", isDirectory: true)
+            .appendingPathComponent("hooks.json")
+        try FileManager.default.createDirectory(
+            at: hooksURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.writeJSON([
+            "hooks": ["PreToolUse": ["not": "an array"]],
+        ], to: hooksURL)
+        let original = try Data(contentsOf: hooksURL)
+
+        let manager = fixture.manager(provider: .codex)
+        manager.install()
+
+        XCTAssertEqual(manager.status, .unavailable("Installation failed"))
+        XCTAssertEqual(try Data(contentsOf: hooksURL), original)
+    }
+
+    @MainActor
+    func testSharedSymlinkedConfigurationKeepsProviderSpecificCommandsSeparate() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let sharedURL = fixture.root.appendingPathComponent("dotfiles/shared-hooks.json")
+        try FileManager.default.createDirectory(
+            at: sharedURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.writeJSON(["hooks": [:]], to: sharedURL)
+        for path in [".codex/hooks.json", ".claude/settings.json"] {
+            let linkURL = fixture.home.appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: linkURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: sharedURL)
+        }
+
+        let codex = fixture.manager(provider: .codex)
+        let claude = fixture.manager(provider: .claudeCode)
+        codex.install()
+        claude.install()
+        claude.uninstall()
+
+        let root = try Self.readJSON(at: sharedURL)
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        let preTool = try XCTUnwrap(hooks["PreToolUse"] as? [[String: Any]])
+        let commands = Self.commands(in: preTool)
+        XCTAssertEqual(commands.filter { $0.contains("--provider 'codex'") }.count, 1)
+        XCTAssertFalse(commands.contains { $0.contains("--provider 'claude-code'") })
     }
 
     @MainActor

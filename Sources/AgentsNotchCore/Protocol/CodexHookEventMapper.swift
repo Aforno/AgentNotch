@@ -1,5 +1,22 @@
 import Foundation
 
+public enum AgentHookInputError: LocalizedError, Equatable {
+    case inputTooLarge
+
+    public var errorDescription: String? {
+        "Hook input exceeds the 1 MiB safety limit."
+    }
+}
+
+public enum AgentHookInput {
+    public static let maximumBytes = 1_048_576
+
+    public static func decode(_ data: Data) throws -> AgentHookPayload {
+        guard data.count <= maximumBytes else { throw AgentHookInputError.inputTooLarge }
+        return try JSONDecoder().decode(AgentHookPayload.self, from: data)
+    }
+}
+
 public struct AgentHookPayload: Decodable, Sendable {
     public var sessionId: String
     public var transcriptPath: String?
@@ -20,6 +37,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var lastAssistantMessage: String?
     public var notificationType: String?
     public var error: String?
+    public var timestamp: Date?
 
     private enum CodingKeys: String, CodingKey {
         case sessionId, sessionIdSnake = "session_id"
@@ -38,6 +56,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         case lastAssistantMessage, lastAssistantMessageSnake = "last_assistant_message"
         case notificationType, notificationTypeSnake = "notification_type"
         case error
+        case timestamp, createdAt, createdAtSnake = "created_at"
     }
 
     public init(from decoder: Decoder) throws {
@@ -61,6 +80,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         lastAssistantMessage = try values.decodeEitherIfPresent(String.self, forKey: .lastAssistantMessage, or: .lastAssistantMessageSnake)
         notificationType = try values.decodeEitherIfPresent(String.self, forKey: .notificationType, or: .notificationTypeSnake)
         error = try values.decodeIfPresent(String.self, forKey: .error)
+        timestamp = values.decodeFlexibleDateIfPresent(forKeys: [.timestamp, .createdAt, .createdAtSnake])
     }
 }
 
@@ -283,6 +303,9 @@ public enum AgentHookEventMapper {
         }
 
         guard var event else { return nil }
+        let eventTimestamp = payload.timestamp ?? now
+        event.timestamp = eventTimestamp
+        event.plan?.updatedAt = eventTimestamp
         event.parentSessionId = parentSessionId
         event.agentRole = payload.description?.nonEmpty ?? payload.agentType
         return event
@@ -532,6 +555,24 @@ private extension KeyedDecodingContainer {
     func decodeEitherIfPresent<T: Decodable>(_ type: T.Type, forKey first: Key, or second: Key) throws -> T? {
         if contains(first) { return try decodeIfPresent(type, forKey: first) }
         return try decodeIfPresent(type, forKey: second)
+    }
+
+    func decodeFlexibleDateIfPresent(forKeys keys: [Key]) -> Date? {
+        for key in keys where contains(key) {
+            if let value = try? decode(String.self, forKey: key) {
+                if let date = try? Date(value, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)) {
+                    return date
+                }
+                if let date = try? Date(value, strategy: Date.ISO8601FormatStyle()) {
+                    return date
+                }
+            }
+            if let value = try? decode(Double.self, forKey: key) {
+                let seconds = value > 10_000_000_000 ? value / 1_000 : value
+                return Date(timeIntervalSince1970: seconds)
+            }
+        }
+        return nil
     }
 }
 

@@ -86,6 +86,7 @@ if [[ "$NOTARIZE" == true && -z "$KEYCHAIN_PROFILE" ]]; then
   fi
 fi
 
+rm -f "$ARCHIVE" "$CHECKSUM"
 "$ROOT_DIR/script/validate_version.sh"
 "$ROOT_DIR/script/stage_app.sh" \
   --configuration release \
@@ -93,8 +94,8 @@ fi
   --sign "$SIGN_IDENTITY"
 "$ROOT_DIR/script/verify_release.sh" --app "$APP_BUNDLE"
 
-rm -f "$ARCHIVE" "$CHECKSUM"
 ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ARCHIVE"
+unzip -tq "$ARCHIVE" >/dev/null
 
 if [[ "$NOTARIZE" == true ]]; then
   if [[ -n "$KEYCHAIN_PROFILE" ]]; then
@@ -110,6 +111,7 @@ if [[ "$NOTARIZE" == true ]]; then
   "$ROOT_DIR/script/verify_release.sh" --app "$APP_BUNDLE" --require-notarized
   rm -f "$ARCHIVE"
   ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ARCHIVE"
+  unzip -tq "$ARCHIVE" >/dev/null
 fi
 
 (cd "$(dirname "$ARCHIVE")" && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")")

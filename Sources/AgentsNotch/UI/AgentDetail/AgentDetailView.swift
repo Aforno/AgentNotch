@@ -19,6 +19,7 @@ struct AgentDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.white.opacity(0.62))
+                .accessibilityLabel("Back")
 
                 StateIndicator(state: session.state, size: 8)
                 ProviderIconView(provider: session.provider, size: 15)
@@ -111,8 +112,10 @@ struct AgentDetailView: View {
                     }
                 }
                 .padding(.horizontal, DynamicIslandSpacing.outer)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.never)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if session.applicationURL != nil || session.workingDirectory != nil {
                 Button(action: onOpen) {
@@ -128,6 +131,7 @@ struct AgentDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, DynamicIslandSpacing.outer)
+                .accessibilityLabel(session.applicationURL == nil ? "Reveal repository" : "Open session")
             }
         }
         .padding(.bottom, DynamicIslandSpacing.outer)

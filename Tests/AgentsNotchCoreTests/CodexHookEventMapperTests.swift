@@ -2,6 +2,48 @@ import AgentsNotchCore
 import XCTest
 
 final class CodexHookEventMapperTests: XCTestCase {
+    func testHookInputRejectsPayloadsLargerThanOneMiB() {
+        let oversized = Data(repeating: 0x20, count: AgentHookInput.maximumBytes + 1)
+
+        XCTAssertThrowsError(try AgentHookInput.decode(oversized)) { error in
+            XCTAssertEqual(error as? AgentHookInputError, .inputTooLarge)
+        }
+    }
+
+    func testProviderTimestampIsPreservedInsteadOfUsingReceiptOrder() throws {
+        let payload = try decode("""
+        {
+          "session_id": "timestamped",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "Stop",
+          "timestamp": "2026-08-09T12:34:56.125Z"
+        }
+        """)
+        let receipt = Date(timeIntervalSince1970: 2_000_000_000)
+
+        let event = try XCTUnwrap(CodexHookEventMapper.map(payload, now: receipt))
+
+        XCTAssertEqual(
+            event.timestamp,
+            try Date("2026-08-09T12:34:56.125Z", strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true))
+        )
+    }
+
+    func testProviderMillisecondTimestampIsDecoded() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "timestamped",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "stop",
+          "createdAt": 1786278896125
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+
+        XCTAssertEqual(event.timestamp.timeIntervalSince1970, 1_786_278_896.125, accuracy: 0.001)
+    }
+
     func testPermissionRequestBecomesPersistentAttention() throws {
         let payload = try decode("""
         {
