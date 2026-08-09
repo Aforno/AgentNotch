@@ -8,6 +8,7 @@ public struct GrokSessionContext: Sendable {
     public let workflowPhase: String?
     public let workflowState: AgentState?
     public let workflowUpdate: AgentWorkflowUpdate?
+    public let workflowUpdatedAt: Date?
 
     public func workflowEvent(now: Date, workingDirectory: String?) -> AgentEvent? {
         guard let owner = workflowOwnerSessionId,
@@ -71,7 +72,8 @@ public enum GrokSessionContextResolver {
                 workflowTask: nil,
                 workflowPhase: nil,
                 workflowState: nil,
-                workflowUpdate: nil
+                workflowUpdate: nil,
+                workflowUpdatedAt: nil
             )
         }
         let fileManager = FileManager.default
@@ -111,7 +113,8 @@ public enum GrokSessionContextResolver {
             workflowTask: nil,
             workflowPhase: nil,
             workflowState: nil,
-            workflowUpdate: nil
+            workflowUpdate: nil,
+            workflowUpdatedAt: nil
         )
     }
 
@@ -145,20 +148,25 @@ public enum GrokSessionContextResolver {
         parent: String?,
         role: String?,
         owner: String?,
-        workflow: StoredWorkflow?
+        workflow: StoredWorkflowSnapshot?
     ) -> GrokSessionContext {
-        GrokSessionContext(
+        let state = workflow?.state
+        return GrokSessionContext(
             parentSessionId: parent,
             agentRole: role,
             workflowOwnerSessionId: workflow == nil ? nil : owner,
-            workflowTask: workflow?.objective ?? workflow?.name,
-            workflowPhase: workflow?.currentPhase,
-            workflowState: workflow.map(agentState),
-            workflowUpdate: workflow.map(workflowUpdate)
+            workflowTask: state?.objective ?? state?.name,
+            workflowPhase: state?.currentPhase,
+            workflowState: state.map(agentState),
+            workflowUpdate: state.map(workflowUpdate),
+            workflowUpdatedAt: workflow?.updatedAt
         )
     }
 
-    private static func latestWorkflow(in sessionDirectory: URL, fileManager: FileManager) -> StoredWorkflow? {
+    private static func latestWorkflow(
+        in sessionDirectory: URL,
+        fileManager: FileManager
+    ) -> StoredWorkflowSnapshot? {
         let workflowsDirectory = sessionDirectory.appendingPathComponent("workflows", isDirectory: true)
         guard let runDirectories = try? fileManager.contentsOfDirectory(
             at: workflowsDirectory,
@@ -168,16 +176,15 @@ public enum GrokSessionContextResolver {
 
         let decoder = JSONDecoder()
         return runDirectories
-            .compactMap { directory -> (Date, StoredWorkflow)? in
+            .compactMap { directory -> StoredWorkflowSnapshot? in
                 let stateURL = directory.appendingPathComponent("state.json")
                 guard let data = try? Data(contentsOf: stateURL),
                       let state = try? decoder.decode(WorkflowEnvelope.self, from: data).state
                 else { return nil }
                 let modified = (try? stateURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-                return (modified, state)
+                return StoredWorkflowSnapshot(state: state, updatedAt: modified)
             }
-            .max { $0.0 < $1.0 }?
-            .1
+            .max { $0.updatedAt < $1.updatedAt }
     }
 
     private static func workflowUpdate(_ workflow: StoredWorkflow) -> AgentWorkflowUpdate {
@@ -265,6 +272,11 @@ private struct SubagentMetadata: Decodable {
 
 private struct WorkflowEnvelope: Decodable {
     let state: StoredWorkflow
+}
+
+private struct StoredWorkflowSnapshot {
+    let state: StoredWorkflow
+    let updatedAt: Date
 }
 
 private struct StoredWorkflow: Decodable {

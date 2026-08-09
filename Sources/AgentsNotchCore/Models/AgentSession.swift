@@ -123,6 +123,92 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         currentActivity = terminalState == .failed ? "Session failed" : "Session ended"
     }
 
+    /// Merges a workflow snapshot discovered from Grok's on-disk session data.
+    /// Restoration is not live agent activity, so it must not advance session
+    /// recency or add a duplicate event on every app launch.
+    @discardableResult
+    public mutating func reconcileRestoredWorkflow(_ event: AgentEvent) -> Bool {
+        guard provider == .grok, let update = event.workflowUpdate else { return false }
+        var changed = repairLegacyRestoredWorkflowRecency(
+            workflowID: update.id,
+            authoritativeTimestamp: event.timestamp
+        )
+
+        if task == "Untitled task", let restoredTask = event.task?.nonEmpty {
+            task = restoredTask
+            changed = true
+        }
+
+        if let index = workflows.firstIndex(where: { $0.id == update.id }) {
+            let title = update.title?.nonEmpty ?? workflows[index].title
+            let status = update.status ?? workflows[index].status
+            let steps = update.steps ?? workflows[index].steps
+            if workflows[index].title != title
+                || workflows[index].status != status
+                || workflows[index].steps != steps
+                || workflows[index].updatedAt != event.timestamp
+            {
+                workflows[index].title = title
+                workflows[index].status = status
+                workflows[index].steps = steps
+                workflows[index].updatedAt = event.timestamp
+                changed = true
+            }
+        } else {
+            workflows.append(AgentWorkflow(
+                id: update.id,
+                title: update.title?.nonEmpty ?? "Workflow",
+                status: update.status ?? .running,
+                steps: update.steps ?? [],
+                updatedAt: event.timestamp
+            ))
+            changed = true
+        }
+        workflows.sort { $0.updatedAt > $1.updatedAt }
+        workflows = Array(workflows.prefix(6))
+        return changed
+    }
+
+    private mutating func repairLegacyRestoredWorkflowRecency(
+        workflowID: String,
+        authoritativeTimestamp: Date
+    ) -> Bool {
+        // Older builds stamped startup reconciliation with Date(). Only repair
+        // when the session's current recency is itself one of those later
+        // synthetic workflow events. The tolerance preserves legitimate hook
+        // delivery a few moments after state.json was written.
+        let cutoff = authoritativeTimestamp.addingTimeInterval(5)
+        let latestWasSyntheticRestore = recentEvents.contains { event in
+            event.timestamp == updatedAt
+                && event.timestamp > cutoff
+                && event.isGrokWorkflowState
+        }
+        guard latestWasSyntheticRestore else { return false }
+
+        recentEvents.removeAll { event in
+            event.timestamp > cutoff && event.isGrokWorkflowState
+        }
+
+        let latestRemainingEvent = recentEvents.map(\.timestamp).max() ?? .distantPast
+        let repairedUpdatedAt = max(max(startedAt, authoritativeTimestamp), latestRemainingEvent)
+        updatedAt = repairedUpdatedAt
+
+        if state == .completed || state == .failed {
+            let latestTerminalEvent = recentEvents
+                .filter { $0.resolvedState == .completed || $0.resolvedState == .failed }
+                .map(\.timestamp)
+                .max() ?? .distantPast
+            completedAt = max(max(startedAt, authoritativeTimestamp), latestTerminalEvent)
+        }
+
+        if let index = workflows.firstIndex(where: { $0.id == workflowID }),
+           workflows[index].updatedAt > cutoff
+        {
+            workflows[index].updatedAt = authoritativeTimestamp
+        }
+        return true
+    }
+
     private mutating func applyWorkflowUpdate(_ update: AgentWorkflowUpdate?, at timestamp: Date) {
         guard let update else { return }
         if let index = workflows.firstIndex(where: { $0.id == update.id }) {
@@ -180,6 +266,10 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 }
 
 private extension AgentEvent {
+    var isGrokWorkflowState: Bool {
+        metadata?["hookEvent"] == "grokWorkflowState"
+    }
+
     var explicitlyResumesSession: Bool {
         if type == .started { return true }
         guard let hookEvent = metadata?["hookEvent"] else { return false }

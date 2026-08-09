@@ -23,6 +23,7 @@ final class AppRuntime {
     private let persistence: SessionPersistence
     private let socketURL: URL
     private let monitorProviders: Bool
+    private let grokHome: URL
     private var socketServer: UnixSocketServer?
     /// Coalesces rapid session writes so an older snapshot cannot overwrite a newer one.
     private var persistTask: Task<Void, Never>?
@@ -34,11 +35,13 @@ final class AppRuntime {
     init(
         persistence: SessionPersistence = SessionPersistence(),
         socketURL: URL = AgentSocketLocation.defaultURL,
-        monitorProviders: Bool = true
+        monitorProviders: Bool = true,
+        grokHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".grok")
     ) {
         self.persistence = persistence
         self.socketURL = socketURL
         self.monitorProviders = monitorProviders
+        self.grokHome = grokHome
         activity = AgentActivityService()
         codexIntegration = ProviderIntegrationManager(provider: .codex)
         claudeIntegration = ProviderIntegrationManager(provider: .claudeCode)
@@ -164,7 +167,8 @@ final class AppRuntime {
             let nativeSessionID = String(session.id.dropFirst(grokPrefix.count))
             let context = GrokSessionContextResolver.resolve(
                 sessionId: nativeSessionID,
-                workspaceRoot: workspace
+                workspaceRoot: workspace,
+                grokHome: grokHome
             )
 
             if let parent = context.parentSessionId {
@@ -186,7 +190,9 @@ final class AppRuntime {
         }
 
         for context in workflowContexts.values {
-            guard var event = context.workflowEvent(now: Date(), workingDirectory: nil) else {
+            guard let workflowUpdatedAt = context.workflowUpdatedAt,
+                  var event = context.workflowEvent(now: workflowUpdatedAt, workingDirectory: nil)
+            else {
                 continue
             }
             // completeUnverifiedActiveSessions() just marked restored actives
@@ -199,7 +205,7 @@ final class AppRuntime {
                 event.state = session.state
                 event.type = session.state == .failed ? .failed : .completed
             }
-            activity.ingest(event)
+            activity.reconcileRestoredWorkflow(event)
         }
     }
 

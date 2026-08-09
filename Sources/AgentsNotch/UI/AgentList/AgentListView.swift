@@ -8,13 +8,8 @@ struct AgentListView: View {
     let onOpenSettings: () -> Void
     let onSelect: (String) -> Void
 
-    static func rowsHeight(for sessions: [AgentSession], relatedSessions: [AgentSession]) -> CGFloat {
-        sessions.reduce(0) { height, session in
-            height + AgentRowView.preferredHeight(
-                for: session,
-                children: childSessions(of: session, in: relatedSessions)
-            )
-        }
+    static func rowsHeight(for sessions: [AgentSession], relatedSessions _: [AgentSession]) -> CGFloat {
+        CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
     }
 
     var body: some View {
@@ -36,7 +31,7 @@ struct AgentListView: View {
                     } label: {
                         AgentRowView(
                             session: session,
-                            children: childSessions(of: session)
+                            subagents: descendantSessions(of: session)
                         )
                     }
                     .buttonStyle(.plain)
@@ -66,11 +61,28 @@ struct AgentListView: View {
         }
     }
 
-    private static func childSessions(of session: AgentSession, in sessions: [AgentSession]) -> [AgentSession] {
-        sessions.filter { $0.parentSessionId == session.id }
+    static func descendantSessions(of session: AgentSession, in sessions: [AgentSession]) -> [AgentSession] {
+        var result: [AgentSession] = []
+        var pending = [session.id]
+        var visited: Set<String> = [session.id]
+
+        while let parentID = pending.popLast() {
+            for candidate in sessions
+                where candidate.parentSessionId == parentID
+                    && visited.insert(candidate.id).inserted
+            {
+                result.append(candidate)
+                pending.append(candidate.id)
+            }
+        }
+
+        return result.sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+            return lhs.id < rhs.id
+        }
     }
 
-    private func childSessions(of session: AgentSession) -> [AgentSession] {
-        Self.childSessions(of: session, in: relatedSessions)
+    private func descendantSessions(of session: AgentSession) -> [AgentSession] {
+        Self.descendantSessions(of: session, in: relatedSessions)
     }
 }

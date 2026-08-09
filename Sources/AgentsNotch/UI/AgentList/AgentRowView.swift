@@ -3,11 +3,7 @@ import SwiftUI
 
 struct AgentRowView: View {
     let session: AgentSession
-    let children: [AgentSession]
-
-    static func preferredHeight(for _: AgentSession, children _: [AgentSession]) -> CGFloat {
-        DynamicIslandSpacing.rowHeight
-    }
+    let subagents: [AgentSession]
 
     var body: some View {
         HStack(spacing: DynamicIslandSpacing.standard) {
@@ -30,14 +26,14 @@ struct AgentRowView: View {
                 ExecutionInlineSummary(
                     progress: workflow.rowProgress,
                     stage: workflow.rowStage,
-                    activeAgentCount: children.filter(\.isActive).count
+                    activeAgentCount: subagents.filter(\.isActive).count
                 )
             } else if let plan = session.plan, !plan.steps.isEmpty {
                 PlanInlineSummary(plan: plan)
-            } else if !children.isEmpty {
+            } else if !subagents.isEmpty {
                 SubagentActivityInlineSummary(
                     activity: session.currentActivity,
-                    activeSubagentCount: children.filter(\.isActive).count
+                    activeSubagentCount: subagents.filter(\.isActive).count
                 )
             } else {
                 Text(session.currentActivity)
@@ -51,10 +47,7 @@ struct AgentRowView: View {
             StateIndicator(state: session.state, size: 12)
         }
         .padding(.horizontal, DynamicIslandSpacing.outer)
-        .frame(
-            height: Self.preferredHeight(for: session, children: children),
-            alignment: .center
-        )
+        .frame(height: DynamicIslandSpacing.rowHeight, alignment: .center)
         .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel)
     }
@@ -72,15 +65,15 @@ struct AgentRowView: View {
             ? "\(subagentLabel) subagent"
             : session.provider.displayName
         if let workflow = session.workflows.first {
-            let active = children.filter(\.isActive).count
+            let active = subagents.filter(\.isActive).count
             let agents = active == 1 ? "1 active agent" : "\(active) active agents"
             return "\(identity), \(workflow.rowProgress), \(workflow.rowStage), \(agents), \(session.state.displayName)"
         }
         if let plan = session.plan, !plan.steps.isEmpty {
             return "\(identity), \(plan.rowProgress), \(plan.rowStage), \(session.state.displayName)"
         }
-        if !children.isEmpty {
-            let active = children.filter(\.isActive).count
+        if !subagents.isEmpty {
+            let active = subagents.filter(\.isActive).count
             let subagents = active == 1 ? "1 active subagent" : "\(active) active subagents"
             return "\(identity), \(session.currentActivity), \(subagents), \(session.state.displayName)"
         }
@@ -97,11 +90,7 @@ private struct SubagentActivityInlineSummary: View {
             Text(activity)
                 .lineLimit(1)
 
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.triangle.branch")
-                Text("\(activeSubagentCount) active")
-            }
-            .foregroundStyle(.white.opacity(0.46))
+            ActiveAgentCountView(count: activeSubagentCount)
         }
         .font(.system(size: 12, weight: .regular))
         .foregroundStyle(.white.opacity(0.68))
@@ -132,20 +121,62 @@ private struct ExecutionInlineSummary: View {
     var body: some View {
         HStack(spacing: DynamicIslandSpacing.related) {
             Text(progress)
+                .fixedSize(horizontal: true, vertical: false)
             Text(stage)
                 .lineLimit(1)
 
             if let activeAgentCount {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.branch")
-                    Text("\(activeAgentCount) active")
-                }
-                .foregroundStyle(.white.opacity(0.46))
+                ActiveAgentCountView(count: activeAgentCount)
             }
         }
         .font(.system(size: 12, weight: .regular))
         .foregroundStyle(.white.opacity(0.68))
         .lineLimit(1)
+    }
+}
+
+private struct ActiveAgentCountView: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.triangle.branch")
+            Text("\(count) active")
+        }
+        .foregroundStyle(.white.opacity(0.46))
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(1)
+    }
+}
+
+enum AgentRowPresentation {
+    static let maximumVisibleSteps = 6
+
+    static func currentStep(in steps: [AgentStep]) -> AgentStep? {
+        for status in [
+            AgentStepStatus.inProgress,
+            .failed,
+            .blocked,
+            .pending,
+        ] {
+            if let step = steps.first(where: { $0.status == status }) {
+                return step
+            }
+        }
+        return steps.last
+    }
+
+    static func visibleSteps(in steps: [AgentStep]) -> [AgentStep] {
+        guard steps.count > maximumVisibleSteps else { return steps }
+        guard let current = currentStep(in: steps),
+              let currentIndex = steps.firstIndex(where: { $0.id == current.id })
+        else {
+            return Array(steps.suffix(maximumVisibleSteps))
+        }
+
+        let maximumStart = steps.count - maximumVisibleSteps
+        let start = min(max(currentIndex - maximumVisibleSteps + 1, 0), maximumStart)
+        return Array(steps[start..<(start + maximumVisibleSteps)])
     }
 }
 
@@ -155,13 +186,7 @@ private extension AgentPlan {
     }
 
     var rowStage: String {
-        let current = steps.first {
-            $0.status == .inProgress || $0.status == .failed || $0.status == .blocked
-        }
-        if let current { return current.title }
-        if steps.allSatisfy({ $0.status == .completed }), let final = steps.last { return final.title }
-        if let pending = steps.first(where: { $0.status == .pending }) { return pending.title }
-        return "Plan"
+        AgentRowPresentation.currentStep(in: steps)?.title ?? "Plan"
     }
 }
 
@@ -173,13 +198,7 @@ private extension AgentWorkflow {
     }
 
     var rowStage: String {
-        let current = steps.first {
-            $0.status == .inProgress || $0.status == .failed || $0.status == .blocked
-        }
-        if let current { return current.title }
-        if status == .completed, let final = steps.last { return final.title }
-        if let pending = steps.first(where: { $0.status == .pending }) { return pending.title }
-        return status.displayName
+        AgentRowPresentation.currentStep(in: steps)?.title ?? status.displayName
     }
 }
 
@@ -188,7 +207,7 @@ private struct StepStatusStrip: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(steps.prefix(6)) { step in
+            ForEach(AgentRowPresentation.visibleSteps(in: steps)) { step in
                 Capsule()
                     .fill(color(for: step.status))
                     .frame(width: 8, height: 3)

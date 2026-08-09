@@ -195,6 +195,20 @@ public final class AgentActivityService {
         attentionEvent = latestWaitingAttentionEvent()
     }
 
+    /// Reconciles workflow metadata discovered from provider-owned storage
+    /// without treating app startup as new agent activity.
+    public func reconcileRestoredWorkflow(_ event: AgentEvent) {
+        guard event.protocolVersion == 1, event.provider == .grok else { return }
+        if let index = sessions.firstIndex(where: { $0.id == event.sessionId }) {
+            guard sessions[index].reconcileRestoredWorkflow(event) else { return }
+        } else {
+            sessions.append(AgentSession(event: event))
+        }
+        sessions.sort(by: Self.orderSessions)
+        trimHistory()
+        onSessionsChanged?(sessions)
+    }
+
     public func removeSession(id: String) {
         sessions.removeAll { $0.id == id }
         if attentionEvent?.sessionId == id {

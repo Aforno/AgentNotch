@@ -20,6 +20,7 @@ final class GrokSessionContextResolverTests: XCTestCase {
         try FileManager.default.createDirectory(at: metadataDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: workflowDirectory, withIntermediateDirectories: true)
 
+        let workflowStateURL = workflowDirectory.appendingPathComponent("state.json")
         try Data("""
         {
           "parent_session_id": "\(parent)",
@@ -43,7 +44,12 @@ final class GrokSessionContextResolverTests: XCTestCase {
             "current_phase": "Audit"
           }
         }
-        """.utf8).write(to: workflowDirectory.appendingPathComponent("state.json"))
+        """.utf8).write(to: workflowStateURL)
+        let workflowUpdatedAt = Date(timeIntervalSince1970: 1_786_270_000)
+        try FileManager.default.setAttributes(
+            [.modificationDate: workflowUpdatedAt],
+            ofItemAtPath: workflowStateURL.path
+        )
 
         let payload = try JSONDecoder().decode(AgentHookPayload.self, from: Data("""
         {
@@ -64,6 +70,11 @@ final class GrokSessionContextResolverTests: XCTestCase {
         XCTAssertEqual(context.workflowState, .running)
         XCTAssertEqual(context.workflowUpdate?.title, "audit-and-fix")
         XCTAssertEqual(context.workflowUpdate?.steps?.map(\.status), [.completed, .inProgress, .pending])
+        XCTAssertEqual(
+            try XCTUnwrap(context.workflowUpdatedAt).timeIntervalSince1970,
+            workflowUpdatedAt.timeIntervalSince1970,
+            accuracy: 1
+        )
     }
 
     func testRejectsSessionIDPathTraversal() throws {

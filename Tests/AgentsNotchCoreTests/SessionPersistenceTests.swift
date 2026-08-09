@@ -61,6 +61,107 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(saved.first?.id, "startup-event")
         XCTAssertEqual(saved.first?.state, .completed)
     }
+
+    @MainActor
+    func testRuntimeGrokRestoreRepairsLegacyRecencyAndStaysIdempotent() async throws {
+        let fixture = try PersistenceFixture()
+        defer { fixture.remove() }
+        let persistence = SessionPersistence(fileURL: fixture.fileURL)
+        let grokHome = fixture.root.appendingPathComponent("grok", isDirectory: true)
+        let workspace = "/tmp/AgentsNotch"
+        let workflowUpdatedAt = Date(timeIntervalSince1970: 110)
+        let workflowDirectory = grokHome
+            .appendingPathComponent("sessions/%2Ftmp%2FAgentsNotch/parent/workflows/run", isDirectory: true)
+        try FileManager.default.createDirectory(at: workflowDirectory, withIntermediateDirectories: true)
+        let workflowStateURL = workflowDirectory.appendingPathComponent("state.json")
+        try Data("""
+        {
+          "version": 4,
+          "state": {
+            "run_id": "workflow-1",
+            "name": "audit-and-fix",
+            "objective": "Audit and fix Agents Notch",
+            "status": "completed",
+            "phases": [{"title": "Audit"}, {"title": "Confirm"}],
+            "current_phase": "Confirm"
+          }
+        }
+        """.utf8).write(to: workflowStateURL)
+        try FileManager.default.setAttributes(
+            [.modificationDate: workflowUpdatedAt],
+            ofItemAtPath: workflowStateURL.path
+        )
+
+        var grok = AgentSession(event: AgentEvent(
+            type: .started,
+            sessionId: "grok:parent",
+            provider: .grok,
+            task: "Audit and fix Agents Notch",
+            state: .starting,
+            timestamp: Date(timeIntervalSince1970: 100),
+            workingDirectory: workspace
+        ))
+        let workflowUpdate = AgentWorkflowUpdate(
+            id: "workflow-1",
+            title: "audit-and-fix",
+            status: .completed,
+            steps: [
+                AgentStep(id: "workflow-1:phase:0", title: "Audit", status: .completed),
+                AgentStep(id: "workflow-1:phase:1", title: "Confirm", status: .completed),
+            ]
+        )
+        // Simulate enough Date()-stamped startup reconciliations to evict the
+        // original lifecycle events from the ten-event diagnostic history.
+        for offset in 0..<12 {
+            grok.apply(AgentEvent(
+                type: .activity,
+                sessionId: "grok:parent",
+                provider: .grok,
+                activity: "Workflow · Confirm",
+                state: .completed,
+                timestamp: Date(timeIntervalSince1970: 500 + TimeInterval(offset)),
+                metadata: ["hookEvent": "grokWorkflowState"],
+                workflowUpdate: workflowUpdate
+            ))
+        }
+        let codex = AgentSession(event: AgentEvent(
+            type: .completed,
+            sessionId: "codex:newer",
+            provider: .codex,
+            task: "Newer Codex thread",
+            state: .completed,
+            timestamp: Date(timeIntervalSince1970: 400)
+        ))
+        let saveError = await persistence.save([grok, codex])
+        XCTAssertNil(saveError)
+
+        let firstRuntime = AppRuntime(
+            persistence: persistence,
+            socketURL: fixture.socketURL,
+            monitorProviders: false,
+            grokHome: grokHome
+        )
+        await firstRuntime.start()
+        XCTAssertEqual(firstRuntime.activity.listSessions.map(\.id), ["codex:newer", "grok:parent"])
+        let repaired = try XCTUnwrap(firstRuntime.activity.sessions.first { $0.id == "grok:parent" })
+        XCTAssertEqual(repaired.updatedAt, workflowUpdatedAt)
+        XCTAssertEqual(repaired.completedAt, workflowUpdatedAt)
+        XCTAssertEqual(repaired.workflows.first?.updatedAt, workflowUpdatedAt)
+        XCTAssertFalse(repaired.recentEvents.contains { $0.timestamp > workflowUpdatedAt })
+        firstRuntime.stop()
+
+        let secondRuntime = AppRuntime(
+            persistence: persistence,
+            socketURL: fixture.socketURL,
+            monitorProviders: false,
+            grokHome: grokHome
+        )
+        await secondRuntime.start()
+        let restoredAgain = try XCTUnwrap(secondRuntime.activity.sessions.first { $0.id == "grok:parent" })
+        XCTAssertEqual(restoredAgain, repaired)
+        XCTAssertEqual(secondRuntime.activity.listSessions.map(\.id), ["codex:newer", "grok:parent"])
+        secondRuntime.stop()
+    }
 }
 
 private final class PersistenceFixture: @unchecked Sendable {
