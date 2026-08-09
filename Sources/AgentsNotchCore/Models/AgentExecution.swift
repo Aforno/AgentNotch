@@ -63,6 +63,26 @@ public struct AgentPlan: Codable, Hashable, Sendable {
         guard !steps.isEmpty else { return 0 }
         return Double(completedStepCount) / Double(steps.count)
     }
+
+    public var isComplete: Bool {
+        !steps.isEmpty && steps.allSatisfy { $0.status == .completed }
+    }
+
+    mutating func completeUnfinishedSteps(at timestamp: Date) {
+        var changed = false
+        for index in steps.indices {
+            switch steps[index].status {
+            case .pending, .inProgress:
+                steps[index].status = .completed
+                changed = true
+            case .completed, .failed, .blocked:
+                break
+            }
+        }
+        if changed {
+            updatedAt = max(updatedAt, timestamp)
+        }
+    }
 }
 
 public enum AgentWorkflowStatus: String, Codable, CaseIterable, Sendable {

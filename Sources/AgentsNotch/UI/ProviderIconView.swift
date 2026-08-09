@@ -33,17 +33,14 @@ struct ProviderIconView: View {
         case .claudeCode: .init(imageSet: "ProviderClaudeCode", file: "clawd.svg", isTemplate: false)
         case .grok: .init(imageSet: "ProviderGrok", file: "grok.svg")
         case .openCode: .init(imageSet: "ProviderOpenCode", file: "opencode.svg")
-        // AppKit currently rasterizes the bundled Gemini SVG at a near-zero
-        // visual size in small template contexts. Use a crisp system mark
-        // until the asset pipeline can guarantee consistent vector sizing.
-        case .geminiCLI: nil
+        case .geminiCLI: .init(imageSet: "ProviderGemini", file: "gemini.svg", isTemplate: false)
         case .cursor: .init(imageSet: "ProviderCursor", file: "cursor.svg")
         default: nil
         }
     }
 
     private var fallbackSymbol: String {
-        provider == .geminiCLI ? "sparkles" : "terminal"
+        "terminal"
     }
 }
 

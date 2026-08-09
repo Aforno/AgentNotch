@@ -22,25 +22,31 @@ struct SettingsView: View {
     @State private var confirmsClearHistory = false
 
     var body: some View {
-        TabView {
-            generalPane
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
+        ZStack {
+            NotchWindowPalette.background.ignoresSafeArea()
 
-            integrationsPane
-                .tabItem {
-                    Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted")
-                }
+            TabView {
+                generalPane
+                    .tabItem {
+                        Label("General", systemImage: "gearshape")
+                    }
 
-            #if DEBUG
-            debugPane
-                .tabItem {
-                    Label("Debug", systemImage: "hammer")
-                }
-            #endif
+                integrationsPane
+                    .tabItem {
+                        Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted")
+                    }
+
+                #if DEBUG
+                debugPane
+                    .tabItem {
+                        Label("Debug", systemImage: "hammer")
+                    }
+                #endif
+            }
         }
         .frame(width: 580, height: 560)
+        .groupBoxStyle(NotchSettingsGroupBoxStyle())
+        .deepBlackWindowSurface()
         .onAppear {
             launchAtLogin = LaunchAtLoginService.isEnabled
         }
@@ -143,6 +149,7 @@ struct SettingsView: View {
             }
             .settingsPanePadding()
         }
+        .background(NotchWindowPalette.background)
         .confirmationDialog("Clear completed session history?", isPresented: $confirmsClearHistory) {
             Button("Clear History", role: .destructive) { runtime.clearHistory() }
         } message: {
@@ -170,12 +177,12 @@ struct SettingsView: View {
                     .padding(.leading, 34)
                 integrationRow(runtime.geminiIntegration)
             }
-
-            Divider()
+            .padding(.horizontal, 14)
+            .notchPanel()
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Local Relay")
-                    .font(.headline)
+                    .font(.system(.headline, design: .monospaced).weight(.bold))
 
                 HStack(spacing: 8) {
                     Circle()
@@ -213,10 +220,13 @@ struct SettingsView: View {
                     )
                 }
             }
+            .padding(14)
+            .notchPanel()
 
             }
             .settingsPanePadding()
         }
+        .background(NotchWindowPalette.background)
     }
 
     @ViewBuilder
@@ -338,6 +348,7 @@ struct SettingsView: View {
             Spacer()
         }
         .settingsPanePadding()
+        .background(NotchWindowPalette.background)
     }
 
     private var debugModeBinding: Binding<Bool> {
@@ -432,12 +443,32 @@ private struct SettingsHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.headline)
+            Text(title.uppercased())
+                .font(.system(size: 18, weight: .black, design: .monospaced))
+                .tracking(-0.5)
             Text(detail)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NotchWindowPalette.secondaryText)
         }
+    }
+}
+
+private struct NotchSettingsGroupBoxStyle: GroupBoxStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            configuration.label
+                .font(.system(.caption, design: .monospaced).weight(.bold))
+                .textCase(.uppercase)
+                .foregroundStyle(.white.opacity(0.74))
+
+            Rectangle()
+                .fill(NotchWindowPalette.border)
+                .frame(height: 1)
+
+            configuration.content
+        }
+        .padding(14)
+        .notchPanel()
     }
 }
 

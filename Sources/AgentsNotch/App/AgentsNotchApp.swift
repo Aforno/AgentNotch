@@ -61,8 +61,13 @@ struct AgentsNotchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("Agents Notch", systemImage: menuBarSymbol) {
+        MenuBarExtra {
             AgentMenuBarView(runtime: appDelegate.runtime)
+        } label: {
+            MenuBarNotchIcon(
+                activeCount: appDelegate.runtime.activity.activeSessions.count,
+                attentionCount: appDelegate.runtime.activity.attentionCount
+            )
         }
 
         Settings {
@@ -82,13 +87,4 @@ struct AgentsNotchApp: App {
         }
     }
 
-    private var menuBarSymbol: String {
-        if appDelegate.runtime.activity.attentionCount > 0 {
-            return "exclamationmark.bubble.fill"
-        }
-        if !appDelegate.runtime.activity.activeSessions.isEmpty {
-            return "bolt.horizontal.circle.fill"
-        }
-        return "bolt.horizontal.circle"
-    }
 }

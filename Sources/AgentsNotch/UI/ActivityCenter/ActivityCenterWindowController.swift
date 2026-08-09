@@ -13,8 +13,12 @@ final class ActivityCenterWindowController: NSWindowController {
         )
         window.title = "Activity Center"
         window.identifier = NSUserInterfaceItemIdentifier("activity-center")
+        window.backgroundColor = .black
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.titlebarAppearsTransparent = true
+        window.isOpaque = true
         window.contentView = NSHostingView(rootView: root)
-        window.minSize = NSSize(width: 720, height: 480)
+        window.minSize = NSSize(width: 760, height: 500)
         let frameName = "AgentsNotchActivityCenter"
         let restoredFrame = window.setFrameUsingName(frameName)
         window.setFrameAutosaveName(frameName)

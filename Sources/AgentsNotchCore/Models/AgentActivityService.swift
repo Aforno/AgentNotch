@@ -262,8 +262,7 @@ public final class AgentActivityService {
         for index in sessions.indices
             where sessions[index].isActive && sessions[index].state != .waitingForUser
         {
-            sessions[index].state = .completed
-            sessions[index].completedAt = sessions[index].updatedAt
+            sessions[index].complete(as: .completed, at: sessions[index].updatedAt)
             changed = true
         }
         guard changed else { return }
@@ -364,14 +363,7 @@ public final class AgentActivityService {
         for index in sessions.indices
             where descendantIDs.contains(sessions[index].id) && sessions[index].isActive
         {
-            sessions[index].state = state
-            sessions[index].completedAt = timestamp
-            sessions[index].updatedAt = max(sessions[index].updatedAt, timestamp)
-            if state == .completed {
-                sessions[index].currentActivity = "Session ended"
-            } else if state == .failed {
-                sessions[index].currentActivity = "Session failed"
-            }
+            sessions[index].complete(as: state, at: timestamp)
         }
     }
 
@@ -381,7 +373,7 @@ public final class AgentActivityService {
               let parent = sessions.first(where: { $0.id == parentID }),
               parent.state == .completed || parent.state == .failed
         else { return }
-        sessions[index].completeFromParent(as: parent.state, at: max(parent.updatedAt, timestamp))
+        sessions[index].complete(as: parent.state, at: max(parent.updatedAt, timestamp))
     }
 
     private func canonicalizedIdentity(for event: AgentEvent) -> AgentEvent {

@@ -38,6 +38,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         plan = event.plan
         workflows = []
         applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
+        reconcilePlanWithTerminalState(at: event.timestamp)
     }
 
     public var isActive: Bool { state.isActive }
@@ -110,6 +111,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 }
             }
             applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
+            reconcilePlanWithTerminalState(at: event.timestamp)
         } else if task == "Untitled task", let task = event.task?.nonEmpty {
             self.task = task
         }
@@ -120,12 +122,13 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         return advancesCurrentState
     }
 
-    public mutating func completeFromParent(as terminalState: AgentState, at timestamp: Date) {
+    public mutating func complete(as terminalState: AgentState, at timestamp: Date) {
         guard terminalState == .completed || terminalState == .failed, isActive else { return }
         state = terminalState
         completedAt = timestamp
         updatedAt = max(updatedAt, timestamp)
         currentActivity = terminalState == .failed ? "Session failed" : "Session ended"
+        reconcilePlanWithTerminalState(at: timestamp)
     }
 
     /// Merges a workflow snapshot discovered from Grok's on-disk session data.
@@ -235,6 +238,11 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         workflows = Array(workflows.prefix(6))
     }
 
+    private mutating func reconcilePlanWithTerminalState(at timestamp: Date) {
+        guard state == .completed else { return }
+        plan?.completeUnfinishedSteps(at: timestamp)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, provider, task, currentActivity, state, startedAt, updatedAt, completedAt
         case workingDirectory, recentFiles, recentEvents, applicationURL, origin
@@ -268,6 +276,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 .sorted { $0.updatedAt > $1.updatedAt }
                 .prefix(6)
         )
+        reconcilePlanWithTerminalState(at: completedAt ?? updatedAt)
     }
 }
 

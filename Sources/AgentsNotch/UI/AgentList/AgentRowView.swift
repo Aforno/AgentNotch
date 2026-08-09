@@ -228,7 +228,8 @@ private extension AgentPlan {
     }
 
     var rowStage: String {
-        AgentRowPresentation.currentStep(in: steps)?.title ?? "Plan"
+        if isComplete { return "Plan complete" }
+        return AgentRowPresentation.currentStep(in: steps)?.title ?? "Plan"
     }
 }
 

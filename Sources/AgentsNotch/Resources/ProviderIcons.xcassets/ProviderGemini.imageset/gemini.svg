@@ -1,1 +1,17 @@
-<svg fill="#000" fill-rule="evenodd" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"/></svg>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Gemini CLI</title>
+  <defs>
+    <linearGradient id="gemini-frame" x1="2" y1="3" x2="22" y2="21" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#168CFA"/>
+      <stop offset="0.52" stop-color="#8B7CF6"/>
+      <stop offset="1" stop-color="#EF4F70"/>
+    </linearGradient>
+    <linearGradient id="gemini-prompt" x1="6.5" y1="7" x2="17.5" y2="17" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#168CFA"/>
+      <stop offset="0.65" stop-color="#8B7CF6"/>
+      <stop offset="1" stop-color="#EF4F70"/>
+    </linearGradient>
+  </defs>
+  <rect x="1.25" y="1.25" width="21.5" height="21.5" rx="4.75" fill="#1E1E2E" stroke="url(#gemini-frame)" stroke-width="2.5"/>
+  <path d="M7 7.25L14 12L7 16.75" stroke="url(#gemini-prompt)" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</svg>

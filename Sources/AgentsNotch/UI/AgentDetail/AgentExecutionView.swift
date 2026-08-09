@@ -56,6 +56,7 @@ struct AgentPlanProgressView: View {
         if let title = plan.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             return title
         }
+        if plan.isComplete { return "Plan complete" }
         return plan.steps.first(where: { $0.status == .inProgress })?.title
             ?? plan.steps.first(where: { $0.status == .pending })?.title
             ?? plan.steps.last?.title

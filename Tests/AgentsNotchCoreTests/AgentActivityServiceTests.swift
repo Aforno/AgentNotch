@@ -543,6 +543,64 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testSuccessfulCompletionFinalizesUnfinishedPlanSteps() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "planned",
+            provider: .codex,
+            timestamp: base,
+            plan: AgentPlan(
+                steps: [
+                    AgentStep(id: "one", title: "Inspect", status: .completed),
+                    AgentStep(id: "two", title: "Implement", status: .inProgress),
+                    AgentStep(id: "three", title: "Verify", status: .pending),
+                ],
+                updatedAt: base
+            )
+        ))
+
+        let completedAt = base.addingTimeInterval(1)
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "planned",
+            provider: .codex,
+            activity: "Shipped",
+            timestamp: completedAt
+        ))
+
+        XCTAssertEqual(service.sessions[0].state, .completed)
+        XCTAssertEqual(service.sessions[0].currentActivity, "Shipped")
+        XCTAssertEqual(service.sessions[0].plan?.steps.map(\.status), [.completed, .completed, .completed])
+        XCTAssertEqual(service.sessions[0].plan?.updatedAt, completedAt)
+        XCTAssertEqual(service.sessions[0].plan?.isComplete, true)
+    }
+
+    func testLegacyCompletedSessionDecodeRepairsUnfinishedPlan() throws {
+        let base = Date(timeIntervalSince1970: 100)
+        var session = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "legacy-plan",
+            provider: .codex,
+            timestamp: base,
+            plan: AgentPlan(
+                steps: [AgentStep(id: "one", title: "Verify", status: .inProgress)],
+                updatedAt: base
+            )
+        ))
+        session.state = .completed
+        session.completedAt = base.addingTimeInterval(1)
+        session.updatedAt = base.addingTimeInterval(1)
+
+        let data = try JSONEncoder.agentsNotch.encode(session)
+        let decoded = try JSONDecoder.agentsNotch.decode(AgentSession.self, from: data)
+
+        XCTAssertEqual(decoded.plan?.steps.first?.status, .completed)
+        XCTAssertEqual(decoded.plan?.updatedAt, session.completedAt)
+    }
+
+    @MainActor
     func testHierarchyKeepsAttentionSubagentWithParent() {
         let service = AgentActivityService()
         let base = Date(timeIntervalSince1970: 100)
