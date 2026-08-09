@@ -20,30 +20,56 @@ struct SettingsView: View {
     @State private var launchError: String?
     @State private var notificationError: String?
     @State private var confirmsClearHistory = false
+    @State private var pane = Pane.general
 
-    var body: some View {
-        ZStack {
-            NotchWindowPalette.background.ignoresSafeArea()
+    private enum Pane: String, CaseIterable, Identifiable {
+        case general
+        case integrations
+        #if DEBUG
+        case debug
+        #endif
 
-            TabView {
-                generalPane
-                    .tabItem {
-                        Label("General", systemImage: "gearshape")
-                    }
+        var id: String { rawValue }
 
-                integrationsPane
-                    .tabItem {
-                        Label("Integrations", systemImage: "point.3.connected.trianglepath.dotted")
-                    }
-
-                #if DEBUG
-                debugPane
-                    .tabItem {
-                        Label("Debug", systemImage: "hammer")
-                    }
-                #endif
+        var title: String {
+            switch self {
+            case .general: "General"
+            case .integrations: "Integrations"
+            #if DEBUG
+            case .debug: "Debug"
+            #endif
             }
         }
+
+        var symbol: String {
+            switch self {
+            case .general: "gearshape"
+            case .integrations: "point.3.connected.trianglepath.dotted"
+            #if DEBUG
+            case .debug: "hammer"
+            #endif
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            paneSelector
+
+            NotchHairline()
+
+            Group {
+                switch pane {
+                case .general: generalPane
+                case .integrations: integrationsPane
+                #if DEBUG
+                case .debug: debugPane
+                #endif
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .foregroundStyle(NotchWindowPalette.primaryText)
         .frame(width: 580, height: 560)
         .groupBoxStyle(NotchSettingsGroupBoxStyle())
         .deepBlackWindowSurface()
@@ -59,6 +85,38 @@ struct SettingsView: View {
         .onChange(of: displayPreference) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: notchEnabled) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: showVirtualNotch) { _, _ in runtime.refreshNotchSurface() }
+    }
+
+    private var paneSelector: some View {
+        HStack(spacing: 4) {
+            ForEach(Pane.allCases) { candidate in
+                Button {
+                    pane = candidate
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: candidate.symbol)
+                            .font(.system(size: 10, weight: .medium))
+                        Text(candidate.title)
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(.white.opacity(pane == candidate ? 0.92 : 0.5))
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(
+                        pane == candidate ? NotchWindowPalette.raisedStrong : .clear,
+                        in: RoundedRectangle(cornerRadius: NotchWindowMetrics.controlRadius, style: .continuous)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(pane == candidate ? .isSelected : [])
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, NotchWindowMetrics.contentInset)
+        .padding(.vertical, 10)
+        .background(NotchWindowPalette.background)
     }
 
     private var generalPane: some View {
@@ -90,8 +148,8 @@ struct SettingsView: View {
                         }
                         HStack {
                             Text("Version \(runtime.updates.currentVersion)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(NotchWindowFont.caption)
+                                .foregroundStyle(NotchWindowPalette.secondaryText)
                             Spacer()
                             updateControl
                         }
@@ -107,8 +165,8 @@ struct SettingsView: View {
                         Toggle("Also notify when an agent fails", isOn: $failureNotificationsEnabled)
                             .disabled(!attentionNotificationsEnabled)
                         Text("Routine activity and completions remain collapsed.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(NotchWindowFont.caption)
+                            .foregroundStyle(NotchWindowPalette.secondaryText)
                     }
                     .padding(.top, 4)
                 }
@@ -159,7 +217,7 @@ struct SettingsView: View {
 
     private var integrationsPane: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: NotchWindowMetrics.sectionSpacing) {
             SettingsHeading(
                 title: "Integrations",
                 detail: "Connect local coding agents to Agents Notch."
@@ -167,36 +225,34 @@ struct SettingsView: View {
 
             VStack(spacing: 0) {
                 integrationRow(runtime.codexIntegration)
-                Divider()
-                    .padding(.leading, 34)
+                NotchHairline(leadingInset: 42)
                 integrationRow(runtime.claudeIntegration)
-                Divider()
-                    .padding(.leading, 34)
+                NotchHairline(leadingInset: 42)
                 integrationRow(runtime.grokIntegration)
-                Divider()
-                    .padding(.leading, 34)
+                NotchHairline(leadingInset: 42)
                 integrationRow(runtime.geminiIntegration)
             }
             .padding(.horizontal, 14)
-            .notchPanel()
+            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Local Relay")
-                    .font(.system(.headline, design: .monospaced).weight(.bold))
+            VStack(alignment: .leading, spacing: 10) {
+                NotchSectionLabel(title: "Local Relay")
 
                 HStack(spacing: 8) {
                     Circle()
                         .fill(socketColor)
                         .frame(width: 7, height: 7)
+                        .shadow(color: socketColor.opacity(0.5), radius: 3)
 
                     Text(runtime.socketStatus)
-                        .foregroundStyle(.secondary)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
 
                     Spacer()
 
                     Text("~/.agentsnotch/agent.sock")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .font(NotchWindowFont.mono)
+                        .foregroundStyle(NotchWindowPalette.tertiaryText)
                         .textSelection(.enabled)
                 }
 
@@ -208,8 +264,8 @@ struct SettingsView: View {
                     )
                 } else {
                     Text("Events stay on this Mac and are delivered through the local socket.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
 
                 if let error = runtime.persistenceError {
@@ -220,8 +276,8 @@ struct SettingsView: View {
                     )
                 }
             }
-            .padding(14)
-            .notchPanel()
+            .padding(NotchWindowMetrics.rowInset)
+            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
 
             }
             .settingsPanePadding()
@@ -233,12 +289,12 @@ struct SettingsView: View {
     private func integrationRow(_ integration: ProviderIntegrationManager) -> some View {
         HStack(alignment: .top, spacing: 10) {
             ProviderIconView(provider: integration.provider, size: 20)
-                .foregroundStyle(.primary)
                 .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(integration.provider.displayName)
-                    .fontWeight(.medium)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.86))
 
                 HStack(spacing: 5) {
                     Circle()
@@ -246,20 +302,20 @@ struct SettingsView: View {
                         .frame(width: 6, height: 6)
                     Text(integration.status.title)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(NotchWindowFont.caption)
+                .foregroundStyle(NotchWindowPalette.secondaryText)
 
                 if integration.status != .notInstalled,
                    let instructions = integration.trustInstructions {
                     Text(instructions)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let error = integration.lastError {
                     Text(error)
-                        .font(.caption)
+                        .font(NotchWindowFont.caption)
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
@@ -267,8 +323,8 @@ struct SettingsView: View {
 
                 if let lastEvent = runtime.lastEventReceivedAt[integration.provider] {
                     Text("Last event \(lastEvent.formatted(.relative(presentation: .named)))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
             }
 
@@ -295,7 +351,7 @@ struct SettingsView: View {
             }
         }
         .controlSize(.small)
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
     }
 
     @ViewBuilder
@@ -326,7 +382,7 @@ struct SettingsView: View {
             Toggle("Enable debug simulator", isOn: debugModeBinding)
 
             if debugMode {
-                Divider()
+                NotchHairline()
 
                 SettingsButtonGroup(title: "Agent States") {
                     Button("Running") { runtime.simulator.simulate(.running) }
@@ -417,8 +473,8 @@ struct SettingsView: View {
                 .foregroundStyle(.green)
         case .noRelease:
             Label("No releases yet", systemImage: "shippingbox")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(NotchWindowFont.caption)
+                .foregroundStyle(NotchWindowPalette.secondaryText)
         case let .available(version, _):
             Button("Download \(version)") { runtime.updates.openAvailableRelease() }
         case let .failed(message):
@@ -442,12 +498,12 @@ private struct SettingsHeading: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title.uppercased())
-                .font(.system(size: 18, weight: .black, design: .monospaced))
-                .tracking(-0.5)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(NotchWindowFont.display)
+                .foregroundStyle(.white.opacity(0.92))
             Text(detail)
-                .font(.caption)
+                .font(NotchWindowFont.caption)
                 .foregroundStyle(NotchWindowPalette.secondaryText)
         }
     }
@@ -455,20 +511,16 @@ private struct SettingsHeading: View {
 
 private struct NotchSettingsGroupBoxStyle: GroupBoxStyle {
     func makeBody(configuration: Configuration) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: 10) {
             configuration.label
-                .font(.system(.caption, design: .monospaced).weight(.bold))
-                .textCase(.uppercase)
+                .font(NotchWindowFont.sectionLabel)
                 .foregroundStyle(.white.opacity(0.74))
-
-            Rectangle()
-                .fill(NotchWindowPalette.border)
-                .frame(height: 1)
 
             configuration.content
         }
-        .padding(14)
-        .notchPanel()
+        .padding(NotchWindowMetrics.rowInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
     }
 }
 
@@ -499,7 +551,8 @@ private struct SettingsButtonGroup<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.headline)
+                .font(NotchWindowFont.sectionLabel)
+                .foregroundStyle(.white.opacity(0.74))
             HStack(spacing: 8) {
                 content
             }
@@ -511,8 +564,8 @@ private struct SettingsButtonGroup<Content: View>: View {
 
 private extension View {
     func settingsPanePadding() -> some View {
-        padding(.horizontal, 24)
-            .padding(.top, 20)
+        padding(.horizontal, NotchWindowMetrics.contentInset)
+            .padding(.top, 18)
             .padding(.bottom, 16)
     }
 }

@@ -8,18 +8,23 @@ struct ActivityMetric: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Rectangle()
-                .fill(value > 0 ? color : NotchWindowPalette.tertiaryText)
-                .frame(width: 3, height: 18)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
-                Text("\(value)")
-                    .font(.system(size: 12, weight: .black, design: .monospaced))
-            }
+            Circle()
+                .fill(value > 0 ? color : Color.white.opacity(0.18))
+                .frame(width: 6, height: 6)
+                .shadow(color: color.opacity(value > 0 ? 0.55 : 0), radius: 4)
+
+            Text(title)
+                .font(NotchWindowFont.caption)
+                .foregroundStyle(NotchWindowPalette.secondaryText)
+
+            Text("\(value)")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(value > 0 ? 0.9 : 0.4))
+                .monospacedDigit()
         }
-        .frame(minWidth: 70, alignment: .leading)
+        .padding(.horizontal, 9)
+        .frame(height: 24)
+        .background(NotchWindowPalette.raised, in: Capsule())
     }
 }
 
@@ -27,56 +32,60 @@ struct ActivitySessionRow: View {
     let session: AgentSession
     let isSelected: Bool
 
+    @State private var isHovering = false
+
     var body: some View {
         HStack(spacing: 10) {
-            Rectangle()
-                .fill(activityColor(for: session.state))
-                .frame(width: 3)
-
             ProviderIconView(provider: session.provider, size: 18)
                 .frame(width: 22)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(session.provider.displayName.uppercased())
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
-                    Text(session.updatedAt, style: .relative)
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(NotchWindowPalette.tertiaryText)
-                }
-
+            VStack(alignment: .leading, spacing: 2) {
                 Text(session.task)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.82))
                     .lineLimit(1)
 
-                Text(rowDetail)
-                    .font(.system(size: 10))
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(session.provider.displayName)
+                    Text("·")
+                        .foregroundStyle(NotchWindowPalette.tertiaryText)
+                    Text(rowDetail)
+                        .lineLimit(1)
+                }
+                .font(NotchWindowFont.footnote)
+                .foregroundStyle(NotchWindowPalette.secondaryText)
             }
 
-            Spacer(minLength: 3)
-            StateIndicator(state: session.state, size: 9)
+            Spacer(minLength: 6)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                StateIndicator(state: session.state, size: 9)
+                Text(session.updatedAt, style: .relative)
+                    .font(.system(size: 9))
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
+                    .lineLimit(1)
+            }
+            .frame(minWidth: 48, alignment: .trailing)
         }
-        .padding(.vertical, 10)
-        .padding(.trailing, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? NotchWindowPalette.raisedStrong : NotchWindowPalette.raised)
-        .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(
-                    isSelected ? NotchWindowPalette.strongBorder : NotchWindowPalette.border,
-                    lineWidth: isSelected ? 1.5 : 1
-                )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(
+            rowFill,
+            in: RoundedRectangle(cornerRadius: NotchWindowMetrics.cardRadius, style: .continuous)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: NotchWindowMetrics.cardRadius, style: .continuous))
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+    }
+
+    private var rowFill: Color {
+        if isSelected { return NotchWindowPalette.raisedStrong }
+        return isHovering ? NotchWindowPalette.raised : .clear
     }
 
     private var rowDetail: String {
         let project = session.workingDirectory.map { URL(fileURLWithPath: $0).lastPathComponent }
-        return [project, session.currentActivity].compactMap { $0 }.joined(separator: " / ")
+        return [project, session.currentActivity].compactMap { $0 }.joined(separator: " · ")
     }
 }
-

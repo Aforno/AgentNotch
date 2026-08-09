@@ -17,30 +17,35 @@ struct ActivityCenterView: View {
         case completed
 
         var id: String { rawValue }
-        var title: String { rawValue.uppercased() }
+        var title: String {
+            switch self {
+            case .all: "All"
+            case .active: "Active"
+            case .attention: "Attention"
+            case .completed: "Completed"
+            }
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             header
 
-            Rectangle()
-                .fill(NotchWindowPalette.border)
-                .frame(height: 1)
+            NotchHairline()
 
             HStack(spacing: 0) {
                 sidebar
                     .frame(minWidth: 270, idealWidth: 300, maxWidth: 340)
 
                 Rectangle()
-                    .fill(NotchWindowPalette.border)
-                    .frame(width: 1)
+                    .fill(NotchWindowPalette.hairline)
+                    .frame(width: 0.6)
 
                 detail
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(NotchWindowPalette.primaryText)
         .frame(minWidth: 760, minHeight: 500)
         .deepBlackWindowSurface()
         .confirmationDialog(
@@ -61,25 +66,25 @@ struct ActivityCenterView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("ACTIVITY CENTER")
-                    .font(.system(size: 23, weight: .black, design: .monospaced))
-                    .tracking(-1)
-                Text("LOCAL AGENT HISTORY / \(runtime.activity.sessions.count) SESSIONS")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Activity")
+                    .font(NotchWindowFont.display)
+                    .foregroundStyle(.white.opacity(0.92))
+                Text(sessionCountSummary)
+                    .font(NotchWindowFont.footnote)
                     .foregroundStyle(NotchWindowPalette.secondaryText)
             }
 
             Spacer()
 
             ActivityMetric(
-                title: "ACTIVE",
+                title: "Active",
                 value: runtime.activity.activeSessions.count,
                 color: .blue
             )
             ActivityMetric(
-                title: "ATTENTION",
+                title: "Attention",
                 value: runtime.activity.attentionCount,
                 color: .orange
             )
@@ -91,19 +96,18 @@ struct ActivityCenterView: View {
                 .disabled(runtime.activity.recentSessions.isEmpty)
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .bold))
-                    .frame(width: 34, height: 30)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
+                    .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
-            .overlay {
-                Rectangle().stroke(NotchWindowPalette.border, lineWidth: 1)
-            }
             .help("Activity options")
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 15)
+        .padding(.horizontal, NotchWindowMetrics.contentInset)
+        .padding(.vertical, 14)
         .background(NotchWindowPalette.background)
     }
 
@@ -111,28 +115,27 @@ struct ActivityCenterView: View {
         VStack(spacing: 0) {
             filterControls
 
-            Rectangle()
-                .fill(NotchWindowPalette.border)
-                .frame(height: 1)
+            NotchHairline()
 
             if filteredSessions.isEmpty {
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
                     Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 24, weight: .light))
+                        .font(.system(size: 20, weight: .light))
                         .foregroundStyle(NotchWindowPalette.tertiaryText)
-                    Text("NO MATCHING SESSIONS")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    Text("No matching sessions")
+                        .font(NotchWindowFont.caption)
                         .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 7) {
+                    LazyVStack(spacing: 2) {
                         ForEach(filteredSessions) { session in
                             sessionButton(session)
                         }
                     }
-                    .padding(12)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
                 }
                 .scrollIndicators(.visible)
             }
@@ -141,38 +144,38 @@ struct ActivityCenterView: View {
     }
 
     private var filterControls: some View {
-        VStack(spacing: 9) {
-            HStack(spacing: 8) {
+        VStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
 
-                TextField("SEARCH SESSIONS", text: $searchText)
+                TextField("Search sessions", text: $searchText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(NotchWindowFont.bodyEmphasis)
 
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold))
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
                     .accessibilityLabel("Clear search")
                 }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 34)
-            .background(NotchWindowPalette.raised)
-            .overlay {
-                Rectangle().stroke(NotchWindowPalette.border, lineWidth: 1)
-            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(
+                NotchWindowPalette.raised,
+                in: RoundedRectangle(cornerRadius: NotchWindowMetrics.controlRadius, style: .continuous)
+            )
 
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Picker("Provider", selection: $providerFilter) {
-                    Text("ALL PROVIDERS").tag("all")
+                    Text("All providers").tag("all")
                     ForEach(availableProviders) { provider in
-                        Text(provider.displayName.uppercased()).tag(provider.rawValue)
+                        Text(provider.displayName).tag(provider.rawValue)
                     }
                 }
                 .labelsHidden()
@@ -188,10 +191,11 @@ struct ActivityCenterView: View {
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity)
             }
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .font(NotchWindowFont.control)
             .controlSize(.small)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
     }
 
     private func sessionButton(_ session: AgentSession) -> some View {
@@ -224,19 +228,25 @@ struct ActivityCenterView: View {
                 onSelectSession: { revealAndSelect($0) }
             )
         } else {
-            VStack(spacing: 14) {
-                NotchShape(bottomRadius: 13)
-                    .fill(.white.opacity(0.12))
-                    .frame(width: 70, height: 38)
-                Text("SELECT A SESSION")
-                    .font(.system(size: 15, weight: .black, design: .monospaced))
+            VStack(spacing: 10) {
+                NotchShape(bottomRadius: 12)
+                    .fill(.white.opacity(0.09))
+                    .frame(width: 66, height: 34)
+                Text("Select a session")
+                    .font(NotchWindowFont.title)
+                    .foregroundStyle(.white.opacity(0.82))
                 Text("Plans, workflows, files, and recent events appear here.")
-                    .font(.caption)
+                    .font(NotchWindowFont.caption)
                     .foregroundStyle(NotchWindowPalette.secondaryText)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(NotchWindowPalette.background)
         }
+    }
+
+    private var sessionCountSummary: String {
+        let count = runtime.activity.sessions.count
+        return count == 1 ? "1 session on this Mac" : "\(count) sessions on this Mac"
     }
 
     private var filteredSessions: [AgentSession] {

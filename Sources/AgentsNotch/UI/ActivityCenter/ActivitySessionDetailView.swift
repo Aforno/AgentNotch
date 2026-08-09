@@ -11,7 +11,7 @@ struct ActivitySessionDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: NotchWindowMetrics.sectionSpacing) {
                 header
 
                 if let plan = session.plan {
@@ -21,9 +21,10 @@ struct ActivitySessionDetailView: View {
                 }
 
                 ForEach(session.workflows) { workflow in
-                    detailSection(workflow.title, count: workflow.status.displayName.uppercased()) {
+                    detailSection(workflow.title, count: workflow.status.displayName) {
                         if workflow.steps.isEmpty {
                             Text(workflow.status.displayName)
+                                .font(NotchWindowFont.caption)
                                 .foregroundStyle(NotchWindowPalette.secondaryText)
                         } else {
                             ForEach(workflow.steps) { step in stepRow(step) }
@@ -46,11 +47,14 @@ struct ActivitySessionDetailView: View {
                             Button { onOpenFile(path) } label: {
                                 HStack(spacing: 9) {
                                     Image(systemName: "doc")
-                                        .foregroundStyle(NotchWindowPalette.secondaryText)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(NotchWindowPalette.tertiaryText)
                                     Text(URL(fileURLWithPath: path).lastPathComponent)
+                                        .font(NotchWindowFont.caption)
+                                        .foregroundStyle(.white.opacity(0.8))
                                     Spacer()
                                     Image(systemName: "arrow.up.forward")
-                                        .font(.caption2.weight(.bold))
+                                        .font(.system(size: 8, weight: .semibold))
                                         .foregroundStyle(NotchWindowPalette.tertiaryText)
                                 }
                                 .contentShape(Rectangle())
@@ -65,77 +69,71 @@ struct ActivitySessionDetailView: View {
                     ForEach(session.recentEvents) { event in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(event.timestamp, style: .time)
-                                .font(.system(size: 9, design: .monospaced))
+                                .font(NotchWindowFont.mono)
                                 .foregroundStyle(NotchWindowPalette.tertiaryText)
                                 .frame(width: 64, alignment: .leading)
                             Text(event.activity ?? event.resolvedState.displayName)
-                                .font(.system(size: 11))
+                                .font(NotchWindowFont.caption)
                                 .foregroundStyle(.white.opacity(0.72))
                             Spacer()
                         }
                     }
                 }
             }
-            .padding(18)
+            .padding(NotchWindowMetrics.contentInset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(NotchWindowPalette.background)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                ProviderIconView(provider: session.provider, size: 22)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(session.provider.displayName.uppercased())
-                        .font(.system(size: 10, weight: .black, design: .monospaced))
-                    HStack(spacing: 5) {
-                        StateIndicator(state: session.state, size: 8)
-                        Text(session.state.displayName.uppercased())
-                    }
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(activityColor(for: session.state))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                ProviderIconView(provider: session.provider, size: 20)
+
+                Text(session.provider.displayName)
+                    .font(NotchWindowFont.bodyEmphasis)
+                    .foregroundStyle(.white.opacity(0.82))
+
+                HStack(spacing: 5) {
+                    StateIndicator(state: session.state, size: 8)
+                    Text(session.state.displayName)
+                        .font(.system(size: 10, weight: .medium))
                 }
+                .foregroundStyle(agentStateColor(for: session.state))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(.white.opacity(0.08), in: Capsule())
 
                 Spacer()
 
                 Text(session.updatedAt, style: .relative)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
+                    .font(NotchWindowFont.footnote)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
 
                 Button(action: onOpen) {
-                    Label("OPEN ORIGIN", systemImage: "arrow.up.forward.app")
+                    Label("Open Origin", systemImage: "arrow.up.forward.app")
                 }
                 .buttonStyle(ActivityActionButtonStyle())
             }
 
-            Rectangle()
-                .fill(NotchWindowPalette.border)
-                .frame(height: 1)
-
             Text(session.task)
-                .font(.system(size: 23, weight: .black, design: .rounded))
-                .tracking(-0.6)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.94))
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(session.currentActivity)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12))
                 .foregroundStyle(NotchWindowPalette.secondaryText)
 
             if let directory = session.workingDirectory {
                 Label(directory, systemImage: "folder")
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(NotchWindowFont.mono)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
                     .textSelection(.enabled)
             }
         }
-        .padding(16)
-        .notchPanel(cornerRadius: 12)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(activityColor(for: session.state))
-                .frame(height: 3)
-                .padding(.horizontal, 13)
-        }
+        .padding(.bottom, 2)
     }
 
     private func detailSection<Content: View>(
@@ -143,44 +141,31 @@ struct ActivitySessionDetailView: View {
         count: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(title.uppercased())
-                    .font(.system(size: 10, weight: .black, design: .monospaced))
-                Spacer()
-                Text(count)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+        VStack(alignment: .leading, spacing: 9) {
+            NotchSectionLabel(title: title, trailing: count)
 
-            Rectangle()
-                .fill(NotchWindowPalette.border)
-                .frame(height: 1)
-
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 9) {
                 content()
             }
-            .padding(14)
+            .padding(NotchWindowMetrics.rowInset)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
         }
-        .notchPanel()
     }
 
     private func stepRow(_ step: AgentStep) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 9) {
             Image(systemName: symbol(for: step.status))
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(color(for: step.status))
-                .frame(width: 15)
+                .frame(width: 14)
             Text(step.title)
-                .font(.system(size: 11))
+                .font(NotchWindowFont.caption)
                 .foregroundStyle(step.status == .completed ? .white.opacity(0.42) : .white.opacity(0.8))
                 .strikethrough(step.status == .completed, color: .white.opacity(0.24))
             Spacer()
-            Text(step.status.displayName.uppercased())
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+            Text(step.status.displayName)
+                .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(color(for: step.status).opacity(0.8))
         }
     }
@@ -191,16 +176,20 @@ struct ActivitySessionDetailView: View {
         } label: {
             HStack(spacing: 9) {
                 ProviderIconView(provider: related.provider, size: 15)
-                Text(label.replacingOccurrences(of: "_", with: " ").uppercased())
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                Text(label.replacingOccurrences(of: "_", with: " ").capitalized)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.white.opacity(0.08), in: Capsule())
                 Text(related.task)
-                    .font(.system(size: 11))
+                    .font(NotchWindowFont.caption)
                     .foregroundStyle(NotchWindowPalette.secondaryText)
                     .lineLimit(1)
                 Spacer()
                 StateIndicator(state: related.state, size: 8)
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
+                    .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
             }
             .contentShape(Rectangle())

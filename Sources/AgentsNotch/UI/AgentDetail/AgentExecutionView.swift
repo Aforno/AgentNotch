@@ -238,6 +238,6 @@ private struct AgentStepRow: View {
 private extension View {
     func executionCard() -> some View {
         padding(DynamicIslandSpacing.standard)
-            .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+            .notchPanel(cornerRadius: 9)
     }
 }

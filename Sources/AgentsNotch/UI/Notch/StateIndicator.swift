@@ -20,18 +20,7 @@ struct StateIndicator: View {
         .accessibilityLabel(state.displayName)
     }
 
-    private var color: Color {
-        switch state {
-        case .waitingForUser: .orange
-        case .failed: .red
-        case .completed: .green
-        case .editing: .mint
-        case .thinking: .purple
-        case .starting: .cyan
-        case .running, .executingTool: .blue
-        case .idle: .secondary
-        }
-    }
+    private var color: Color { agentStateColor(for: state) }
 }
 
 private struct StateSpinner: View {
