@@ -205,7 +205,7 @@ struct NotchRootView: View {
         case .collapsed:
             if hasActiveAgents {
                 CollapsedNotchView(
-                    sessions: activity.activeSessions,
+                    activeProviders: activity.activeProviders,
                     activeCount: activity.activeGroupCount
                 )
             }

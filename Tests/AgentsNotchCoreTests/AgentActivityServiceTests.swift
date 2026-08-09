@@ -57,6 +57,49 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testActiveProvidersAreUniqueAndOrderedByLatestActivity() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex-old",
+            provider: .codex,
+            state: .running,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "claude",
+            provider: .claudeCode,
+            state: .thinking,
+            timestamp: base.addingTimeInterval(2)
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex-new",
+            provider: .codex,
+            state: .editing,
+            timestamp: base.addingTimeInterval(3)
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "grok-done",
+            provider: .grok,
+            state: .running,
+            timestamp: base.addingTimeInterval(3.5)
+        ))
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "grok-done",
+            provider: .grok,
+            state: .completed,
+            timestamp: base.addingTimeInterval(4)
+        ))
+
+        XCTAssertEqual(service.activeProviders, [.codex, .claudeCode])
+    }
+
+    @MainActor
     func testCompletedSessionsCanBePruned() {
         let service = AgentActivityService()
         let oldDate = Date(timeIntervalSince1970: 100)

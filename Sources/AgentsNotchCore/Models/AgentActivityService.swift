@@ -23,6 +23,22 @@ public final class AgentActivityService {
         sessions.filter(\.isActive)
     }
 
+    /// Active provider identities ordered by their most recently updated
+    /// session. A provider appears once even when it has multiple agents or
+    /// subagents running concurrently.
+    public var activeProviders: [AgentProvider] {
+        var seen = Set<AgentProvider>()
+        return activeSessions
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                if lhs.provider != rhs.provider { return lhs.provider.rawValue < rhs.provider.rawValue }
+                return lhs.id < rhs.id
+            }
+            .compactMap { session in
+                seen.insert(session.provider).inserted ? session.provider : nil
+            }
+    }
+
     public var activeGroupCount: Int {
         sessionGroupRoots.filter { groupIsActive(rootID: $0.id) }.count
     }
