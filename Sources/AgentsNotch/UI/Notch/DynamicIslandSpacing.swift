@@ -11,7 +11,13 @@ enum DynamicIslandSpacing {
     static let expandedTop: CGFloat = 8
     static let expandedBottom: CGFloat = 12
     static let rowHeight: CGFloat = 44
-    // Wide enough for a status dot plus a three-digit count while preserving
-    // a full outer inset and clearance from the physical notch.
-    static let compactEarWidth: CGFloat = 64
+    static let compactInset: CGFloat = 8
+
+    /// Keeps the resting notch close to the sensor housing while leaving room
+    /// for the status dot and count. Extra width is added only when the count
+    /// gains another digit instead of reserving a three-digit ear at all times.
+    static func compactEarWidth(for activeCount: Int) -> CGFloat {
+        let digits = String(max(activeCount, 0)).count
+        return 36 + CGFloat(max(digits - 1, 0)) * 7
+    }
 }

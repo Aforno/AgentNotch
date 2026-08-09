@@ -11,14 +11,14 @@ struct CollapsedNotchView: View {
         Color.clear
             .overlay(alignment: .leading) {
                 leadingStatus
-                    .padding(.leading, DynamicIslandSpacing.outer)
+                    .padding(.leading, DynamicIslandSpacing.compactInset)
             }
             .overlay(alignment: .trailing) {
                 if attention != nil {
                     Image(systemName: "exclamationmark.circle.fill")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.orange)
-                        .padding(.trailing, DynamicIslandSpacing.outer)
+                        .padding(.trailing, DynamicIslandSpacing.compactInset)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

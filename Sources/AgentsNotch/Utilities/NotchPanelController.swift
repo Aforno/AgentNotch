@@ -40,8 +40,11 @@ final class NotchPanelController: NSWindowController {
 
     func show() {
         let hasActiveAgents = !runtime.activity.activeSessions.isEmpty
+        let compactEarWidth = DynamicIslandSpacing.compactEarWidth(
+            for: runtime.activity.activeGroupCount
+        )
         reposition(
-            width: geometry.notchWidth + (hasActiveAgents ? DynamicIslandSpacing.compactEarWidth * 2 : 0),
+            width: geometry.notchWidth + (hasActiveAgents ? compactEarWidth * 2 : 0),
             height: geometry.notchHeight + (hasActiveAgents ? 2 : 0)
         )
         window?.orderFrontRegardless()
