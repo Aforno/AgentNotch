@@ -11,52 +11,60 @@ struct OnboardingView: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 64, height: 64)
+
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Agents should find you—not interrupt you")
-                        .font(.title2.weight(.semibold))
+                        .font(NotchWindowFont.title)
+                        .foregroundStyle(NotchWindowPalette.primaryText)
                     Text("Install one or more local observers, confirm the relay, then leave the notch collapsed until an agent needs input.")
-                        .foregroundStyle(.secondary)
+                        .font(NotchWindowFont.body)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
             VStack(spacing: 0) {
                 providerRow(runtime.codexIntegration)
-                Divider().padding(.leading, 42)
+                NotchHairline(leadingInset: 42)
                 providerRow(runtime.claudeIntegration)
-                Divider().padding(.leading, 42)
+                NotchHairline(leadingInset: 42)
                 providerRow(runtime.grokIntegration)
-                Divider().padding(.leading, 42)
+                NotchHairline(leadingInset: 42)
                 providerRow(runtime.geminiIntegration)
             }
             .padding(.horizontal, 14)
-            .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
 
             HStack(spacing: 8) {
                 Image(systemName: runtime.socketStatus == "Listening" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(runtime.socketStatus == "Listening" ? .green : .orange)
                 Text("Local relay: \(runtime.socketStatus)")
-                    .fontWeight(.medium)
+                    .font(NotchWindowFont.bodyEmphasis)
+                    .foregroundStyle(NotchWindowPalette.primaryText)
                 Spacer()
                 Text("No source code or prompts leave this Mac.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(NotchWindowFont.caption)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
             }
 
             Spacer()
 
             HStack {
                 Button("Open Activity Center") { runtime.openActivityCenter() }
+                    .buttonStyle(NotchPillButtonStyle())
                 Spacer()
                 Button("Finish") {
                     UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
                     onDone()
                 }
+                .buttonStyle(NotchPillButtonStyle())
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)
         .frame(width: 640, height: 480)
+        .foregroundStyle(NotchWindowPalette.primaryText)
+        .deepBlackWindowSurface()
     }
 
     private func providerRow(_ integration: ProviderIntegrationManager) -> some View {
@@ -66,45 +74,32 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(integration.provider.displayName)
-                    .fontWeight(.medium)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.86))
                 Text(providerDetail(integration))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(NotchWindowFont.caption)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
                     .lineLimit(2)
             }
 
-            Spacer()
+            Spacer(minLength: 12)
 
             if integration.status.canInstall {
                 Button("Install") { integration.install() }
+                    .buttonStyle(NotchPillButtonStyle())
             } else {
-                selfTestButton(for: integration.provider)
                 Button {
                     integration.refreshStatus()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                .buttonStyle(NotchIconButtonStyle())
                 .help("Refresh status")
+                .accessibilityLabel("Refresh \(integration.provider.displayName) status")
             }
         }
         .controlSize(.small)
         .padding(.vertical, 11)
-    }
-
-    @ViewBuilder
-    private func selfTestButton(for provider: AgentProvider) -> some View {
-        switch runtime.selfTestStatuses[provider] ?? .idle {
-        case .idle:
-            Button("Test") { runtime.runSelfTest(for: provider) }
-        case .running:
-            ProgressView().controlSize(.small).frame(width: 48)
-        case .passed:
-            Label("Relay verified", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case let .failed(message):
-            Button("Retry") { runtime.runSelfTest(for: provider) }
-                .help(message)
-        }
     }
 
     private func providerDetail(_ integration: ProviderIntegrationManager) -> String {

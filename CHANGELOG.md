@@ -26,8 +26,14 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Parent rows surface waiting or failed descendant state.
 - Settings window matches Activity Center chrome: resizable, minimizable, and
   pure-black transparent title bar with frame restoration.
-- Notch agent rows and attention peeks show the chat/task name instead of only
-  the provider label (provider remains identified by its icon).
+- Settings controls use T3-style rows: title + detail, switch toggles, and
+  compact dark pill buttons/pickers.
+- Setup/onboarding window uses the same pure-black deep surface as Settings
+  and Activity Center.
+- Settings dropdowns use a T3-style dark pill trigger and solid borderless
+  floating menu (no speech-bubble popover) with selected-row highlight.
+- Notch agent rows keep the provider name and show the session title instead of
+  live activity messages; attention peeks do the same.
 
 ## [0.1.0] - 2026-08-08
 

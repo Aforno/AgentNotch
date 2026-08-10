@@ -14,21 +14,19 @@ struct TemporaryActivityView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: DynamicIslandSpacing.tight) {
-                    Text(session.task)
+                    Text(session.provider.displayName)
                         .fontWeight(.semibold)
-                        .lineLimit(1)
                     if let projectName {
                         Text("·")
                             .foregroundStyle(.white.opacity(0.32))
                         Text(projectName)
                             .foregroundStyle(.white.opacity(0.66))
-                            .lineLimit(1)
                     }
                 }
                 .font(.system(size: 11))
                 .lineLimit(1)
 
-                Text(session.currentActivity)
+                Text(session.task)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)

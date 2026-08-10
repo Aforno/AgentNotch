@@ -71,7 +71,6 @@ struct SettingsView: View {
         }
         .foregroundStyle(NotchWindowPalette.primaryText)
         .frame(minWidth: 520, idealWidth: 580, minHeight: 480, idealHeight: 560)
-        .groupBoxStyle(NotchSettingsGroupBoxStyle())
         .deepBlackWindowSurface()
         .onAppear {
             launchAtLogin = LaunchAtLoginService.isEnabled
@@ -121,81 +120,104 @@ struct SettingsView: View {
 
     private var generalPane: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 28) {
                 SettingsHeading(
                     title: "General",
                     detail: "Control how Agents Notch starts, alerts, and stores local history."
                 )
 
-                GroupBox("Application") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Launch Agents Notch at login", isOn: launchBinding)
-                        Toggle("Animate notch transitions", isOn: $animationsEnabled)
-                        Toggle("Show notch surface", isOn: $notchEnabled)
-                        Toggle("Show a virtual notch on displays without hardware", isOn: $showVirtualNotch)
-                        Toggle("Automatically check GitHub for updates", isOn: $automaticallyCheckForUpdates)
-
-                        HStack {
-                            Text("Show the notch on:")
-                            Spacer()
-                            Picker("Show the notch on", selection: $displayPreference) {
-                                ForEach(DisplayPreference.allCases) { preference in
-                                    Text(preference.title).tag(preference.rawValue)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 190)
-                        }
-                        HStack {
-                            Text("Version \(runtime.updates.currentVersion)")
-                                .font(NotchWindowFont.caption)
+                SettingsSection(title: "Application") {
+                    SettingsToggleRow(
+                        title: "Launch at login",
+                        detail: "Start Agents Notch automatically when you sign in to this Mac.",
+                        isOn: launchBinding
+                    )
+                    SettingsToggleRow(
+                        title: "Animate notch transitions",
+                        detail: "Smooth open, close, and content changes on the notch surface.",
+                        isOn: $animationsEnabled
+                    )
+                    SettingsToggleRow(
+                        title: "Show notch surface",
+                        detail: "Display live agent activity on the hardware or virtual notch.",
+                        isOn: $notchEnabled
+                    )
+                    SettingsToggleRow(
+                        title: "Virtual notch",
+                        detail: "Show a virtual notch on displays without hardware cutouts.",
+                        isOn: $showVirtualNotch
+                    )
+                    SettingsToggleRow(
+                        title: "Provider update checks",
+                        detail: "Automatically check GitHub for newer Agents Notch releases.",
+                        isOn: $automaticallyCheckForUpdates
+                    )
+                    SettingsMenuRow(
+                        title: "Show the notch on",
+                        detail: "Choose which display hosts the notch surface.",
+                        selection: $displayPreference,
+                        options: DisplayPreference.allCases.map { ($0.rawValue, $0.title) }
+                    )
+                    SettingsControlRow(title: "Version", detail: "Current app version and update status.") {
+                        HStack(spacing: 8) {
+                            Text(runtime.updates.currentVersion)
+                                .font(NotchWindowFont.control)
                                 .foregroundStyle(NotchWindowPalette.secondaryText)
-                            Spacer()
                             updateControl
                         }
                     }
-                    .padding(.top, 4)
                 }
 
-                GroupBox("Attention") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Show macOS notifications when an agent needs input", isOn: notificationBinding)
-                        Toggle("Play notification sound", isOn: $attentionNotificationSoundEnabled)
-                            .disabled(!attentionNotificationsEnabled)
-                        Toggle("Also notify when an agent fails", isOn: $failureNotificationsEnabled)
-                            .disabled(!attentionNotificationsEnabled)
-                        Text("Routine activity and completions remain collapsed.")
-                            .font(NotchWindowFont.caption)
-                            .foregroundStyle(NotchWindowPalette.secondaryText)
-                    }
-                    .padding(.top, 4)
+                SettingsSection(title: "Attention") {
+                    SettingsToggleRow(
+                        title: "Attention notifications",
+                        detail: "Show macOS notifications when an agent needs input.",
+                        isOn: notificationBinding
+                    )
+                    SettingsToggleRow(
+                        title: "Notification sound",
+                        detail: "Play the system notification sound with attention alerts.",
+                        isOn: $attentionNotificationSoundEnabled
+                    )
+                    .disabled(!attentionNotificationsEnabled)
+                    .opacity(attentionNotificationsEnabled ? 1 : 0.45)
+                    SettingsToggleRow(
+                        title: "Failure notifications",
+                        detail: "Also notify when an agent fails. Routine activity stays collapsed.",
+                        isOn: $failureNotificationsEnabled
+                    )
+                    .disabled(!attentionNotificationsEnabled)
+                    .opacity(attentionNotificationsEnabled ? 1 : 0.45)
                 }
 
-                GroupBox("Local History") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Keep completed sessions")
-                            Spacer()
-                            Picker("Keep completed sessions", selection: $historyRetentionDays) {
-                                Text("7 days").tag(7)
-                                Text("30 days").tag(30)
-                                Text("90 days").tag(90)
-                                Text("1 year").tag(365)
-                            }
-                            .labelsHidden()
-                            .frame(width: 120)
-                        }
-                        HStack {
+                SettingsSection(title: "Local History") {
+                    SettingsMenuRow(
+                        title: "Keep completed sessions",
+                        detail: "How long finished sessions remain in Activity Center.",
+                        selection: $historyRetentionDays,
+                        options: [
+                            (7, "7 days"),
+                            (30, "30 days"),
+                            (90, "90 days"),
+                            (365, "1 year"),
+                        ]
+                    )
+                    SettingsControlRow(
+                        title: "History actions",
+                        detail: "Open related windows or clear completed local sessions."
+                    ) {
+                        HStack(spacing: 8) {
                             Button("Open Activity Center") { runtime.openActivityCenter() }
+                                .buttonStyle(NotchPillButtonStyle())
                             Button("Show Setup") { runtime.openOnboarding() }
-                            Spacer()
-                            Button("Clear Completed History", role: .destructive) {
+                                .buttonStyle(NotchPillButtonStyle())
+                            Button("Clear History", role: .destructive) {
                                 confirmsClearHistory = true
                             }
+                            .buttonStyle(NotchPillButtonStyle(destructive: true))
                             .disabled(runtime.activity.recentSessions.isEmpty)
                         }
                     }
-                    .padding(.top, 4)
                 }
 
                 if let launchError {
@@ -218,67 +240,66 @@ struct SettingsView: View {
     private var integrationsPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: NotchWindowMetrics.sectionSpacing) {
-            SettingsHeading(
-                title: "Integrations",
-                detail: "Connect local coding agents to Agents Notch."
-            )
+                SettingsHeading(
+                    title: "Integrations",
+                    detail: "Connect local coding agents to Agents Notch."
+                )
 
-            VStack(spacing: 0) {
-                integrationRow(runtime.codexIntegration)
-                NotchHairline(leadingInset: 42)
-                integrationRow(runtime.claudeIntegration)
-                NotchHairline(leadingInset: 42)
-                integrationRow(runtime.grokIntegration)
-                NotchHairline(leadingInset: 42)
-                integrationRow(runtime.geminiIntegration)
-            }
-            .padding(.horizontal, 14)
-            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
-
-            VStack(alignment: .leading, spacing: 10) {
-                NotchSectionLabel(title: "Local Relay")
-
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(socketColor)
-                        .frame(width: 7, height: 7)
-                        .shadow(color: socketColor.opacity(0.5), radius: 3)
-
-                    Text(runtime.socketStatus)
-                        .font(NotchWindowFont.caption)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
-
-                    Spacer()
-
-                    Text("~/.agentsnotch/agent.sock")
-                        .font(NotchWindowFont.mono)
-                        .foregroundStyle(NotchWindowPalette.tertiaryText)
-                        .textSelection(.enabled)
+                VStack(spacing: 0) {
+                    integrationRow(runtime.codexIntegration)
+                    NotchHairline(leadingInset: 42)
+                    integrationRow(runtime.claudeIntegration)
+                    NotchHairline(leadingInset: 42)
+                    integrationRow(runtime.grokIntegration)
+                    NotchHairline(leadingInset: 42)
+                    integrationRow(runtime.geminiIntegration)
                 }
+                .padding(.horizontal, 14)
+                .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
 
-                if let error = runtime.socketError {
-                    SettingsMessage(
-                        text: error,
-                        symbol: "exclamationmark.triangle.fill",
-                        color: .red
-                    )
-                } else {
-                    Text("Events stay on this Mac and are delivered through the local socket.")
-                        .font(NotchWindowFont.caption)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
+                VStack(alignment: .leading, spacing: 10) {
+                    NotchSectionLabel(title: "Local Relay")
+
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(socketColor)
+                            .frame(width: 7, height: 7)
+                            .shadow(color: socketColor.opacity(0.5), radius: 3)
+
+                        Text(runtime.socketStatus)
+                            .font(NotchWindowFont.caption)
+                            .foregroundStyle(NotchWindowPalette.secondaryText)
+
+                        Spacer()
+
+                        Text("~/.agentsnotch/agent.sock")
+                            .font(NotchWindowFont.mono)
+                            .foregroundStyle(NotchWindowPalette.tertiaryText)
+                            .textSelection(.enabled)
+                    }
+
+                    if let error = runtime.socketError {
+                        SettingsMessage(
+                            text: error,
+                            symbol: "exclamationmark.triangle.fill",
+                            color: .red
+                        )
+                    } else {
+                        Text("Events stay on this Mac and are delivered through the local socket.")
+                            .font(NotchWindowFont.caption)
+                            .foregroundStyle(NotchWindowPalette.secondaryText)
+                    }
+
+                    if let error = runtime.persistenceError {
+                        SettingsMessage(
+                            text: error,
+                            symbol: "externaldrive.badge.exclamationmark",
+                            color: .orange
+                        )
+                    }
                 }
-
-                if let error = runtime.persistenceError {
-                    SettingsMessage(
-                        text: error,
-                        symbol: "externaldrive.badge.exclamationmark",
-                        color: .orange
-                    )
-                }
-            }
-            .padding(NotchWindowMetrics.rowInset)
-            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
-
+                .padding(NotchWindowMetrics.rowInset)
+                .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
             }
             .settingsPanePadding()
         }
@@ -334,76 +355,88 @@ struct SettingsView: View {
                 Button(integration.status == .notInstalled ? "Install" : "Retry") {
                     integration.install()
                 }
+                .buttonStyle(NotchPillButtonStyle())
             } else {
-                selfTestControl(for: integration.provider)
-
                 Button {
                     integration.refreshStatus()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                .buttonStyle(NotchIconButtonStyle())
                 .help("Refresh status")
                 .accessibilityLabel("Refresh \(integration.provider.displayName) status")
 
                 Button("Remove", role: .destructive) {
                     integration.uninstall()
                 }
+                .buttonStyle(NotchPillButtonStyle(destructive: true))
             }
         }
         .controlSize(.small)
         .padding(.vertical, 9)
     }
 
-    @ViewBuilder
-    private func selfTestControl(for provider: AgentProvider) -> some View {
-        switch runtime.selfTestStatuses[provider] ?? .idle {
-        case .idle:
-            Button("Test") { runtime.runSelfTest(for: provider) }
-        case .running:
-            ProgressView().controlSize(.small).frame(width: 34)
-        case .passed:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .help("Installed relay delivered a local test event")
-        case let .failed(message):
-            Button("Retry") { runtime.runSelfTest(for: provider) }
-                .help(message)
-        }
-    }
-
     #if DEBUG
     private var debugPane: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SettingsHeading(
-                title: "Debug",
-                detail: "Preview agent states without a live session."
-            )
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                SettingsHeading(
+                    title: "Debug",
+                    detail: "Preview agent states without a live session."
+                )
 
-            Toggle("Enable debug simulator", isOn: debugModeBinding)
-
-            if debugMode {
-                NotchHairline()
-
-                SettingsButtonGroup(title: "Agent States") {
-                    Button("Running") { runtime.simulator.simulate(.running) }
-                    Button("Editing") { runtime.simulator.simulate(.editing) }
-                    Button("Needs Approval") { runtime.simulator.simulate(.waitingForUser) }
-                    Button("Completed") { runtime.simulator.simulate(.completed) }
-                    Button("Failed") { runtime.simulator.simulate(.failed) }
+                SettingsSection(title: "Simulator") {
+                    SettingsToggleRow(
+                        title: "Enable debug simulator",
+                        detail: "Inject synthetic agent activity into the notch and Activity Center.",
+                        isOn: debugModeBinding
+                    )
                 }
 
-                SettingsButtonGroup(title: "Structured Activity") {
-                    Button("Plan") { runtime.simulator.simulatePlan() }
-                    Button("Workflow") { runtime.simulator.simulateWorkflow() }
-                    Button("Subagents") { runtime.simulator.simulateSubagents() }
-                    Button("Concurrent") { runtime.simulator.runConcurrentDemo() }
-                    Button("Clear", role: .destructive) { runtime.simulator.reset() }
+                if debugMode {
+                    SettingsSection(title: "Agent States") {
+                        SettingsControlRow(
+                            title: "Inject state",
+                            detail: "Push a single simulated agent into the selected state."
+                        ) {
+                            HStack(spacing: 8) {
+                                Button("Running") { runtime.simulator.simulate(.running) }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Editing") { runtime.simulator.simulate(.editing) }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Needs Approval") { runtime.simulator.simulate(.waitingForUser) }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Completed") { runtime.simulator.simulate(.completed) }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Failed") { runtime.simulator.simulate(.failed) }
+                                    .buttonStyle(NotchPillButtonStyle())
+                            }
+                        }
+                    }
+
+                    SettingsSection(title: "Structured Activity") {
+                        SettingsControlRow(
+                            title: "Inject activity",
+                            detail: "Preview plans, workflows, and concurrent agent demos."
+                        ) {
+                            HStack(spacing: 8) {
+                                Button("Plan") { runtime.simulator.simulatePlan() }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Workflow") { runtime.simulator.simulateWorkflow() }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Subagents") { runtime.simulator.simulateSubagents() }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Concurrent") { runtime.simulator.runConcurrentDemo() }
+                                    .buttonStyle(NotchPillButtonStyle())
+                                Button("Clear", role: .destructive) { runtime.simulator.reset() }
+                                    .buttonStyle(NotchPillButtonStyle(destructive: true))
+                            }
+                        }
+                    }
                 }
             }
-
-            Spacer()
+            .settingsPanePadding()
         }
-        .settingsPanePadding()
         .background(NotchWindowPalette.background)
     }
 
@@ -465,6 +498,7 @@ struct SettingsView: View {
         switch runtime.updates.state {
         case .idle:
             Button("Check for Updates") { Task { await runtime.updates.check() } }
+                .buttonStyle(NotchPillButtonStyle())
         case .checking:
             ProgressView().controlSize(.small)
         case .upToDate:
@@ -477,8 +511,10 @@ struct SettingsView: View {
                 .foregroundStyle(NotchWindowPalette.secondaryText)
         case let .available(version, _):
             Button("Download \(version)") { runtime.updates.openAvailableRelease() }
+                .buttonStyle(NotchPillButtonStyle())
         case let .failed(message):
             Button("Retry") { Task { await runtime.updates.check() } }
+                .buttonStyle(NotchPillButtonStyle())
                 .help(message)
         }
     }
@@ -492,6 +528,8 @@ struct SettingsView: View {
         }
     }
 }
+
+// MARK: - Settings chrome
 
 private struct SettingsHeading: View {
     let title: String
@@ -509,18 +547,81 @@ private struct SettingsHeading: View {
     }
 }
 
-private struct NotchSettingsGroupBoxStyle: GroupBoxStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            configuration.label
+/// Section of title + detail rows, matching T3 Code’s flat settings list.
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
                 .font(NotchWindowFont.sectionLabel)
                 .foregroundStyle(.white.opacity(0.74))
+                .padding(.bottom, 8)
 
-            configuration.content
+            content
         }
-        .padding(NotchWindowMetrics.rowInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
+    }
+}
+
+/// Title + optional detail on the left, control trailing on the right.
+private struct SettingsControlRow<Control: View>: View {
+    let title: String
+    var detail: String?
+    @ViewBuilder let control: Control
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.9))
+                if let detail {
+                    Text(detail)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            control
+                .layoutPriority(1)
+        }
+        .padding(.vertical, 10)
+    }
+}
+
+private struct SettingsToggleRow: View {
+    let title: String
+    var detail: String?
+    @Binding var isOn: Bool
+
+    var body: some View {
+        SettingsControlRow(title: title, detail: detail) {
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .tint(Color.accentColor)
+        }
+    }
+}
+
+private struct SettingsMenuRow<Value: Hashable>: View {
+    let title: String
+    var detail: String?
+    @Binding var selection: Value
+    let options: [(Value, String)]
+
+    var body: some View {
+        SettingsControlRow(title: title, detail: detail) {
+            NotchMenuPicker(
+                selection: $selection,
+                options: options.map { (value: $0.0, title: $0.1) }
+            )
+        }
     }
 }
 
@@ -537,30 +638,6 @@ private struct SettingsMessage: View {
             .textSelection(.enabled)
     }
 }
-
-#if DEBUG
-private struct SettingsButtonGroup<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    init(title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(NotchWindowFont.sectionLabel)
-                .foregroundStyle(.white.opacity(0.74))
-            HStack(spacing: 8) {
-                content
-            }
-            .controlSize(.small)
-        }
-    }
-}
-#endif
 
 private extension View {
     func settingsPanePadding() -> some View {
