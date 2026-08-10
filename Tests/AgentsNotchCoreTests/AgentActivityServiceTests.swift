@@ -307,7 +307,7 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testColdStartPreservesWaitingAttentionWhileCompletingUnverifiedRunners() {
+    func testColdStartPreservesWaitingAttentionAndMarksUnverifiedRunnersUnknown() {
         let base = Date(timeIntervalSince1970: 100)
         let service = AgentActivityService(sessions: [
             AgentSession(event: AgentEvent(
@@ -322,16 +322,125 @@ final class AgentActivityServiceTests: XCTestCase {
                 type: .activity,
                 sessionId: "runner",
                 provider: .grok,
+                activity: "Running long task",
                 state: .running,
                 timestamp: base.addingTimeInterval(1)
             )),
         ])
 
-        service.completeUnverifiedActiveSessions()
+        service.reconcileUnverifiedActiveSessions(processAlive: { _ in true })
 
+        let runner = service.sessions.first { $0.id == "runner" }
         XCTAssertEqual(service.sessions.first { $0.id == "approval" }?.state, .waitingForUser)
-        XCTAssertEqual(service.sessions.first { $0.id == "runner" }?.state, .completed)
+        XCTAssertEqual(runner?.state, .unknown)
+        XCTAssertEqual(runner?.currentActivity, "Running long task")
+        XCTAssertNil(runner?.completedAt)
+        XCTAssertTrue(runner?.isActive ?? false)
         XCTAssertEqual(service.attentionEvent?.sessionId, "approval")
+    }
+
+    @MainActor
+    func testColdStartCompletesRunnersWhoseOriginProcessIsDead() {
+        let base = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "dead-process",
+                provider: .codex,
+                activity: "Halfway through",
+                state: .executingTool,
+                timestamp: base,
+                origin: AgentOrigin(processIdentifier: 42_424)
+            )),
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "live-process",
+                provider: .claudeCode,
+                activity: "Still going",
+                state: .running,
+                timestamp: base,
+                origin: AgentOrigin(processIdentifier: 99_999)
+            )),
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "no-origin",
+                provider: .geminiCLI,
+                activity: "No pid",
+                state: .thinking,
+                timestamp: base
+            )),
+        ])
+
+        service.reconcileUnverifiedActiveSessions(processAlive: { $0 == 99_999 })
+
+        XCTAssertEqual(service.sessions.first { $0.id == "dead-process" }?.state, .completed)
+        XCTAssertEqual(service.sessions.first { $0.id == "live-process" }?.state, .unknown)
+        XCTAssertEqual(service.sessions.first { $0.id == "no-origin" }?.state, .unknown)
+    }
+
+    @MainActor
+    func testUnknownSessionsCompleteAfterGraceAndResumeOnLiveEvent() {
+        let base = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "orphan",
+                provider: .codex,
+                activity: "Before restart",
+                state: .running,
+                timestamp: base
+            )),
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "still-live",
+                provider: .claudeCode,
+                activity: "Before restart",
+                state: .running,
+                timestamp: base
+            )),
+        ])
+        service.reconcileUnverifiedActiveSessions(processAlive: { _ in true })
+
+        service.ingest(AgentEvent(
+            type: .toolStarted,
+            sessionId: "still-live",
+            provider: .claudeCode,
+            activity: "Running tests",
+            state: .executingTool,
+            timestamp: base.addingTimeInterval(5)
+        ))
+        service.completeUnknownSessions()
+
+        XCTAssertEqual(service.sessions.first { $0.id == "orphan" }?.state, .completed)
+        XCTAssertEqual(service.sessions.first { $0.id == "still-live" }?.state, .executingTool)
+        XCTAssertEqual(service.sessions.first { $0.id == "still-live" }?.currentActivity, "Running tests")
+    }
+
+    @MainActor
+    func testRestoredLifecycleEvidenceResolvesUnknownGrokSession() {
+        let base = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "grok:workflow",
+                provider: .grok,
+                activity: "Workflow · Audit",
+                state: .running,
+                timestamp: base
+            )),
+        ])
+        service.reconcileUnverifiedActiveSessions(processAlive: { _ in true })
+        XCTAssertEqual(service.sessions.first?.state, .unknown)
+
+        service.applyRestoredLifecycle(
+            sessionId: "grok:workflow",
+            state: .completed,
+            activity: "Workflow · Confirm",
+            at: base.addingTimeInterval(20)
+        )
+
+        XCTAssertEqual(service.sessions.first?.state, .completed)
+        XCTAssertEqual(service.sessions.first?.completedAt, base.addingTimeInterval(20))
     }
 
     @MainActor

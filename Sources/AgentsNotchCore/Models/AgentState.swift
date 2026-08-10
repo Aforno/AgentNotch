@@ -8,12 +8,15 @@ public enum AgentState: String, Codable, CaseIterable, Sendable {
     case executingTool
     case editing
     case waitingForUser
+    /// Cold-start uncertainty: the session was active when the app last quit,
+    /// but hooks alone cannot prove the provider process is still working.
+    case unknown
     case completed
     case failed
 
     public var isActive: Bool {
         switch self {
-        case .starting, .thinking, .running, .executingTool, .editing, .waitingForUser:
+        case .starting, .thinking, .running, .executingTool, .editing, .waitingForUser, .unknown:
             true
         case .idle, .completed, .failed:
             false
@@ -33,6 +36,7 @@ public enum AgentState: String, Codable, CaseIterable, Sendable {
         case .executingTool: "Using tool"
         case .editing: "Editing"
         case .waitingForUser: "Needs attention"
+        case .unknown: "Reconnecting"
         case .completed: "Completed"
         case .failed: "Failed"
         }

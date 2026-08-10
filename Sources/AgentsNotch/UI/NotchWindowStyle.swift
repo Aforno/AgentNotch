@@ -55,6 +55,7 @@ func agentStateColor(for state: AgentState) -> Color {
     case .thinking: .purple
     case .starting: .cyan
     case .running, .executingTool: .blue
+    case .unknown: .secondary
     case .idle: NotchWindowPalette.tertiaryText
     }
 }

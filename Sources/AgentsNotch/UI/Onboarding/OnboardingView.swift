@@ -89,7 +89,9 @@ struct OnboardingView: View {
                     .buttonStyle(NotchPillButtonStyle())
             } else {
                 Button {
-                    integration.refreshStatus()
+                    integration.refreshStatus(
+                        hasReceivedEvent: runtime.lastEventReceivedAt[integration.provider] != nil
+                    )
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -104,10 +106,13 @@ struct OnboardingView: View {
 
     private func providerDetail(_ integration: ProviderIntegrationManager) -> String {
         if let lastEvent = runtime.lastEventReceivedAt[integration.provider] {
-            return "Last provider event received \(lastEvent.formatted(.relative(presentation: .named)))"
+            return "Connected · last event \(lastEvent.formatted(.relative(presentation: .named)))"
         }
-        if integration.status == .installedNeedsTrust {
-            return "Installed. Review and trust the hooks inside the provider once."
+        if let trust = integration.trustInstructions {
+            return trust
+        }
+        if integration.status == .awaitingFirstEvent {
+            return "Installed. Waiting for the first provider event."
         }
         return integration.status.title
     }

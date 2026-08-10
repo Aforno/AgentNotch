@@ -52,7 +52,7 @@ private struct StateSpinner: View {
 private extension AgentState {
     var showsSpinner: Bool {
         switch self {
-        case .starting, .running, .executingTool: true
+        case .starting, .running, .executingTool, .unknown: true
         case .idle, .thinking, .editing, .waitingForUser, .completed, .failed: false
         }
     }
@@ -65,7 +65,7 @@ private extension AgentState {
         case .waitingForUser: "questionmark"
         case .completed: "checkmark"
         case .failed: "xmark"
-        case .starting, .running, .executingTool: ""
+        case .starting, .running, .executingTool, .unknown: ""
         }
     }
 }

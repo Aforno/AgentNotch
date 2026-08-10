@@ -106,6 +106,10 @@ final class RoadmapFeatureTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTAssertNotNil(runtime.lastEventReceivedAt[.codex])
+        XCTAssertTrue(
+            runtime.codexIntegration.hasReceivedEvent,
+            "genuine events must mark the Codex integration as verified"
+        )
         XCTAssertFalse(runtime.activity.sessions.contains { $0.id == "expired-live-event" })
     }
 
@@ -137,6 +141,10 @@ final class RoadmapFeatureTests: XCTestCase {
         }
         XCTAssertTrue(runtime.activity.sessions.contains { $0.id == "self-test:codex:fixture" })
         XCTAssertNil(runtime.lastEventReceivedAt[.codex])
+        XCTAssertFalse(
+            runtime.codexIntegration.hasReceivedEvent,
+            "self-test traffic must not promote integration health"
+        )
     }
 
     func testGeminiLifecycleAliasesMapToProviderNeutralEvents() throws {
@@ -211,7 +219,7 @@ final class RoadmapFeatureTests: XCTestCase {
         )
         manager.install()
 
-        XCTAssertEqual(manager.status, .ready)
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
         let settingsURL = home.appendingPathComponent(".gemini/settings.json")
         let rootObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]

@@ -199,6 +199,7 @@ final class DebugEventSimulator {
         case .executingTool: (.toolStarted, "Running swift test", nil)
         case .editing: (.fileChanged, "Editing AuthService.swift", "Sources/AuthService.swift")
         case .waitingForUser: (.waiting, "Needs approval", nil)
+        case .unknown: (.activity, "Reconnecting after restart", nil)
         case .completed: (.completed, "Tests passed", nil)
         case .failed: (.failed, "Build failed", nil)
         }

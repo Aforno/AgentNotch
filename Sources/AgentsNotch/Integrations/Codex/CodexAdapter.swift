@@ -20,13 +20,14 @@ final class HookProviderAdapter: AgentProviderAdapter {
     func stopMonitoring() async {
         // Hooks are push-based; there is no process subscription to tear down.
         // Stale actives are reconciled on launch via
-        // AgentActivityService.completeUnverifiedActiveSessions().
+        // AgentActivityService.reconcileUnverifiedActiveSessions().
     }
 
     func discoverSessions() async throws -> [AgentSession] {
         // Hooks are event-driven; no transcript polling or filesystem scan is used.
-        // Live process reconciliation is not available, so AppRuntime completes
-        // restored active sessions on start instead of merging a discovered set.
+        // Cold-start recovery lives in AgentActivityService: dead origin PIDs
+        // complete immediately, remaining restored runners become `.unknown`
+        // for a reconnect grace period instead of inventing completion.
         []
     }
 }

@@ -191,6 +191,12 @@ implement the few lines needed to connect and write newline-delimited JSON.
 `discoverSessions`. Future OpenCode and Cursor adapters can
 translate their native events into `AgentEvent` without changing the notch UI.
 
+Hook adapters are push-only, so `discoverSessions` returns an empty list. On
+launch, Agents Notch reconciles restored runners instead of inventing
+completion: dead origin process IDs complete immediately, waiting sessions stay
+waiting, and other actives enter a short `unknown` (Reconnecting) grace period
+until a live hook arrives or the grace expires.
+
 All activity state and recent-session persistence stays local. There is no
 analytics, source upload, or remote telemetry. If update checking is enabled,
 the app makes an HTTPS request to GitHub Releases at most once per day; manual

@@ -45,10 +45,16 @@ final class AppRuntime {
     private var socketServer: UnixSocketServer?
     /// Coalesces rapid session writes so an older snapshot cannot overwrite a newer one.
     private var persistTask: Task<Void, Never>?
+    /// Completes sessions still in `.unknown` when no live hook confirms them.
+    private var unknownGraceTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
     private var acceptsEvents = false
     private var isRestoring = false
     private var startupEvents: [AgentEvent] = []
+
+    /// How long restored unverified runners stay in `.unknown` before the app
+    /// assumes they ended without a hook. Live events cancel this per session.
+    static let unknownSessionGracePeriod: Duration = .seconds(90)
 
     init(
         persistence: SessionPersistence = SessionPersistence(),
@@ -111,10 +117,10 @@ final class AppRuntime {
         let saved = loadResult.sessions
         persistenceError = loadResult.recoveryMessage
         activity.replaceSessions(saved)
-        // Hook adapters cannot verify process liveness. Complete restored running
-        // sessions so a missed Stop/SessionEnd cannot leave rows active forever.
-        // Waiting rows are preserved because the user may still owe input.
-        activity.completeUnverifiedActiveSessions()
+        // Do not invent completion for restored runners. Dead origin PIDs are
+        // completed; everything else becomes `.unknown` until a live hook or
+        // the reconnect grace period resolves them. Waiting rows stay waiting.
+        activity.reconcileUnverifiedActiveSessions()
         reconcileGrokSessionContext()
         pruneHistory()
         #if DEBUG
@@ -138,6 +144,7 @@ final class AppRuntime {
         for event in bufferedEvents {
             process(event, notify: false)
         }
+        scheduleUnknownSessionGracePeriod(generation: generation)
 
         if monitorProviders {
             for adapter in providerAdapters {
@@ -154,6 +161,8 @@ final class AppRuntime {
         isRestoring = false
         startupEvents.removeAll()
         activity.onSessionsChanged = nil
+        unknownGraceTask?.cancel()
+        unknownGraceTask = nil
         persistTask?.cancel()
         persistTask = nil
         do {
@@ -193,6 +202,7 @@ final class AppRuntime {
         pruneHistory()
         if event.metadata?["source"] != "self-test" {
             lastEventReceivedAt[event.provider] = Date()
+            integration(for: event.provider)?.noteEventReceived()
         }
         guard let session = activity.sessions.first(where: { $0.id == event.sessionId }) else { return }
 
@@ -202,6 +212,23 @@ final class AppRuntime {
             notifications.deliverFailure(for: session)
         } else if previousState == .waitingForUser, session.state != .waitingForUser {
             notifications.removeNotification(for: session.id)
+        }
+    }
+
+    private func scheduleUnknownSessionGracePeriod(generation: Int) {
+        unknownGraceTask?.cancel()
+        guard activity.sessions.contains(where: { $0.state == .unknown }) else {
+            unknownGraceTask = nil
+            return
+        }
+        unknownGraceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.unknownSessionGracePeriod)
+            guard let self,
+                  !Task.isCancelled,
+                  self.acceptsEvents,
+                  generation == self.lifecycleGeneration
+            else { return }
+            self.activity.completeUnknownSessions()
         }
     }
 
@@ -243,15 +270,23 @@ final class AppRuntime {
             else {
                 continue
             }
-            // completeUnverifiedActiveSessions() just marked restored actives
-            // completed. Leftover on-disk workflow status (e.g. active/running)
-            // must not reopen those sessions as phantoms across relaunch.
-            if let session = activity.sessions.first(where: { $0.id == event.sessionId }),
-               !session.isActive,
-               event.resolvedState.isActive
-            {
-                event.state = session.state
-                event.type = session.state == .failed ? .failed : .completed
+            if let session = activity.sessions.first(where: { $0.id == event.sessionId }) {
+                if session.state == .unknown {
+                    // On-disk Grok workflow status is stronger evidence than
+                    // cold-start uncertainty: complete finished runs and restore
+                    // active ones instead of inventing a generic completion.
+                    activity.applyRestoredLifecycle(
+                        sessionId: session.id,
+                        state: event.resolvedState,
+                        activity: event.activity,
+                        at: workflowUpdatedAt
+                    )
+                } else if !session.isActive, event.resolvedState.isActive {
+                    // Leftover on-disk workflow status (e.g. active/running) must
+                    // not reopen terminal sessions as phantoms across relaunch.
+                    event.state = session.state
+                    event.type = session.state == .failed ? .failed : .completed
+                }
             }
             activity.reconcileRestoredWorkflow(event)
         }

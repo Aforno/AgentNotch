@@ -21,6 +21,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Cold start no longer forces restored running sessions to completed. Dead
+  origin processes complete immediately; other runners enter a short
+  reconnecting (`unknown`) grace period until a live hook arrives.
 - Multiple waiting sessions now form an explicit attention queue while routine
   activity remains collapsed.
 - Parent rows surface waiting or failed descendant state.
@@ -32,8 +35,6 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Activity Center.
 - Settings dropdowns use a T3-style dark pill trigger and solid borderless
   floating menu (no speech-bubble popover) with selected-row highlight.
-- Notch agent rows keep the provider name and show the session title instead of
-  live activity messages; attention peeks do the same.
 
 ## [0.1.0] - 2026-08-08
 

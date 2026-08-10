@@ -63,6 +63,49 @@ final class SessionPersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testRuntimeMarksRestoredRunnersUnknownInsteadOfCompleted() async throws {
+        let fixture = try PersistenceFixture()
+        defer { fixture.remove() }
+        let persistence = SessionPersistence(fileURL: fixture.fileURL)
+        let running = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "codex:mid-task",
+            provider: .codex,
+            task: "Twenty-minute refactor",
+            activity: "Running tests",
+            state: .running,
+            timestamp: Date(timeIntervalSince1970: 200)
+        ))
+        let waiting = AgentSession(event: AgentEvent(
+            type: .waiting,
+            sessionId: "claude:approval",
+            provider: .claudeCode,
+            activity: "Needs approval",
+            state: .waitingForUser,
+            timestamp: Date(timeIntervalSince1970: 210)
+        ))
+        let saveError = await persistence.save([running, waiting])
+        XCTAssertNil(saveError)
+
+        let runtime = AppRuntime(
+            persistence: persistence,
+            socketURL: fixture.socketURL,
+            monitorProviders: false
+        )
+        await runtime.start()
+        defer { runtime.stop() }
+
+        let midTask = try XCTUnwrap(runtime.activity.sessions.first { $0.id == "codex:mid-task" })
+        XCTAssertEqual(midTask.state, .unknown)
+        XCTAssertEqual(midTask.currentActivity, "Running tests")
+        XCTAssertNil(midTask.completedAt)
+        XCTAssertEqual(
+            runtime.activity.sessions.first { $0.id == "claude:approval" }?.state,
+            .waitingForUser
+        )
+    }
+
+    @MainActor
     func testRuntimeGrokRestoreRepairsLegacyRecencyAndStaysIdempotent() async throws {
         let fixture = try PersistenceFixture()
         defer { fixture.remove() }

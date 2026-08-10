@@ -33,7 +33,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         manager.install()
         manager.install()
 
-        XCTAssertEqual(manager.status, .installedNeedsTrust)
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)
         XCTAssertEqual(try Data(contentsOf: manager.installedRelayURL), Data("relay-v1".utf8))
         let permissions = try FileManager.default.attributesOfItem(
@@ -85,7 +85,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let manager = fixture.manager(provider: .codex)
         manager.install()
 
-        XCTAssertEqual(manager.status, .installedNeedsTrust)
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertEqual(
             try FileManager.default.destinationOfSymbolicLink(atPath: hooksURL.path),
             sharedURL.path
@@ -243,10 +243,51 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         )
         manager.prepareForMonitoring()
 
-        XCTAssertEqual(manager.status, .ready)
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)
         XCTAssertEqual(try Data(contentsOf: manager.installedRelayURL), Data("relay-v2".utf8))
         XCTAssertEqual(try Data(contentsOf: hooksURL), hooksBeforeRefresh)
+    }
+
+    @MainActor
+    func testCodexPromotesToConnectedAfterGenuineEventAndRefreshDoesNotDemote() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .codex)
+
+        manager.install()
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertNotNil(manager.trustInstructions)
+        XCTAssertFalse(manager.hasReceivedEvent)
+
+        manager.noteEventReceived()
+        XCTAssertEqual(manager.status, .connected)
+        XCTAssertTrue(manager.hasReceivedEvent)
+        XCTAssertNil(manager.trustInstructions)
+
+        manager.refreshStatus()
+        XCTAssertEqual(manager.status, .connected, "refresh must not demote a verified integration")
+
+        manager.refreshStatus(hasReceivedEvent: true)
+        XCTAssertEqual(manager.status, .connected)
+
+        manager.uninstall()
+        XCTAssertEqual(manager.status, .notInstalled)
+        XCTAssertFalse(manager.hasReceivedEvent)
+    }
+
+    @MainActor
+    func testRefreshStatusAcceptsRuntimeEventEvidence() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .claudeCode)
+        manager.install()
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertNil(manager.trustInstructions, "trust warning is Codex-only")
+
+        manager.refreshStatus(hasReceivedEvent: true)
+        XCTAssertEqual(manager.status, .connected)
+        XCTAssertTrue(manager.hasReceivedEvent)
     }
 
     @MainActor

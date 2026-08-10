@@ -326,11 +326,10 @@ struct SettingsView: View {
                 .font(NotchWindowFont.caption)
                 .foregroundStyle(NotchWindowPalette.secondaryText)
 
-                if integration.status != .notInstalled,
-                   let instructions = integration.trustInstructions {
+                if let instructions = integration.trustInstructions {
                     Text(instructions)
                         .font(NotchWindowFont.caption)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
+                        .foregroundStyle(.orange.opacity(0.9))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -358,7 +357,9 @@ struct SettingsView: View {
                 .buttonStyle(NotchPillButtonStyle())
             } else {
                 Button {
-                    integration.refreshStatus()
+                    integration.refreshStatus(
+                        hasReceivedEvent: runtime.lastEventReceivedAt[integration.provider] != nil
+                    )
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -521,8 +522,8 @@ struct SettingsView: View {
 
     private func statusColor(for status: ProviderIntegrationStatus) -> Color {
         switch status {
-        case .ready: .green
-        case .installedNeedsTrust: .orange
+        case .connected: .green
+        case .awaitingFirstEvent: .orange
         case .notInstalled: .secondary
         case .unavailable: .red
         }

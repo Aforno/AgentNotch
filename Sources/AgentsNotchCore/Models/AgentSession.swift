@@ -131,6 +131,38 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         reconcilePlanWithTerminalState(at: timestamp)
     }
 
+    /// Marks an active session as cold-start-unverified without inventing a
+    /// completion. Recency and last activity text are preserved so a mid-task
+    /// restart does not look like the work finished.
+    public mutating func markUnknown() {
+        guard isActive, state != .waitingForUser, state != .unknown else { return }
+        state = .unknown
+        completedAt = nil
+    }
+
+    /// Applies lifecycle evidence discovered outside the live hook stream
+    /// (for example Grok on-disk workflow status) without treating restore as
+    /// a new agent turn.
+    @discardableResult
+    public mutating func applyRestoredLifecycle(
+        state restoredState: AgentState,
+        activity restoredActivity: String?,
+        at timestamp: Date
+    ) -> Bool {
+        guard state == .unknown else { return false }
+        if restoredState == .completed || restoredState == .failed {
+            complete(as: restoredState, at: timestamp)
+            return true
+        }
+        guard restoredState.isActive, restoredState != .unknown else { return false }
+        state = restoredState
+        if let restoredActivity = restoredActivity?.nonEmpty {
+            currentActivity = restoredActivity
+        }
+        completedAt = nil
+        return true
+    }
+
     /// Merges a workflow snapshot discovered from Grok's on-disk session data.
     /// Restoration is not live agent activity, so it must not advance session
     /// recency or add a duplicate event on every app launch.

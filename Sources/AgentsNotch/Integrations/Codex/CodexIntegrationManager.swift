@@ -3,16 +3,19 @@ import Foundation
 import Observation
 
 enum ProviderIntegrationStatus: Equatable {
+    /// Hooks / relay are not present on disk.
     case notInstalled
-    case installedNeedsTrust
-    case ready
+    /// Hooks are installed; no genuine provider event has been observed yet.
+    case awaitingFirstEvent
+    /// At least one genuine provider event was received while hooks were installed.
+    case connected
     case unavailable(String)
 
     var title: String {
         switch self {
         case .notInstalled: "Not installed"
-        case .installedNeedsTrust: "Installed · review hooks"
-        case .ready: "Installed"
+        case .awaitingFirstEvent: "Awaiting first event"
+        case .connected: "Connected"
         case let .unavailable(message): message
         }
     }
@@ -20,7 +23,7 @@ enum ProviderIntegrationStatus: Equatable {
     var canInstall: Bool {
         switch self {
         case .notInstalled, .unavailable: true
-        case .installedNeedsTrust, .ready: false
+        case .awaitingFirstEvent, .connected: false
         }
     }
 }
@@ -31,6 +34,9 @@ final class ProviderIntegrationManager {
     let provider: AgentProvider
     private(set) var status: ProviderIntegrationStatus = .notInstalled
     private(set) var lastError: String?
+    /// Remembers that a real (non-self-test) provider event has been observed.
+    /// Survives refresh so Connected is not demoted until uninstall.
+    private(set) var hasReceivedEvent = false
 
     private let fileManager: FileManager
     private let homeDirectoryURL: URL
@@ -64,17 +70,18 @@ final class ProviderIntegrationManager {
             .appendingPathComponent("agentsnotch-hook")
     }
 
+    /// Codex-only guidance shown while hooks are installed but not yet verified by a live event.
     var trustInstructions: String? {
-        switch provider {
-        case .codex: "Open /hooks in Codex once to review and trust the installed lifecycle hooks."
-        case .claudeCode: "Open /hooks in Claude Code to inspect the installed lifecycle hooks."
-        case .grok: "Open /hooks in Grok to inspect the installed lifecycle hooks."
-        case .geminiCLI: "Open /hooks panel in Gemini CLI to inspect the installed lifecycle hooks."
-        default: nil
-        }
+        guard provider == .codex, status == .awaitingFirstEvent else { return nil }
+        return "Open /hooks in Codex once to review and trust the installed lifecycle hooks."
     }
 
-    func refreshStatus() {
+    /// Recomputes install health from disk. Pass `hasReceivedEvent: true` when the runtime
+    /// already observed a genuine event for this provider (e.g. Settings refresh).
+    func refreshStatus(hasReceivedEvent knownEvent: Bool = false) {
+        if knownEvent {
+            hasReceivedEvent = true
+        }
         lastError = nil
         guard fileManager.isExecutableFile(atPath: installedRelayURL.path),
               hookConfigurationContainsRelay()
@@ -82,7 +89,18 @@ final class ProviderIntegrationManager {
             status = .notInstalled
             return
         }
-        status = provider == .codex ? .installedNeedsTrust : .ready
+        status = hasReceivedEvent ? .connected : .awaitingFirstEvent
+    }
+
+    /// Promote to Connected after a genuine provider event (not self-test).
+    func noteEventReceived() {
+        hasReceivedEvent = true
+        switch status {
+        case .awaitingFirstEvent, .connected:
+            status = .connected
+        case .notInstalled, .unavailable:
+            break
+        }
     }
 
     func prepareForMonitoring() {
@@ -101,7 +119,7 @@ final class ProviderIntegrationManager {
         do {
             try writeBundledRelay()
             try installHookConfiguration()
-            status = provider == .codex ? .installedNeedsTrust : .ready
+            status = hasReceivedEvent ? .connected : .awaitingFirstEvent
             lastError = nil
         } catch {
             lastError = error.localizedDescription
@@ -112,6 +130,7 @@ final class ProviderIntegrationManager {
     func uninstall() {
         do {
             try removeHookConfiguration()
+            hasReceivedEvent = false
             status = .notInstalled
             lastError = nil
         } catch {

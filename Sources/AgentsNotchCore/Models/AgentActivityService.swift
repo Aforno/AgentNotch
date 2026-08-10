@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Observation
 
@@ -254,18 +255,69 @@ public final class AgentActivityService {
         onSessionsChanged?(sessions)
     }
 
-    /// Hook-driven running sessions cannot be verified after a cold start.
-    /// Preserve waiting sessions because the provider may still be blocked on
-    /// an approval or answer that will not emit another hook until it is given.
-    public func completeUnverifiedActiveSessions() {
+    /// Reconciles hook-driven sessions after a cold start.
+    ///
+    /// Waiting sessions are preserved: the provider may still be blocked on an
+    /// approval that will not emit another hook until the user answers.
+    /// When `origin.processIdentifier` is present and the process is gone, the
+    /// session is completed immediately. Remaining unverified actives become
+    /// `.unknown` (reconnecting) instead of inventing a completion; a later
+    /// live event or grace-period expiry resolves them.
+    public func reconcileUnverifiedActiveSessions(
+        processAlive: (Int32) -> Bool = { pid in
+            guard pid > 0 else { return false }
+            return kill(pid, 0) == 0
+        }
+    ) {
         var changed = false
         for index in sessions.indices
             where sessions[index].isActive && sessions[index].state != .waitingForUser
         {
+            if sessions[index].state == .unknown {
+                continue
+            }
+            if let pid = sessions[index].origin?.processIdentifier, !processAlive(pid) {
+                sessions[index].complete(as: .completed, at: sessions[index].updatedAt)
+                changed = true
+                continue
+            }
+            sessions[index].markUnknown()
+            changed = true
+        }
+        guard changed else { return }
+        sessions.sort(by: Self.orderSessions)
+        attentionEvent = latestWaitingAttentionEvent()
+        onSessionsChanged?(sessions)
+    }
+
+    /// Completes sessions still stuck in `.unknown` after the reconnect grace
+    /// period when no live hook arrived to confirm they are still running.
+    public func completeUnknownSessions() {
+        var changed = false
+        for index in sessions.indices where sessions[index].state == .unknown {
             sessions[index].complete(as: .completed, at: sessions[index].updatedAt)
             changed = true
         }
         guard changed else { return }
+        sessions.sort(by: Self.orderSessions)
+        attentionEvent = latestWaitingAttentionEvent()
+        onSessionsChanged?(sessions)
+    }
+
+    /// Applies provider-owned restore evidence (e.g. Grok workflow status) to a
+    /// session that is still in `.unknown` after cold-start reconciliation.
+    public func applyRestoredLifecycle(
+        sessionId: String,
+        state: AgentState,
+        activity: String?,
+        at timestamp: Date
+    ) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        guard sessions[index].applyRestoredLifecycle(
+            state: state,
+            activity: activity,
+            at: timestamp
+        ) else { return }
         sessions.sort(by: Self.orderSessions)
         attentionEvent = latestWaitingAttentionEvent()
         onSessionsChanged?(sessions)
