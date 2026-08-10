@@ -256,50 +256,6 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 14)
                 .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    NotchSectionLabel(title: "Local Relay")
-
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(socketColor)
-                            .frame(width: 7, height: 7)
-                            .shadow(color: socketColor.opacity(0.5), radius: 3)
-
-                        Text(runtime.socketStatus)
-                            .font(NotchWindowFont.caption)
-                            .foregroundStyle(NotchWindowPalette.secondaryText)
-
-                        Spacer()
-
-                        Text("~/.agentsnotch/agent.sock")
-                            .font(NotchWindowFont.mono)
-                            .foregroundStyle(NotchWindowPalette.tertiaryText)
-                            .textSelection(.enabled)
-                    }
-
-                    if let error = runtime.socketError {
-                        SettingsMessage(
-                            text: error,
-                            symbol: "exclamationmark.triangle.fill",
-                            color: .red
-                        )
-                    } else {
-                        Text("Events stay on this Mac and are delivered through the local socket.")
-                            .font(NotchWindowFont.caption)
-                            .foregroundStyle(NotchWindowPalette.secondaryText)
-                    }
-
-                    if let error = runtime.persistenceError {
-                        SettingsMessage(
-                            text: error,
-                            symbol: "externaldrive.badge.exclamationmark",
-                            color: .orange
-                        )
-                    }
-                }
-                .padding(NotchWindowMetrics.rowInset)
-                .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
             }
             .settingsPanePadding()
         }
@@ -308,7 +264,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func integrationRow(_ integration: ProviderIntegrationManager) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             ProviderIconView(provider: integration.provider, size: 20)
                 .frame(width: 24, height: 24)
 
@@ -317,14 +273,16 @@ struct SettingsView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.86))
 
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(statusColor(for: integration.status))
-                        .frame(width: 6, height: 6)
-                    Text(integration.status.title)
+                if showsStatus(integration.status) {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(statusColor(for: integration.status))
+                            .frame(width: 6, height: 6)
+                        Text(integration.status.title)
+                    }
+                    .font(NotchWindowFont.caption)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
-                .font(NotchWindowFont.caption)
-                .foregroundStyle(NotchWindowPalette.secondaryText)
 
                 if let instructions = integration.trustInstructions {
                     Text(instructions)
@@ -339,12 +297,6 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
-                }
-
-                if let lastEvent = runtime.lastEventReceivedAt[integration.provider] {
-                    Text("Last event \(lastEvent.formatted(.relative(presentation: .named)))")
-                        .font(NotchWindowFont.caption)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
             }
 
@@ -490,10 +442,6 @@ struct SettingsView: View {
         )
     }
 
-    private var socketColor: Color {
-        runtime.socketStatus == "Listening" ? .green : .orange
-    }
-
     @ViewBuilder
     private var updateControl: some View {
         switch runtime.updates.state {
@@ -517,6 +465,13 @@ struct SettingsView: View {
             Button("Retry") { Task { await runtime.updates.check() } }
                 .buttonStyle(NotchPillButtonStyle())
                 .help(message)
+        }
+    }
+
+    private func showsStatus(_ status: ProviderIntegrationStatus) -> Bool {
+        switch status {
+        case .unavailable: true
+        case .notInstalled, .awaitingFirstEvent, .connected: false
         }
     }
 

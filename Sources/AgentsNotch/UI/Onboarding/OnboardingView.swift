@@ -16,7 +16,7 @@ struct OnboardingView: View {
                     Text("Agents should find you—not interrupt you")
                         .font(NotchWindowFont.title)
                         .foregroundStyle(NotchWindowPalette.primaryText)
-                    Text("Install one or more local observers, confirm the relay, then leave the notch collapsed until an agent needs input.")
+                    Text("Install one or more local observers, then leave the notch collapsed until an agent needs input.")
                         .font(NotchWindowFont.body)
                         .foregroundStyle(NotchWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -34,18 +34,6 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 14)
             .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
-
-            HStack(spacing: 8) {
-                Image(systemName: runtime.socketStatus == "Listening" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(runtime.socketStatus == "Listening" ? .green : .orange)
-                Text("Local relay: \(runtime.socketStatus)")
-                    .font(NotchWindowFont.bodyEmphasis)
-                    .foregroundStyle(NotchWindowPalette.primaryText)
-                Spacer()
-                Text("No source code or prompts leave this Mac.")
-                    .font(NotchWindowFont.caption)
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
-            }
 
             Spacer()
 
@@ -68,7 +56,7 @@ struct OnboardingView: View {
     }
 
     private func providerRow(_ integration: ProviderIntegrationManager) -> some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             ProviderIconView(provider: integration.provider, size: 22)
                 .frame(width: 26)
 
@@ -76,17 +64,36 @@ struct OnboardingView: View {
                 Text(integration.provider.displayName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.86))
-                Text(providerDetail(integration))
-                    .font(NotchWindowFont.caption)
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
-                    .lineLimit(2)
+
+                if case let .unavailable(message) = integration.status {
+                    Text(message)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
+                }
+
+                if let instructions = integration.trustInstructions {
+                    Text(instructions)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(.orange.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let error = integration.lastError {
+                    Text(error)
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
             }
 
             Spacer(minLength: 12)
 
             if integration.status.canInstall {
-                Button("Install") { integration.install() }
-                    .buttonStyle(NotchPillButtonStyle())
+                Button(integration.status == .notInstalled ? "Install" : "Retry") {
+                    integration.install()
+                }
+                .buttonStyle(NotchPillButtonStyle())
             } else {
                 Button {
                     integration.refreshStatus(
@@ -102,18 +109,5 @@ struct OnboardingView: View {
         }
         .controlSize(.small)
         .padding(.vertical, 11)
-    }
-
-    private func providerDetail(_ integration: ProviderIntegrationManager) -> String {
-        if let lastEvent = runtime.lastEventReceivedAt[integration.provider] {
-            return "Connected · last event \(lastEvent.formatted(.relative(presentation: .named)))"
-        }
-        if let trust = integration.trustInstructions {
-            return trust
-        }
-        if integration.status == .awaitingFirstEvent {
-            return "Installed. Waiting for the first provider event."
-        }
-        return integration.status.title
     }
 }
