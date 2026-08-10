@@ -77,6 +77,11 @@ private struct DeepBlackWindowConfigurator: NSViewRepresentable {
             window.appearance = NSAppearance(named: .darkAqua)
             window.titlebarAppearsTransparent = true
             window.isOpaque = true
+            // Match Activity Center chrome: titled windows keep minimize and
+            // live-resize traffic-light controls.
+            if window.styleMask.contains(.titled) {
+                window.styleMask.insert([.miniaturizable, .resizable])
+            }
         }
     }
 }

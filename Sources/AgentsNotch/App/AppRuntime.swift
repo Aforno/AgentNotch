@@ -33,6 +33,7 @@ final class AppRuntime {
     private(set) var selfTestStatuses: [AgentProvider: SelfTestStatus] = [:]
     var openActivityCenterHandler: (() -> Void)?
     var openOnboardingHandler: (() -> Void)?
+    var openSettingsHandler: (() -> Void)?
     weak var panelController: NotchPanelController?
 
     private let persistence: SessionPersistence
@@ -366,25 +367,7 @@ final class AppRuntime {
     }
 
     func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        guard let item = settingsMenuItem(in: NSApp.mainMenu),
-              let action = item.action else { return }
-        NSApp.sendAction(action, to: item.target, from: item)
-    }
-
-    private func settingsMenuItem(in menu: NSMenu?) -> NSMenuItem? {
-        guard let menu else { return nil }
-
-        for item in menu.items {
-            if item.keyEquivalent == ",",
-               item.keyEquivalentModifierMask.contains(.command) {
-                return item
-            }
-            if let match = settingsMenuItem(in: item.submenu) {
-                return match
-            }
-        }
-        return nil
+        openSettingsHandler?()
     }
 
     private func pruneHistory() {

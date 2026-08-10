@@ -14,12 +14,16 @@ struct TemporaryActivityView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: DynamicIslandSpacing.tight) {
-                    Text(session.provider.displayName)
+                    Text(session.task)
                         .fontWeight(.semibold)
-                    Text("·")
-                        .foregroundStyle(.white.opacity(0.32))
-                    Text(projectName)
-                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(1)
+                    if let projectName {
+                        Text("·")
+                            .foregroundStyle(.white.opacity(0.32))
+                        Text(projectName)
+                            .foregroundStyle(.white.opacity(0.66))
+                            .lineLimit(1)
+                    }
                 }
                 .font(.system(size: 11))
                 .lineLimit(1)
@@ -45,8 +49,7 @@ struct TemporaryActivityView: View {
         .padding(.horizontal, DynamicIslandSpacing.outer)
     }
 
-    private var projectName: String {
-        guard let directory = session.workingDirectory else { return session.task }
-        return URL(fileURLWithPath: directory).lastPathComponent
+    private var projectName: String? {
+        session.workingDirectory.map { URL(fileURLWithPath: $0).lastPathComponent }
     }
 }

@@ -24,6 +24,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiple waiting sessions now form an explicit attention queue while routine
   activity remains collapsed.
 - Parent rows surface waiting or failed descendant state.
+- Settings window matches Activity Center chrome: resizable, minimizable, and
+  pure-black transparent title bar with frame restoration.
+- Notch agent rows and attention peeks show the chat/task name instead of only
+  the provider label (provider remains identified by its icon).
 
 ## [0.1.0] - 2026-08-08
 

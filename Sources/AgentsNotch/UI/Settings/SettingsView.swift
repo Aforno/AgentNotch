@@ -70,7 +70,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .foregroundStyle(NotchWindowPalette.primaryText)
-        .frame(width: 580, height: 560)
+        .frame(minWidth: 520, idealWidth: 580, minHeight: 480, idealHeight: 560)
         .groupBoxStyle(NotchSettingsGroupBoxStyle())
         .deepBlackWindowSurface()
         .onAppear {

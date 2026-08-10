@@ -21,7 +21,8 @@ struct AgentMenuBarView: View {
             Button("Open Activity Center") { runtime.openActivityCenter() }
                 .keyboardShortcut("1", modifiers: [.command])
             Button("Show Setup") { runtime.openOnboarding() }
-            SettingsLink { Text("Settings…") }
+            Button("Settings…") { runtime.openSettings() }
+                .keyboardShortcut(",", modifiers: [.command])
         }
 
         Divider()

@@ -17,10 +17,12 @@ struct AgentRowView: View {
             ProviderIconView(provider: session.provider, size: 14)
                 .foregroundStyle(.white.opacity(0.9))
 
-            Text(session.isSubagent ? subagentLabel : session.provider.displayName)
+            Text(session.isSubagent ? subagentLabel : session.task)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: session.isSubagent ? 78 : 62, alignment: .leading)
+                .lineLimit(1)
+                .frame(maxWidth: session.isSubagent ? 90 : 168, alignment: .leading)
+                .layoutPriority(1)
 
             if let attention = groupAttentionSession {
                 AttentionInlineSummary(session: attention)
@@ -65,24 +67,25 @@ struct AgentRowView: View {
     private var accessibilityLabel: String {
         let identity = session.isSubagent
             ? "\(subagentLabel) subagent"
-            : session.provider.displayName
+            : session.task
+        let provider = session.provider.displayName
         if let attention = groupAttentionSession {
-            return "\(identity), \(attention.currentActivity), \(groupState.displayName)"
+            return "\(identity), \(provider), \(attention.currentActivity), \(groupState.displayName)"
         }
         if let workflow = session.workflows.first {
             let active = subagents.filter(\.isActive).count
             let agents = active == 1 ? "1 active agent" : "\(active) active agents"
-            return "\(identity), \(workflow.rowProgress), \(workflow.rowStage), \(agents), \(groupState.displayName)"
+            return "\(identity), \(provider), \(workflow.rowProgress), \(workflow.rowStage), \(agents), \(groupState.displayName)"
         }
         if let plan = session.plan, !plan.steps.isEmpty {
-            return "\(identity), \(plan.rowProgress), \(plan.rowStage), \(groupState.displayName)"
+            return "\(identity), \(provider), \(plan.rowProgress), \(plan.rowStage), \(groupState.displayName)"
         }
         if !subagents.isEmpty {
             let active = subagents.filter(\.isActive).count
             let subagents = active == 1 ? "1 active subagent" : "\(active) active subagents"
-            return "\(identity), \(session.currentActivity), \(subagents), \(groupState.displayName)"
+            return "\(identity), \(provider), \(session.currentActivity), \(subagents), \(groupState.displayName)"
         }
-        return "\(identity), \(session.currentActivity), \(groupState.displayName)"
+        return "\(identity), \(provider), \(session.currentActivity), \(groupState.displayName)"
     }
 
     private var groupAttentionSession: AgentSession? {

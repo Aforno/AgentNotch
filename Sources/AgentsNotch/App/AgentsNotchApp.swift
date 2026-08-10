@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: NotchPanelController?
     private var activityCenterWindowController: ActivityCenterWindowController?
     private var onboardingWindowController: OnboardingWindowController?
+    private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         var defaults: [String: Any] = [
@@ -38,8 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activityCenterWindowController = activityCenter
         let onboarding = OnboardingWindowController(runtime: runtime)
         onboardingWindowController = onboarding
+        let settings = SettingsWindowController(runtime: runtime)
+        settingsWindowController = settings
         runtime.openActivityCenterHandler = { [weak activityCenter] in activityCenter?.show() }
         runtime.openOnboardingHandler = { [weak onboarding] in onboarding?.show() }
+        runtime.openSettingsHandler = { [weak settings] in settings?.show() }
         panel.show()
 
         Task { await runtime.start() }
@@ -69,11 +73,17 @@ struct AgentsNotchApp: App {
                 attentionCount: appDelegate.runtime.activity.attentionCount
             )
         }
-
-        Settings {
-            SettingsView(runtime: appDelegate.runtime)
-        }
         .commands {
+            // Settings is a dedicated NSWindowController (same chrome as Activity
+            // Center) rather than a SwiftUI Settings scene, so minimize/zoom/resize
+            // traffic lights stay enabled and the title bar stays pure black.
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    appDelegate.runtime.openSettings()
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+            }
+
             CommandMenu("Agents") {
                 Button("Open Activity Center") {
                     appDelegate.runtime.openActivityCenter()
