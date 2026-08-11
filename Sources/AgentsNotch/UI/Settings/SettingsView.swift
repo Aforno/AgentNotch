@@ -129,6 +129,10 @@ struct SettingsView: View {
                     detail: "Control how Agents Notch starts, alerts, and stores local history."
                 )
 
+                if hasRuntimeHealthMessages {
+                    runtimeHealthMessages
+                }
+
                 ApplicationSettingsSection(
                     launchAtLogin: launchBinding,
                     animationsEnabled: $animationsEnabled,
@@ -177,6 +181,10 @@ struct SettingsView: View {
                     title: "Integrations",
                     detail: "Connect local coding agents to Agents Notch."
                 )
+
+                if hasRuntimeHealthMessages {
+                    runtimeHealthMessages
+                }
 
                 VStack(spacing: 0) {
                     ForEach(Array(runtime.integrations.enumerated()), id: \.element.provider) { index, integration in
@@ -379,5 +387,19 @@ struct SettingsView: View {
         case .unavailable: true
         case .notInstalled, .awaitingFirstEvent, .connected: false
         }
+    }
+
+    private var hasRuntimeHealthMessages: Bool {
+        runtime.socketError != nil
+            || runtime.persistenceError != nil
+            || runtime.persistenceRecoveryNotice != nil
+    }
+
+    private var runtimeHealthMessages: some View {
+        RuntimeHealthMessages(
+            socketError: runtime.socketError,
+            persistenceError: runtime.persistenceError,
+            persistenceRecoveryNotice: runtime.persistenceRecoveryNotice
+        )
     }
 }

@@ -5,16 +5,30 @@ actor SessionPersistence {
     struct LoadResult: Sendable {
         let sessions: [AgentSession]
         let recoveryMessage: String?
-        let needsRewrite: Bool
+        /// False only when unreadable history could not be moved aside. In that
+        /// state, replacing the file could destroy the only recoverable copy.
+        let canSafelyWrite: Bool
     }
 
     nonisolated let fileURL: URL
     private nonisolated let writeLock = NSLock()
+    private nonisolated let quarantineUnreadableFile: @Sendable (URL, URL) throws -> Void
     private let loadDelay: Duration?
     private(set) var saveInvocationCount = 0
 
-    init(fileURL: URL? = nil, loadDelay: Duration? = nil) {
+    init(
+        fileURL: URL? = nil,
+        loadDelay: Duration? = nil,
+        quarantineUnreadableFile: (@Sendable (URL, URL) throws -> Void)? = nil
+    ) {
         self.loadDelay = loadDelay
+        self.quarantineUnreadableFile = quarantineUnreadableFile ?? { source, destination in
+            try FileManager.default.moveItem(at: source, to: destination)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: destination.path
+            )
+        }
         if let fileURL {
             self.fileURL = fileURL
         } else {
@@ -36,30 +50,26 @@ actor SessionPersistence {
         writeLock.lock()
         defer { writeLock.unlock() }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return LoadResult(sessions: [], recoveryMessage: nil, needsRewrite: false)
+            return LoadResult(sessions: [], recoveryMessage: nil, canSafelyWrite: true)
         }
         do {
             let data = try Data(contentsOf: fileURL)
             let sessions = try JSONDecoder.agentsNotch.decode([AgentSession].self, from: data)
-            return LoadResult(sessions: sessions, recoveryMessage: nil, needsRewrite: false)
+            return LoadResult(sessions: sessions, recoveryMessage: nil, canSafelyWrite: true)
         } catch {
             let backupURL = nextCorruptBackupURL()
             do {
-                try FileManager.default.moveItem(at: fileURL, to: backupURL)
-                try FileManager.default.setAttributes(
-                    [.posixPermissions: 0o600],
-                    ofItemAtPath: backupURL.path
-                )
+                try quarantineUnreadableFile(fileURL, backupURL)
                 return LoadResult(
                     sessions: [],
                     recoveryMessage: "Recovered unreadable session history to \(backupURL.lastPathComponent).",
-                    needsRewrite: true
+                    canSafelyWrite: true
                 )
             } catch let recoveryError {
                 return LoadResult(
                     sessions: [],
                     recoveryMessage: "Session history is unreadable and could not be recovered: \(recoveryError.localizedDescription)",
-                    needsRewrite: false
+                    canSafelyWrite: false
                 )
             }
         }

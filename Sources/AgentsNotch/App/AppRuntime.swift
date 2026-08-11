@@ -18,6 +18,7 @@ final class AppRuntime {
     private(set) var socketStatus = "Starting"
     private(set) var socketError: String?
     private(set) var persistenceError: String?
+    private(set) var persistenceRecoveryNotice: String?
     private(set) var lastEventReceivedAt: [AgentProvider: Date] = [:]
     private(set) var requestedSessionID: String?
     private(set) var activitySearchRequest: UInt64 = 0
@@ -43,6 +44,8 @@ final class AppRuntime {
     private var lifecycleGeneration = 0
     private var acceptsEvents = false
     private var isRestoring = false
+    /// Protects an unreadable history file when it could not be quarantined.
+    private var persistenceWritesAllowed = false
     private var startupEvents: [AgentEvent] = []
     private let persistDebounceDuration: Duration
     private let persistMaximumDelay: Duration
@@ -113,6 +116,9 @@ final class AppRuntime {
         lifecycleGeneration += 1
         acceptsEvents = true
         isRestoring = true
+        // Loading decides whether replacing the current history is safe. Keep
+        // writes disabled while restoration is still in flight.
+        persistenceWritesAllowed = false
         startupEvents.removeAll(keepingCapacity: true)
         return lifecycleGeneration
     }
@@ -139,7 +145,14 @@ final class AppRuntime {
     private func restorePersistedState(generation: Int) async -> Bool {
         let loadResult = await persistence.load()
         guard isCurrentLifecycle(generation) else { return false }
-        persistenceError = loadResult.recoveryMessage
+        persistenceWritesAllowed = loadResult.canSafelyWrite
+        if loadResult.canSafelyWrite {
+            persistenceError = nil
+            persistenceRecoveryNotice = loadResult.recoveryMessage
+        } else {
+            persistenceError = loadResult.recoveryMessage
+            persistenceRecoveryNotice = nil
+        }
         activity.replaceSessions(loadResult.sessions)
         // Do not invent completion for restored runners. Dead origin PIDs are
         // completed; everything else becomes `.unknown` until a live hook or
@@ -158,12 +171,14 @@ final class AppRuntime {
         // written by older debug builds before simulator persistence was split.
         simulator.reset()
         #endif
-        // Always save the reconciled snapshot. This persists restored Grok
-        // relationships and recreates a clean file after corruption recovery.
-        let saveError = await persistence.save(persistableSessions)
-        guard isCurrentLifecycle(generation) else { return false }
-        if let error = saveError {
-            persistenceError = error
+        if persistenceWritesAllowed {
+            // Persist restored Grok relationships and recreate a clean file after
+            // successful corruption quarantine. Failed quarantine stays read-only.
+            let saveError = await persistence.save(persistableSessions)
+            guard isCurrentLifecycle(generation) else { return false }
+            if let error = saveError {
+                persistenceError = error
+            }
         }
         return true
     }
@@ -207,16 +222,20 @@ final class AppRuntime {
         persistTask = nil
         persistDeadlineTask?.cancel()
         persistDeadlineTask = nil
-        do {
-            try persistence.saveSynchronously(persistableSessions)
-        } catch {
-            persistenceError = "Could not save session history: \(error.localizedDescription)"
+        if persistenceWritesAllowed {
+            do {
+                try persistence.saveSynchronously(persistableSessions)
+                persistenceError = nil
+            } catch {
+                persistenceError = "Could not save session history: \(error.localizedDescription)"
+            }
         }
         socketServer?.stop()
         socketServer = nil
     }
 
     private func schedulePersist() {
+        guard persistenceWritesAllowed else { return }
         if persistDeadlineTask == nil {
             persistDeadlineTask = Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -245,10 +264,9 @@ final class AppRuntime {
         persistTask = nil
         persistDeadlineTask?.cancel()
         persistDeadlineTask = nil
+        guard persistenceWritesAllowed else { return }
         let snapshot = persistableSessions
-        if let error = await persistence.save(snapshot) {
-            persistenceError = error
-        }
+        persistenceError = await persistence.save(snapshot)
     }
 
     private func receive(_ event: AgentEvent, generation: Int) {
@@ -262,7 +280,7 @@ final class AppRuntime {
 
     private func process(_ event: AgentEvent, notify: Bool) {
         let previousState = activity.sessions.first { $0.id == event.sessionId }?.state
-        activity.ingest(event)
+        guard activity.ingest(event) else { return }
         if event.resolvedState == .completed || event.resolvedState == .failed {
             pruneHistory()
         }

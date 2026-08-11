@@ -32,9 +32,17 @@ let isSelfTest = arguments.contains("--self-test")
 let grokNativeConfiguration = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent(".grok/hooks/agentsnotch.json")
 let grokHasNativeRelay = configurationContainsNativeGrokRelay(at: grokNativeConfiguration)
-let isDuplicateClaudeCompatibilityHook = grokHookEvent != nil
-    && configuredProvider == .claudeCode
-    && grokHasNativeRelay
+let isDuplicateClaudeCompatibilityHook = GrokHookRouting.shouldSkipClaudeCompatibilityHook(
+    grokHookEvent: grokHookEvent,
+    configuredProvider: configuredProvider,
+    hasNativeRelay: grokHasNativeRelay
+)
+
+if isDuplicateClaudeCompatibilityHook {
+    // Drain stdin above, then stop before decoding or walking Grok's session tree.
+    writePassiveResponse()
+    exit(EXIT_SUCCESS)
+}
 
 do {
     var payload = try AgentHookInput.decode(input)
@@ -52,12 +60,11 @@ do {
     }
     let permissionRequestRequiresUserInput = provider != .codex
         || CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
-    if !isDuplicateClaudeCompatibilityHook,
-       var event = AgentHookEventMapper.map(
-           payload,
-           provider: provider,
-           permissionRequestRequiresUserInput: permissionRequestRequiresUserInput
-       )
+    if var event = AgentHookEventMapper.map(
+        payload,
+        provider: provider,
+        permissionRequestRequiresUserInput: permissionRequestRequiresUserInput
+    )
     {
         event.origin = hookOrigin()
         if isSelfTest {
@@ -70,8 +77,7 @@ do {
         }
         try? UnixSocketClient.send(event, to: socketURL)
     }
-    if !isDuplicateClaudeCompatibilityHook,
-       provider == .grok,
+    if provider == .grok,
        shouldPublishWorkflowState(payload),
        var workflowEvent = grokContext?.workflowEvent(
            now: Date(),
@@ -93,9 +99,13 @@ do {
         try? UnixSocketClient.send(workflowEvent, to: socketURL)
     }
     // Some providers inspect hook stdout. An empty object is always passive.
-    FileHandle.standardOutput.write(Data("{}\n".utf8))
+    writePassiveResponse()
 } catch {
     // Monitoring must never interrupt the agent. All providers treat exit 0 as success.
+    writePassiveResponse()
+}
+
+private func writePassiveResponse() {
     FileHandle.standardOutput.write(Data("{}\n".utf8))
 }
 

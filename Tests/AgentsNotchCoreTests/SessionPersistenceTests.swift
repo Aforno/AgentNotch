@@ -13,7 +13,7 @@ final class SessionPersistenceTests: XCTestCase {
         let result = await persistence.load()
 
         XCTAssertTrue(result.sessions.isEmpty)
-        XCTAssertTrue(result.needsRewrite)
+        XCTAssertTrue(result.canSafelyWrite)
         XCTAssertNotNil(result.recoveryMessage)
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.fileURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.fileURL.path + ".corrupt"))
@@ -22,6 +22,82 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertNil(saveError)
         let repaired = try Data(contentsOf: fixture.fileURL)
         XCTAssertEqual(try JSONDecoder.agentsNotch.decode([AgentSession].self, from: repaired), [])
+    }
+
+    @MainActor
+    func testRuntimeDoesNotOverwriteUnreadableHistoryWhenQuarantineFails() async throws {
+        let fixture = try PersistenceFixture()
+        defer { fixture.remove() }
+        let unreadableHistory = Data("{broken".utf8)
+        try unreadableHistory.write(to: fixture.fileURL)
+        let persistence = SessionPersistence(
+            fileURL: fixture.fileURL,
+            quarantineUnreadableFile: { _, _ in throw PersistenceTestError.quarantineFailed }
+        )
+        let runtime = AppRuntime(
+            persistence: persistence,
+            socketURL: fixture.socketURL,
+            monitorProviders: false,
+            persistDebounceDuration: .milliseconds(40),
+            persistMaximumDelay: .milliseconds(100)
+        )
+
+        await runtime.start()
+        XCTAssertNotNil(runtime.persistenceError)
+        XCTAssertNil(runtime.persistenceRecoveryNotice)
+        var saveInvocationCount = await persistence.saveInvocationCount
+        XCTAssertEqual(saveInvocationCount, 0)
+
+        runtime.activity.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:in-memory-only",
+            provider: .codex,
+            state: .running
+        ))
+        try await Task.sleep(for: .milliseconds(150))
+        saveInvocationCount = await persistence.saveInvocationCount
+        XCTAssertEqual(saveInvocationCount, 0)
+
+        runtime.stop()
+        XCTAssertEqual(try Data(contentsOf: fixture.fileURL), unreadableHistory)
+    }
+
+    @MainActor
+    func testRuntimeDoesNotPromoteProviderTelemetryForRejectedProtocol() async throws {
+        let fixture = try PersistenceFixture()
+        defer { fixture.remove() }
+        let runtime = AppRuntime(
+            persistence: SessionPersistence(fileURL: fixture.fileURL),
+            socketURL: fixture.socketURL,
+            monitorProviders: false
+        )
+        await runtime.start()
+        defer { runtime.stop() }
+
+        try UnixSocketClient.send(AgentEvent(
+            protocolVersion: 2,
+            type: .activity,
+            sessionId: "codex:future-protocol",
+            provider: .codex,
+            state: .running
+        ), to: fixture.socketURL)
+        try await Task.sleep(for: .milliseconds(150))
+
+        XCTAssertTrue(runtime.activity.sessions.isEmpty)
+        XCTAssertNil(runtime.lastEventReceivedAt[.codex])
+
+        try UnixSocketClient.send(AgentEvent(
+            type: .activity,
+            sessionId: "codex:supported-protocol",
+            provider: .codex,
+            state: .running
+        ), to: fixture.socketURL)
+        for _ in 0..<30 where runtime.lastEventReceivedAt[.codex] == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(runtime.activity.sessions.count, 1)
+        XCTAssertNotNil(runtime.lastEventReceivedAt[.codex])
     }
 
     @MainActor
@@ -240,6 +316,12 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(secondRuntime.activity.listSessions.map(\.id), ["codex:newer", "grok:parent"])
         secondRuntime.stop()
     }
+}
+
+private enum PersistenceTestError: LocalizedError {
+    case quarantineFailed
+
+    var errorDescription: String? { "Simulated quarantine failure." }
 }
 
 private final class PersistenceFixture: @unchecked Sendable {

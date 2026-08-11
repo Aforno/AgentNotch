@@ -23,6 +23,17 @@ struct OnboardingView: View {
                 }
             }
 
+            if runtime.socketError != nil
+                || runtime.persistenceError != nil
+                || runtime.persistenceRecoveryNotice != nil
+            {
+                RuntimeHealthMessages(
+                    socketError: runtime.socketError,
+                    persistenceError: runtime.persistenceError,
+                    persistenceRecoveryNotice: runtime.persistenceRecoveryNotice
+                )
+            }
+
             VStack(spacing: 0) {
                 ForEach(Array(runtime.integrations.enumerated()), id: \.element.provider) { index, integration in
                     providerRow(integration)

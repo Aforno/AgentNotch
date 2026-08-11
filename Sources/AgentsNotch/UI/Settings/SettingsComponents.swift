@@ -33,7 +33,7 @@ struct ApplicationSettingsSection: View {
                 isOn: showVirtualNotch
             )
             SettingsToggleRow(
-                title: "Provider update checks",
+                title: "App update checks",
                 detail: "Automatically check GitHub for newer Agents Notch releases.",
                 isOn: automaticallyCheckForUpdates
             )
@@ -279,6 +279,38 @@ struct SettingsMessage: View {
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
+    }
+}
+
+struct RuntimeHealthMessages: View {
+    let socketError: String?
+    let persistenceError: String?
+    let persistenceRecoveryNotice: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let socketError {
+                SettingsMessage(
+                    text: "Local event relay unavailable: \(socketError)",
+                    symbol: "network.slash",
+                    color: .red
+                )
+            }
+            if let persistenceError {
+                SettingsMessage(
+                    text: persistenceError,
+                    symbol: "externaldrive.badge.exclamationmark",
+                    color: .red
+                )
+            }
+            if let persistenceRecoveryNotice {
+                SettingsMessage(
+                    text: persistenceRecoveryNotice,
+                    symbol: "externaldrive.badge.checkmark",
+                    color: .orange
+                )
+            }
+        }
     }
 }
 

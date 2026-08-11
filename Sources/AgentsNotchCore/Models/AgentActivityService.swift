@@ -117,8 +117,9 @@ public final class AgentActivityService {
         notchSnapshot.attentionCount
     }
 
-    public func ingest(_ event: AgentEvent) {
-        guard event.protocolVersion == 1 else { return }
+    @discardableResult
+    public func ingest(_ event: AgentEvent) -> Bool {
+        guard event.protocolVersion == 1 else { return false }
         var event = event
         let now = Date()
         if event.timestamp > now {
@@ -171,6 +172,7 @@ public final class AgentActivityService {
         }
         publishNotchSnapshot()
         notifySessionsChanged()
+        return true
     }
 
     public func replaceSessions(_ sessions: [AgentSession]) {

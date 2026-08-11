@@ -2,6 +2,29 @@ import AgentsNotchCore
 import XCTest
 
 final class GrokSessionContextResolverTests: XCTestCase {
+    func testSkipsClaudeCompatibilityHookOnlyWhenNativeGrokRelayIsPresent() {
+        XCTAssertTrue(GrokHookRouting.shouldSkipClaudeCompatibilityHook(
+            grokHookEvent: "PreToolUse",
+            configuredProvider: .claudeCode,
+            hasNativeRelay: true
+        ))
+        XCTAssertFalse(GrokHookRouting.shouldSkipClaudeCompatibilityHook(
+            grokHookEvent: nil,
+            configuredProvider: .claudeCode,
+            hasNativeRelay: true
+        ))
+        XCTAssertFalse(GrokHookRouting.shouldSkipClaudeCompatibilityHook(
+            grokHookEvent: "PreToolUse",
+            configuredProvider: .grok,
+            hasNativeRelay: true
+        ))
+        XCTAssertFalse(GrokHookRouting.shouldSkipClaudeCompatibilityHook(
+            grokHookEvent: "PreToolUse",
+            configuredProvider: .claudeCode,
+            hasNativeRelay: false
+        ))
+    }
+
     func testResolvesChildRelationshipAndWorkflowPhasesFromWorkspaceMetadata() throws {
         let temporary = FileManager.default.temporaryDirectory
             .appendingPathComponent("AgentsNotch-GrokContext-\(UUID().uuidString)", isDirectory: true)
