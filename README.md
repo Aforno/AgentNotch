@@ -17,8 +17,8 @@ same `AgentEvent` values to the local socket.
 Requirements: Apple Silicon Mac and macOS 14 or later.
 
 When release assets are available, download the ZIP and matching `.sha256` file
-from the [latest GitHub release](../../releases/latest), then verify it before
-opening the app:
+from the [GitHub releases page](../../releases), then verify it before opening
+the app:
 
 ```sh
 shasum -a 256 -c Agents-Notch-*-macOS-arm64.zip.sha256
