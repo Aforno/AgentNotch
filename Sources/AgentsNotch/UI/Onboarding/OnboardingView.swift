@@ -24,17 +24,12 @@ struct OnboardingView: View {
             }
 
             VStack(spacing: 0) {
-                providerRow(runtime.codexIntegration)
-                NotchHairline(leadingInset: 42)
-                providerRow(runtime.claudeIntegration)
-                NotchHairline(leadingInset: 42)
-                providerRow(runtime.grokIntegration)
-                NotchHairline(leadingInset: 42)
-                providerRow(runtime.geminiIntegration)
-                NotchHairline(leadingInset: 42)
-                providerRow(runtime.openCodeIntegration)
-                NotchHairline(leadingInset: 42)
-                providerRow(runtime.cursorIntegration)
+                ForEach(Array(runtime.integrations.enumerated()), id: \.element.provider) { index, integration in
+                    providerRow(integration)
+                    if index < runtime.integrations.count - 1 {
+                        NotchHairline(leadingInset: 42)
+                    }
+                }
             }
             .padding(.horizontal, 14)
             .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)

@@ -78,6 +78,7 @@ struct ActivityCenterView: View {
     @State private var expandedGroupIDs = Set<String>()
     @State private var handledSearchRequest: UInt64 = 0
     @FocusState private var isSearchFocused: Bool
+    @FocusState private var isSessionListFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -88,6 +89,8 @@ struct ActivityCenterView: View {
             HStack(spacing: 0) {
                 sidebar
                     .frame(minWidth: 270, idealWidth: 300, maxWidth: 340)
+                    .focusable()
+                    .focused($isSessionListFocused)
 
                 Rectangle()
                     .fill(NotchWindowPalette.hairline)
@@ -390,6 +393,8 @@ struct ActivityCenterView: View {
     private func sessionButton(_ session: AgentSession) -> some View {
         Button {
             selection = session.id
+            isSearchFocused = false
+            isSessionListFocused = true
         } label: {
             ActivitySessionRow(session: session, isSelected: selection == session.id)
         }
@@ -405,6 +410,7 @@ struct ActivityCenterView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(session.task)
         .accessibilityValue("\(session.provider.displayName), \(session.state.displayName), \(session.currentActivity)")
+        .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(selection == session.id ? .isSelected : [])
     }
 
@@ -591,6 +597,7 @@ struct ActivityCenterView: View {
     private func handleSearchRequest() {
         guard handledSearchRequest != runtime.activitySearchRequest else { return }
         handledSearchRequest = runtime.activitySearchRequest
+        isSessionListFocused = false
         isSearchFocused = true
     }
 }

@@ -101,10 +101,7 @@ struct NotchRootView: View {
             let contentHeight = DynamicIslandSpacing.expandedTop
                 + (visibleSessions.isEmpty
                     ? DynamicIslandSpacing.rowHeight
-                    : AgentListView.rowsHeight(
-                        for: visibleSessions,
-                        relatedSessions: snapshot.relatedSessions
-                    ))
+                    : AgentListView.rowsHeight(for: visibleSessions))
                 + DynamicIslandSpacing.expandedBottom
             return NotchLayout(width: 424, height: geometry.notchHeight + contentHeight, radius: 20)
         case .detail:

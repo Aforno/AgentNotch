@@ -27,6 +27,12 @@ public struct NotchActivitySnapshot: Equatable, Sendable {
 @Observable
 @MainActor
 public final class AgentActivityService {
+    private enum AttentionRefreshPolicy {
+        case keep
+        case ifMissing
+        case always
+    }
+
     public private(set) var sessions: [AgentSession]
     public private(set) var attentionEvent: AgentEvent?
     public private(set) var notchSnapshot: NotchActivitySnapshot
@@ -171,13 +177,9 @@ public final class AgentActivityService {
         self.sessions = sessions
             .filter { !Self.isOrphanedGrokStart($0) }
         normalizeRestoredIdentities()
-        self.sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
         // Restoring from disk has no live event stream; rebuild the temporary
         // attention surface from any session that is still waiting for input.
-        attentionEvent = latestWaitingAttentionEvent()
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(orderSessions: true, attentionRefresh: .always)
     }
 
     /// Reconciles workflow metadata discovered from provider-owned storage
@@ -189,22 +191,14 @@ public final class AgentActivityService {
         } else {
             sessions.append(AgentSession(event: event))
         }
-        sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(orderSessions: true)
     }
 
     public func removeSession(id: String) {
         let previousCount = sessions.count
         sessions.removeAll { $0.id == id }
         guard sessions.count != previousCount else { return }
-        rebuildIndex()
-        if attentionEvent?.sessionId == id {
-            attentionEvent = latestWaitingAttentionEvent()
-        }
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(attentionRefresh: .ifMissing)
     }
 
     public func removeSessions(ids: Set<String>) {
@@ -212,24 +206,14 @@ public final class AgentActivityService {
         let previousCount = sessions.count
         sessions.removeAll { ids.contains($0.id) }
         guard sessions.count != previousCount else { return }
-        rebuildIndex()
-        if let attentionEvent, ids.contains(attentionEvent.sessionId) {
-            self.attentionEvent = latestWaitingAttentionEvent()
-        }
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(attentionRefresh: .ifMissing)
     }
 
     public func clearRecent() {
         let previousCount = sessions.count
         sessions.removeAll { !$0.isActive }
         guard sessions.count != previousCount else { return }
-        rebuildIndex()
-        if let attentionEvent, index.sessionsByID[attentionEvent.sessionId] == nil {
-            self.attentionEvent = latestWaitingAttentionEvent()
-        }
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(attentionRefresh: .ifMissing)
     }
 
     public func pruneCompleted(olderThan age: TimeInterval, now: Date = Date()) {
@@ -239,12 +223,7 @@ public final class AgentActivityService {
             return now.timeIntervalSince(completedAt) > age
         }
         guard sessions.count != previousCount else { return }
-        rebuildIndex()
-        if let attentionEvent, index.sessionsByID[attentionEvent.sessionId] == nil {
-            self.attentionEvent = latestWaitingAttentionEvent()
-        }
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(attentionRefresh: .ifMissing)
     }
 
     /// Reconciles hook-driven sessions after a cold start.
@@ -282,11 +261,7 @@ public final class AgentActivityService {
             changed = true
         }
         guard changed else { return }
-        sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
-        attentionEvent = latestWaitingAttentionEvent()
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(orderSessions: true, attentionRefresh: .always)
     }
 
     /// Completes sessions still stuck in `.unknown` after the reconnect grace
@@ -298,11 +273,7 @@ public final class AgentActivityService {
             changed = true
         }
         guard changed else { return }
-        sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
-        attentionEvent = latestWaitingAttentionEvent()
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(orderSessions: true, attentionRefresh: .always)
     }
 
     /// Applies provider-owned restore evidence (e.g. Grok workflow status) to a
@@ -319,11 +290,7 @@ public final class AgentActivityService {
             activity: activity,
             at: timestamp
         ) else { return }
-        sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
-        attentionEvent = latestWaitingAttentionEvent()
-        publishNotchSnapshot()
-        notifySessionsChanged()
+        commitSessionChanges(orderSessions: true, attentionRefresh: .always)
     }
 
     private func updateAttentionPresentation(for event: AgentEvent) {
@@ -388,36 +355,56 @@ public final class AgentActivityService {
         sessions[index].complete(as: parent.state, at: max(parent.updatedAt, timestamp))
     }
 
-    private func canonicalizedIdentity(for event: AgentEvent) -> AgentEvent {
-        var event = event
-        let prefix = "\(event.provider.rawValue):"
-
+    private func canonicalizedIdentity(for incomingEvent: AgentEvent) -> AgentEvent {
+        let prefix = "\(incomingEvent.provider.rawValue):"
         // After a prior cross-provider collision, rows are stored as provider:id.
         // Later events still carrying the bare id must resolve to that row
         // instead of creating a duplicate unprefixed session.
-        if !event.sessionId.hasPrefix(prefix) {
-            let canonicalID = prefix + event.sessionId
-            if sessions.contains(where: { $0.id == canonicalID && $0.provider == event.provider }) {
-                event.sessionId = canonicalID
-                if let parentID = event.parentSessionId, !parentID.hasPrefix(prefix),
-                   sessions.contains(where: {
-                       $0.id == prefix + parentID && $0.provider == event.provider
-                   })
-                {
-                    event.parentSessionId = prefix + parentID
-                }
-                return event
-            }
+        if let resolved = eventTargetingExistingCanonicalSession(
+            incomingEvent,
+            providerPrefix: prefix
+        ) {
+            return resolved
         }
 
         let collidingIndices = sessions.indices.filter {
-            sessions[$0].id == event.sessionId && sessions[$0].provider != event.provider
+            sessions[$0].id == incomingEvent.sessionId
+                && sessions[$0].provider != incomingEvent.provider
         }
-        guard !collidingIndices.isEmpty else {
-            return event
+        guard !collidingIndices.isEmpty else { return incomingEvent }
+
+        renameCollidingSessions(at: collidingIndices, originalID: incomingEvent.sessionId)
+        return eventCanonicalizedAfterCollision(incomingEvent, providerPrefix: prefix)
+    }
+
+    private func eventTargetingExistingCanonicalSession(
+        _ event: AgentEvent,
+        providerPrefix: String
+    ) -> AgentEvent? {
+        guard !event.sessionId.hasPrefix(providerPrefix) else { return nil }
+        let canonicalID = providerPrefix + event.sessionId
+        guard sessions.contains(where: {
+            $0.id == canonicalID && $0.provider == event.provider
+        }) else { return nil }
+
+        var resolved = event
+        resolved.sessionId = canonicalID
+        if let parentID = event.parentSessionId,
+           !parentID.hasPrefix(providerPrefix),
+           sessions.contains(where: {
+               $0.id == providerPrefix + parentID && $0.provider == event.provider
+           })
+        {
+            resolved.parentSessionId = providerPrefix + parentID
         }
-        let originalID = event.sessionId
-        for index in collidingIndices {
+        return resolved
+    }
+
+    private func renameCollidingSessions(
+        at indices: [Int],
+        originalID: String
+    ) {
+        for index in indices {
             let existingProvider = sessions[index].provider
             let existingPrefix = "\(existingProvider.rawValue):"
             let canonicalID = sessions[index].id.hasPrefix(existingPrefix)
@@ -443,14 +430,21 @@ public final class AgentActivityService {
                 attentionEvent?.sessionId = canonicalID
             }
         }
-        if !event.sessionId.hasPrefix(prefix) {
-            event.sessionId = prefix + event.sessionId
+    }
+
+    private func eventCanonicalizedAfterCollision(
+        _ event: AgentEvent,
+        providerPrefix: String
+    ) -> AgentEvent {
+        var event = event
+        if !event.sessionId.hasPrefix(providerPrefix) {
+            event.sessionId = providerPrefix + event.sessionId
         }
         if let parentID = event.parentSessionId,
            sessions.contains(where: { $0.id == parentID && $0.provider != event.provider }),
-           !parentID.hasPrefix(prefix)
+           !parentID.hasPrefix(providerPrefix)
         {
-            event.parentSessionId = prefix + parentID
+            event.parentSessionId = providerPrefix + parentID
         }
         return event
     }
@@ -492,6 +486,28 @@ public final class AgentActivityService {
         index = SessionIndex(sessions: sessions)
     }
 
+    /// Finishes a successful session mutation through the single publication
+    /// path used by history, attention, and notch consumers.
+    private func commitSessionChanges(
+        orderSessions: Bool = false,
+        attentionRefresh: AttentionRefreshPolicy = .keep
+    ) {
+        if orderSessions {
+            sessions.sort(by: Self.orderSessions)
+        }
+        rebuildIndex()
+        switch attentionRefresh {
+        case .keep:
+            break
+        case .ifMissing where attentionEvent.map({ index.sessionsByID[$0.sessionId] == nil }) != true:
+            break
+        case .ifMissing, .always:
+            attentionEvent = latestWaitingAttentionEvent()
+        }
+        publishNotchSnapshot()
+        notifySessionsChanged()
+    }
+
     private func publishNotchSnapshot() {
         let snapshot = index.notchSnapshot(attentionEvent: attentionEvent)
         if snapshot != notchSnapshot {
@@ -527,249 +543,5 @@ public final class AgentActivityService {
                 .replacingOccurrences(of: "_", with: "")
                 .lowercased() == "sessionstart"
         }
-    }
-}
-
-private struct SessionIndex {
-    struct GroupAggregate {
-        let needsAttention: Bool
-        let isActive: Bool
-        let updatedAt: Date
-    }
-
-    let sessionsByID: [String: AgentSession]
-    let childrenByParentID: [String: [AgentSession]]
-    let hierarchicalSessions: [AgentSession]
-    let activeSessions: [AgentSession]
-    let activeProviders: [AgentProvider]
-    let attentionSessions: [AgentSession]
-    let groupRoots: [AgentSession]
-    let groupMembersByRootID: [String: [AgentSession]]
-    let groupRootIDBySessionID: [String: String]
-    let groupAggregates: [String: GroupAggregate]
-
-    static let empty = SessionIndex(sessions: [])
-
-    init(sessions: [AgentSession]) {
-        var sessionsByID: [String: AgentSession] = [:]
-        sessionsByID.reserveCapacity(sessions.count)
-        for session in sessions {
-            sessionsByID[session.id] = session
-        }
-        self.sessionsByID = sessionsByID
-
-        var childrenByParentID: [String: [AgentSession]] = [:]
-        for session in sessions {
-            guard let parentID = session.parentSessionId else { continue }
-            childrenByParentID[parentID, default: []].append(session)
-        }
-        for parentID in childrenByParentID.keys {
-            childrenByParentID[parentID]?.sort(by: Self.orderSessions)
-        }
-        self.childrenByParentID = childrenByParentID
-
-        let naturalRoots = sessions.filter { session in
-            guard let parentID = session.parentSessionId else { return true }
-            return sessionsByID[parentID] == nil
-        }
-
-        var membersByCandidateRoot: [String: [AgentSession]] = [:]
-        var aggregatesByCandidateRoot: [String: GroupAggregate] = [:]
-        for root in naturalRoots {
-            let members = Self.hierarchy(
-                from: root,
-                childrenByParentID: childrenByParentID
-            )
-            membersByCandidateRoot[root.id] = members
-            aggregatesByCandidateRoot[root.id] = Self.aggregate(members, fallback: root)
-        }
-
-        let orderedNaturalRoots = naturalRoots.sorted { lhs, rhs in
-            Self.orderGroups(
-                lhs,
-                rhs,
-                aggregates: aggregatesByCandidateRoot
-            )
-        }
-
-        var hierarchicalSessions: [AgentSession] = []
-        hierarchicalSessions.reserveCapacity(sessions.count)
-        var groupRoots: [AgentSession] = []
-        var groupMembersByRootID: [String: [AgentSession]] = [:]
-        var groupRootIDBySessionID: [String: String] = [:]
-        var groupAggregates: [String: GroupAggregate] = [:]
-        var visited: Set<String> = []
-
-        func appendGroup(root: AgentSession, members: [AgentSession]) {
-            let unvisited = members.filter { visited.insert($0.id).inserted }
-            guard !unvisited.isEmpty else { return }
-            groupRoots.append(root)
-            groupMembersByRootID[root.id] = unvisited
-            for session in unvisited {
-                groupRootIDBySessionID[session.id] = root.id
-            }
-            groupAggregates[root.id] = Self.aggregate(unvisited, fallback: root)
-            hierarchicalSessions.append(contentsOf: unvisited)
-        }
-
-        for root in orderedNaturalRoots {
-            appendGroup(root: root, members: membersByCandidateRoot[root.id] ?? [root])
-        }
-
-        // Malformed external input can contain cycles with no natural root. Use
-        // the first remaining row as a deterministic presentation root and walk
-        // the component once, preserving visibility without repeated scans.
-        for session in sessions where !visited.contains(session.id) {
-            appendGroup(
-                root: session,
-                members: Self.hierarchy(
-                    from: session,
-                    childrenByParentID: childrenByParentID
-                )
-            )
-        }
-
-        self.hierarchicalSessions = hierarchicalSessions
-        self.groupRoots = groupRoots
-        self.groupMembersByRootID = groupMembersByRootID
-        self.groupRootIDBySessionID = groupRootIDBySessionID
-        self.groupAggregates = groupAggregates
-
-        activeSessions = sessions.filter(\.isActive)
-        var seenProviders = Set<AgentProvider>()
-        activeProviders = activeSessions
-            .sorted { lhs, rhs in
-                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
-                if lhs.provider != rhs.provider { return lhs.provider.rawValue < rhs.provider.rawValue }
-                return lhs.id < rhs.id
-            }
-            .compactMap { session in
-                seenProviders.insert(session.provider).inserted ? session.provider : nil
-            }
-        attentionSessions = sessions
-            .filter { $0.state == .waitingForUser }
-            .sorted { lhs, rhs in
-                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
-                return lhs.id < rhs.id
-            }
-    }
-
-    func descendantIDs(of sessionID: String) -> Set<String> {
-        var result: Set<String> = []
-        var pending = [sessionID]
-        var visited: Set<String> = [sessionID]
-        while let parentID = pending.popLast() {
-            for child in childrenByParentID[parentID] ?? []
-                where visited.insert(child.id).inserted
-            {
-                result.insert(child.id)
-                pending.append(child.id)
-            }
-        }
-        return result
-    }
-
-    func notchSnapshot(attentionEvent: AgentEvent?) -> NotchActivitySnapshot {
-        let listSessions = Array(
-            groupRoots
-                .sorted { lhs, rhs in
-                    let lhsUpdatedAt = groupAggregates[lhs.id]?.updatedAt ?? lhs.updatedAt
-                    let rhsUpdatedAt = groupAggregates[rhs.id]?.updatedAt ?? rhs.updatedAt
-                    if lhsUpdatedAt != rhsUpdatedAt { return lhsUpdatedAt > rhsUpdatedAt }
-                    return lhs.id < rhs.id
-                }
-                .prefix(3)
-        )
-        var relatedSessions: [AgentSession] = []
-        var relatedIDs: Set<String> = []
-        for root in listSessions {
-            for session in groupMembersByRootID[root.id] ?? [root]
-                where relatedIDs.insert(session.id).inserted
-            {
-                relatedSessions.append(session)
-            }
-        }
-        let attentionSession = attentionEvent
-            .flatMap { sessionsByID[$0.sessionId] }
-            ?? attentionSessions.first
-        if let attentionSession,
-           let rootID = groupRootIDBySessionID[attentionSession.id]
-        {
-            for session in groupMembersByRootID[rootID] ?? [attentionSession]
-                where relatedIDs.insert(session.id).inserted
-            {
-                relatedSessions.append(session)
-            }
-        }
-
-        return NotchActivitySnapshot(
-            activeSessions: activeSessions,
-            activeProviders: activeProviders,
-            activeGroupCount: groupRoots.reduce(into: 0) { count, root in
-                if groupAggregates[root.id]?.isActive == true { count += 1 }
-            },
-            attentionSessions: attentionSessions,
-            attentionSession: attentionSession,
-            listSessions: listSessions,
-            relatedSessions: relatedSessions
-        )
-    }
-
-    private static func hierarchy(
-        from root: AgentSession,
-        childrenByParentID: [String: [AgentSession]]
-    ) -> [AgentSession] {
-        var result: [AgentSession] = []
-        var visited: Set<String> = []
-
-        func append(_ session: AgentSession) {
-            guard visited.insert(session.id).inserted else { return }
-            result.append(session)
-            for child in childrenByParentID[session.id] ?? [] {
-                append(child)
-            }
-        }
-
-        append(root)
-        return result
-    }
-
-    private static func aggregate(
-        _ sessions: [AgentSession],
-        fallback: AgentSession
-    ) -> GroupAggregate {
-        GroupAggregate(
-            needsAttention: sessions.contains(where: \.needsAttention),
-            isActive: sessions.contains(where: \.isActive),
-            updatedAt: sessions.map(\.updatedAt).max() ?? fallback.updatedAt
-        )
-    }
-
-    private static func orderGroups(
-        _ lhs: AgentSession,
-        _ rhs: AgentSession,
-        aggregates: [String: GroupAggregate]
-    ) -> Bool {
-        let lhsAggregate = aggregates[lhs.id]
-            ?? GroupAggregate(needsAttention: lhs.needsAttention, isActive: lhs.isActive, updatedAt: lhs.updatedAt)
-        let rhsAggregate = aggregates[rhs.id]
-            ?? GroupAggregate(needsAttention: rhs.needsAttention, isActive: rhs.isActive, updatedAt: rhs.updatedAt)
-        if lhsAggregate.needsAttention != rhsAggregate.needsAttention {
-            return lhsAggregate.needsAttention
-        }
-        if lhsAggregate.isActive != rhsAggregate.isActive {
-            return lhsAggregate.isActive
-        }
-        if lhsAggregate.updatedAt != rhsAggregate.updatedAt {
-            return lhsAggregate.updatedAt > rhsAggregate.updatedAt
-        }
-        return lhs.id < rhs.id
-    }
-
-    private static func orderSessions(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
-        if lhs.needsAttention != rhs.needsAttention { return lhs.needsAttention }
-        if lhs.isActive != rhs.isActive { return lhs.isActive }
-        if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
-        return lhs.id < rhs.id
     }
 }

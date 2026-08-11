@@ -110,8 +110,9 @@ final class RoadmapFeatureTests: XCTestCase {
             bundledRelayURL: bundledRelayURL,
             historyRetentionDays: { 7 }
         )
-        runtime.codexIntegration.install()
-        XCTAssertEqual(runtime.codexIntegration.status, .awaitingFirstEvent)
+        let codexIntegration = try XCTUnwrap(runtime.integration(for: .codex))
+        codexIntegration.install()
+        XCTAssertEqual(codexIntegration.status, .awaitingFirstEvent)
         await runtime.start()
         defer { runtime.stop() }
 
@@ -128,7 +129,7 @@ final class RoadmapFeatureTests: XCTestCase {
         }
         XCTAssertNotNil(runtime.lastEventReceivedAt[.codex])
         XCTAssertTrue(
-            runtime.codexIntegration.hasReceivedEvent,
+            codexIntegration.hasReceivedEvent,
             "genuine events must mark the Codex integration as verified"
         )
         XCTAssertFalse(runtime.activity.sessions.contains { $0.id == "expired-live-event" })
@@ -146,6 +147,7 @@ final class RoadmapFeatureTests: XCTestCase {
             socketURL: socketURL,
             monitorProviders: false
         )
+        let codexIntegration = try XCTUnwrap(runtime.integration(for: .codex))
         await runtime.start()
         defer { runtime.stop() }
 
@@ -163,7 +165,7 @@ final class RoadmapFeatureTests: XCTestCase {
         XCTAssertTrue(runtime.activity.sessions.contains { $0.id == "self-test:codex:fixture" })
         XCTAssertNil(runtime.lastEventReceivedAt[.codex])
         XCTAssertFalse(
-            runtime.codexIntegration.hasReceivedEvent,
+            codexIntegration.hasReceivedEvent,
             "self-test traffic must not promote integration health"
         )
     }

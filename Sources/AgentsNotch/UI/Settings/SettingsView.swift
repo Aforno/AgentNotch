@@ -129,113 +129,29 @@ struct SettingsView: View {
                     detail: "Control how Agents Notch starts, alerts, and stores local history."
                 )
 
-                SettingsSection(title: "Application") {
-                    SettingsToggleRow(
-                        title: "Launch at login",
-                        detail: "Start Agents Notch automatically when you sign in to this Mac.",
-                        isOn: launchBinding
-                    )
-                    SettingsToggleRow(
-                        title: "Animate notch transitions",
-                        detail: "Smooth open, close, and content changes on the notch surface.",
-                        isOn: $animationsEnabled
-                    )
-                    SettingsToggleRow(
-                        title: "Show notch surface",
-                        detail: "Display live agent activity on the hardware or virtual notch.",
-                        isOn: $notchEnabled
-                    )
-                    SettingsToggleRow(
-                        title: "Virtual notch",
-                        detail: "Show a virtual notch on displays without hardware cutouts.",
-                        isOn: $showVirtualNotch
-                    )
-                    SettingsToggleRow(
-                        title: "Provider update checks",
-                        detail: "Automatically check GitHub for newer Agents Notch releases.",
-                        isOn: $automaticallyCheckForUpdates
-                    )
-                    SettingsMenuRow(
-                        title: "Show the notch on",
-                        detail: "Choose which display hosts the notch surface.",
-                        selection: $displayPreference,
-                        options: DisplayPreference.allCases.map { ($0.rawValue, $0.title) }
-                    )
-                    SettingsMenuRow(
-                        title: "Global activity shortcut",
-                        detail: "Open Activity Center from any app without Accessibility permission.",
-                        selection: $globalActivityShortcut,
-                        options: GlobalActivityShortcut.allCases.map { ($0.rawValue, $0.title) }
-                    )
-                    SettingsControlRow(title: "Version", detail: "Current app version and update status.") {
-                        HStack(spacing: 8) {
-                            Text(runtime.updates.currentVersion)
-                                .font(NotchWindowFont.control)
-                                .foregroundStyle(NotchWindowPalette.secondaryText)
-                            updateControl
-                        }
-                    }
-                }
-
-                SettingsSection(title: "Attention") {
-                    SettingsToggleRow(
-                        title: "Attention notifications",
-                        detail: "Show macOS notifications when an agent needs input.",
-                        isOn: notificationBinding
-                    )
-                    SettingsToggleRow(
-                        title: "Notification sound",
-                        detail: "Play the system notification sound with attention alerts.",
-                        isOn: $attentionNotificationSoundEnabled
-                    )
-                    .disabled(!attentionNotificationsEnabled)
-                    .opacity(attentionNotificationsEnabled ? 1 : 0.45)
-                    SettingsToggleRow(
-                        title: "Failure notifications",
-                        detail: "Also notify when an agent fails. Routine activity stays collapsed.",
-                        isOn: $failureNotificationsEnabled
-                    )
-                    .disabled(!attentionNotificationsEnabled)
-                    .opacity(attentionNotificationsEnabled ? 1 : 0.45)
-                }
-
-                SettingsSection(title: "Privacy") {
-                    SettingsToggleRow(
-                        title: "Hide activity details",
-                        detail: "Show only provider, project, and state in the notch, menu bar, and notifications.",
-                        isOn: $privacyModeEnabled
-                    )
-                }
-
-                SettingsSection(title: "Local History") {
-                    SettingsMenuRow(
-                        title: "Keep completed sessions",
-                        detail: "How long finished sessions remain in Activity Center.",
-                        selection: $historyRetentionDays,
-                        options: [
-                            (7, "7 days"),
-                            (30, "30 days"),
-                            (90, "90 days"),
-                            (365, "1 year"),
-                        ]
-                    )
-                    SettingsControlRow(
-                        title: "History actions",
-                        detail: "Open related windows or clear completed local sessions."
-                    ) {
-                        HStack(spacing: 8) {
-                            Button("Open Activity Center") { runtime.openActivityCenter() }
-                                .buttonStyle(NotchPillButtonStyle())
-                            Button("Show Setup") { runtime.openOnboarding() }
-                                .buttonStyle(NotchPillButtonStyle())
-                            Button("Clear History", role: .destructive) {
-                                confirmsClearHistory = true
-                            }
-                            .buttonStyle(NotchPillButtonStyle(destructive: true))
-                            .disabled(runtime.activity.recentSessions.isEmpty)
-                        }
-                    }
-                }
+                ApplicationSettingsSection(
+                    launchAtLogin: launchBinding,
+                    animationsEnabled: $animationsEnabled,
+                    notchEnabled: $notchEnabled,
+                    showVirtualNotch: $showVirtualNotch,
+                    automaticallyCheckForUpdates: $automaticallyCheckForUpdates,
+                    displayPreference: $displayPreference,
+                    globalActivityShortcut: $globalActivityShortcut,
+                    updates: runtime.updates
+                )
+                AttentionSettingsSection(
+                    notificationsEnabled: notificationBinding,
+                    soundEnabled: $attentionNotificationSoundEnabled,
+                    failureNotificationsEnabled: $failureNotificationsEnabled
+                )
+                PrivacySettingsSection(privacyModeEnabled: $privacyModeEnabled)
+                HistorySettingsSection(
+                    retentionDays: $historyRetentionDays,
+                    hasCompletedSessions: !runtime.activity.recentSessions.isEmpty,
+                    openActivityCenter: runtime.openActivityCenter,
+                    openOnboarding: runtime.openOnboarding,
+                    requestClearHistory: { confirmsClearHistory = true }
+                )
 
                 if let launchError {
                     SettingsMessage(text: launchError, symbol: "exclamationmark.triangle.fill", color: .red)
@@ -263,17 +179,12 @@ struct SettingsView: View {
                 )
 
                 VStack(spacing: 0) {
-                    integrationRow(runtime.codexIntegration)
-                    NotchHairline(leadingInset: 42)
-                    integrationRow(runtime.claudeIntegration)
-                    NotchHairline(leadingInset: 42)
-                    integrationRow(runtime.grokIntegration)
-                    NotchHairline(leadingInset: 42)
-                    integrationRow(runtime.geminiIntegration)
-                    NotchHairline(leadingInset: 42)
-                    integrationRow(runtime.openCodeIntegration)
-                    NotchHairline(leadingInset: 42)
-                    integrationRow(runtime.cursorIntegration)
+                    ForEach(Array(runtime.integrations.enumerated()), id: \.element.provider) { index, integration in
+                        integrationRow(integration)
+                        if index < runtime.integrations.count - 1 {
+                            NotchHairline(leadingInset: 42)
+                        }
+                    }
                 }
                 .padding(.horizontal, 14)
                 .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
@@ -297,7 +208,7 @@ struct SettingsView: View {
                 if showsStatus(integration.status) {
                     HStack(spacing: 5) {
                         Circle()
-                            .fill(statusColor(for: integration.status))
+                            .fill(.red)
                             .frame(width: 6, height: 6)
                         Text(integration.status.title)
                     }
@@ -463,164 +374,10 @@ struct SettingsView: View {
         )
     }
 
-    @ViewBuilder
-    private var updateControl: some View {
-        switch runtime.updates.state {
-        case .idle:
-            Button("Check for Updates") { Task { await runtime.updates.check() } }
-                .buttonStyle(NotchPillButtonStyle())
-        case .checking:
-            ProgressView().controlSize(.small)
-        case .upToDate:
-            Label("Up to date", systemImage: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.green)
-        case .noRelease:
-            Label("No releases yet", systemImage: "shippingbox")
-                .font(NotchWindowFont.caption)
-                .foregroundStyle(NotchWindowPalette.secondaryText)
-        case let .available(version, _):
-            Button("Download \(version)") { runtime.updates.openAvailableRelease() }
-                .buttonStyle(NotchPillButtonStyle())
-        case let .failed(message):
-            Button("Retry") { Task { await runtime.updates.check() } }
-                .buttonStyle(NotchPillButtonStyle())
-                .help(message)
-        }
-    }
-
     private func showsStatus(_ status: ProviderIntegrationStatus) -> Bool {
         switch status {
         case .unavailable: true
         case .notInstalled, .awaitingFirstEvent, .connected: false
         }
-    }
-
-    private func statusColor(for status: ProviderIntegrationStatus) -> Color {
-        switch status {
-        case .connected: .green
-        case .awaitingFirstEvent: .orange
-        case .notInstalled: .secondary
-        case .unavailable: .red
-        }
-    }
-}
-
-// MARK: - Settings chrome
-
-private struct SettingsHeading: View {
-    let title: String
-    let detail: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(NotchWindowFont.display)
-                .foregroundStyle(.white.opacity(0.92))
-            Text(detail)
-                .font(NotchWindowFont.caption)
-                .foregroundStyle(NotchWindowPalette.secondaryText)
-        }
-    }
-}
-
-/// Section of title + detail rows, matching T3 Code’s flat settings list.
-private struct SettingsSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(NotchWindowFont.sectionLabel)
-                .foregroundStyle(.white.opacity(0.74))
-                .padding(.bottom, 8)
-
-            content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// Title + optional detail on the left, control trailing on the right.
-private struct SettingsControlRow<Control: View>: View {
-    let title: String
-    var detail: String?
-    @ViewBuilder let control: Control
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
-                if let detail {
-                    Text(detail)
-                        .font(NotchWindowFont.caption)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            control
-                .layoutPriority(1)
-        }
-        .padding(.vertical, 10)
-    }
-}
-
-private struct SettingsToggleRow: View {
-    let title: String
-    var detail: String?
-    @Binding var isOn: Bool
-
-    var body: some View {
-        SettingsControlRow(title: title, detail: detail) {
-            Toggle(title, isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .tint(Color.accentColor)
-        }
-    }
-}
-
-private struct SettingsMenuRow<Value: Hashable>: View {
-    let title: String
-    var detail: String?
-    @Binding var selection: Value
-    let options: [(Value, String)]
-
-    var body: some View {
-        SettingsControlRow(title: title, detail: detail) {
-            NotchMenuPicker(
-                selection: $selection,
-                options: options.map { (value: $0.0, title: $0.1) },
-                accessibilityLabel: title
-            )
-        }
-    }
-}
-
-private struct SettingsMessage: View {
-    let text: String
-    let symbol: String
-    let color: Color
-
-    var body: some View {
-        Label(text, systemImage: symbol)
-            .font(.caption)
-            .foregroundStyle(color)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
-    }
-}
-
-private extension View {
-    func settingsPanePadding() -> some View {
-        padding(.horizontal, NotchWindowMetrics.contentInset)
-            .padding(.top, 18)
-            .padding(.bottom, 16)
     }
 }

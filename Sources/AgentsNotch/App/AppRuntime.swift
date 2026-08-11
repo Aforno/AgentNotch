@@ -6,20 +6,8 @@ import Observation
 @Observable
 @MainActor
 final class AppRuntime {
-    enum SelfTestStatus: Equatable {
-        case idle
-        case running
-        case passed(Date)
-        case failed(String)
-    }
-
     let activity: AgentActivityService
-    let codexIntegration: ProviderIntegrationManager
-    let claudeIntegration: ProviderIntegrationManager
-    let grokIntegration: ProviderIntegrationManager
-    let geminiIntegration: ProviderIntegrationManager
-    let openCodeIntegration: ProviderIntegrationManager
-    let cursorIntegration: ProviderIntegrationManager
+    let integrations: [ProviderIntegrationManager]
     let providerAdapters: [HookProviderAdapter]
     let notifications: AgentNotificationService
     let updates: UpdateService
@@ -33,7 +21,6 @@ final class AppRuntime {
     private(set) var lastEventReceivedAt: [AgentProvider: Date] = [:]
     private(set) var requestedSessionID: String?
     private(set) var activitySearchRequest: UInt64 = 0
-    private(set) var selfTestStatuses: [AgentProvider: SelfTestStatus] = [:]
     var openActivityCenterHandler: (() -> Void)?
     var openOnboardingHandler: (() -> Void)?
     var openSettingsHandler: (() -> Void)?
@@ -63,6 +50,14 @@ final class AppRuntime {
     /// How long restored unverified runners stay in `.unknown` before the app
     /// assumes they ended without a hook. Live events cancel this per session.
     static let unknownSessionGracePeriod: Duration = .seconds(90)
+    private static let integratedProviders: [AgentProvider] = [
+        .codex,
+        .claudeCode,
+        .grok,
+        .geminiCLI,
+        .openCode,
+        .cursor,
+    ]
 
     init(
         persistence: SessionPersistence = SessionPersistence(),
@@ -85,45 +80,15 @@ final class AppRuntime {
         self.persistMaximumDelay = persistMaximumDelay
         self.historyRetentionDays = historyRetentionDays
         activity = AgentActivityService()
-        codexIntegration = ProviderIntegrationManager(
-            provider: .codex,
-            homeDirectoryURL: providerHomeDirectoryURL,
-            bundledRelayURL: bundledRelayURL
-        )
-        claudeIntegration = ProviderIntegrationManager(
-            provider: .claudeCode,
-            homeDirectoryURL: providerHomeDirectoryURL,
-            bundledRelayURL: bundledRelayURL
-        )
-        grokIntegration = ProviderIntegrationManager(
-            provider: .grok,
-            homeDirectoryURL: providerHomeDirectoryURL,
-            bundledRelayURL: bundledRelayURL
-        )
-        geminiIntegration = ProviderIntegrationManager(
-            provider: .geminiCLI,
-            homeDirectoryURL: providerHomeDirectoryURL,
-            bundledRelayURL: bundledRelayURL
-        )
-        openCodeIntegration = ProviderIntegrationManager(
-            provider: .openCode,
-            homeDirectoryURL: providerHomeDirectoryURL,
-            bundledRelayURL: bundledRelayURL
-        )
-        cursorIntegration = ProviderIntegrationManager(
-            provider: .cursor,
-            homeDirectoryURL: providerHomeDirectoryURL,
-            bundledRelayURL: bundledRelayURL
-        )
-        providerAdapters = [
-            codexIntegration,
-            claudeIntegration,
-            grokIntegration,
-            geminiIntegration,
-            openCodeIntegration,
-            cursorIntegration,
-        ]
-            .map(HookProviderAdapter.init)
+        let integrations = Self.integratedProviders.map { provider in
+            ProviderIntegrationManager(
+                provider: provider,
+                homeDirectoryURL: providerHomeDirectoryURL,
+                bundledRelayURL: bundledRelayURL
+            )
+        }
+        self.integrations = integrations
+        providerAdapters = integrations.map(HookProviderAdapter.init)
         notifications = AgentNotificationService()
         updates = UpdateService()
         #if DEBUG
@@ -135,13 +100,24 @@ final class AppRuntime {
     }
 
     func start() async {
-        guard !acceptsEvents else { return }
+        guard let generation = beginStartup() else { return }
+        startSocket(generation: generation)
+        guard await restorePersistedState(generation: generation) else { return }
+        completeRestoration(generation: generation)
+        guard await startProviderMonitoring(generation: generation) else { return }
+        updates.checkAutomaticallyIfNeeded()
+    }
+
+    private func beginStartup() -> Int? {
+        guard !acceptsEvents else { return nil }
         lifecycleGeneration += 1
-        let generation = lifecycleGeneration
         acceptsEvents = true
         isRestoring = true
         startupEvents.removeAll(keepingCapacity: true)
+        return lifecycleGeneration
+    }
 
+    private func startSocket(generation: Int) {
         // Bind before any awaited restore work. Hooks emitted during startup are
         // buffered and replayed after the persisted snapshot is installed.
         let server = UnixSocketServer(socketURL: socketURL) { [weak self] event in
@@ -158,12 +134,13 @@ final class AppRuntime {
             socketStatus = "Unavailable"
             socketError = error.localizedDescription
         }
+    }
 
+    private func restorePersistedState(generation: Int) async -> Bool {
         let loadResult = await persistence.load()
-        guard acceptsEvents, generation == lifecycleGeneration else { return }
-        let saved = loadResult.sessions
+        guard isCurrentLifecycle(generation) else { return false }
         persistenceError = loadResult.recoveryMessage
-        activity.replaceSessions(saved)
+        activity.replaceSessions(loadResult.sessions)
         // Do not invent completion for restored runners. Dead origin PIDs are
         // completed; everything else becomes `.unknown` until a live hook or
         // the reconnect grace period resolves them. Waiting rows stay waiting.
@@ -171,9 +148,9 @@ final class AppRuntime {
         let restoredSessions = activity.sessions
         let grokHome = self.grokHome
         let grokEvidence = await Task.detached(priority: .utility) {
-            Self.discoverGrokSessionContext(in: restoredSessions, grokHome: grokHome)
+            GrokSessionRestorer.discover(in: restoredSessions, grokHome: grokHome)
         }.value
-        guard acceptsEvents, generation == lifecycleGeneration else { return }
+        guard isCurrentLifecycle(generation) else { return false }
         applyGrokSessionContext(grokEvidence)
         pruneHistory()
         #if DEBUG
@@ -184,10 +161,15 @@ final class AppRuntime {
         // Always save the reconciled snapshot. This persists restored Grok
         // relationships and recreates a clean file after corruption recovery.
         let saveError = await persistence.save(persistableSessions)
-        guard acceptsEvents, generation == lifecycleGeneration else { return }
+        guard isCurrentLifecycle(generation) else { return false }
         if let error = saveError {
             persistenceError = error
         }
+        return true
+    }
+
+    private func completeRestoration(generation: Int) {
+        guard isCurrentLifecycle(generation) else { return }
         activity.onSessionsChanged = { [weak self] _ in
             self?.schedulePersist()
         }
@@ -198,14 +180,19 @@ final class AppRuntime {
             process(event, notify: false)
         }
         scheduleUnknownSessionGracePeriod(generation: generation)
+    }
 
-        if monitorProviders {
-            for adapter in providerAdapters {
-                guard acceptsEvents, generation == lifecycleGeneration else { return }
-                try? await adapter.startMonitoring()
-            }
+    private func startProviderMonitoring(generation: Int) async -> Bool {
+        guard monitorProviders else { return isCurrentLifecycle(generation) }
+        for adapter in providerAdapters {
+            guard isCurrentLifecycle(generation) else { return false }
+            try? await adapter.startMonitoring()
         }
-        updates.checkAutomaticallyIfNeeded()
+        return isCurrentLifecycle(generation)
+    }
+
+    private func isCurrentLifecycle(_ generation: Int) -> Bool {
+        acceptsEvents && generation == lifecycleGeneration
     }
 
     func stop() {
@@ -311,53 +298,6 @@ final class AppRuntime {
         }
     }
 
-    nonisolated private static func discoverGrokSessionContext(
-        in sessions: [AgentSession],
-        grokHome: URL
-    ) -> GrokRestoreEvidence {
-        let grokPrefix = "\(AgentProvider.grok.rawValue):"
-        var workflowContexts: [String: GrokSessionContext] = [:]
-        var relationshipEvents: [AgentEvent] = []
-
-        for session in sessions where session.provider == .grok {
-            guard session.id.hasPrefix(grokPrefix),
-                  let workspace = session.workingDirectory else { continue }
-            let nativeSessionID = String(session.id.dropFirst(grokPrefix.count))
-            let context = GrokSessionContextResolver.resolve(
-                sessionId: nativeSessionID,
-                workspaceRoot: workspace,
-                grokHome: grokHome
-            )
-
-            if let parent = context.parentSessionId {
-                relationshipEvents.append(AgentEvent(
-                    type: .activity,
-                    sessionId: session.id,
-                    provider: .grok,
-                    activity: session.currentActivity,
-                    state: session.state,
-                    timestamp: session.updatedAt,
-                    workingDirectory: session.workingDirectory,
-                    parentSessionId: "\(grokPrefix)\(parent)",
-                    agentRole: context.agentRole
-                ))
-            }
-            if let owner = context.workflowOwnerSessionId {
-                workflowContexts[owner] = context
-            }
-        }
-
-        let workflowEvents = workflowContexts.values.compactMap { context -> AgentEvent? in
-            guard let workflowUpdatedAt = context.workflowUpdatedAt else { return nil }
-            return context.workflowEvent(now: workflowUpdatedAt, workingDirectory: nil)
-        }
-        .sorted { $0.sessionId < $1.sessionId }
-        return GrokRestoreEvidence(
-            relationshipEvents: relationshipEvents,
-            workflowEvents: workflowEvents
-        )
-    }
-
     private func applyGrokSessionContext(_ evidence: GrokRestoreEvidence) {
         for event in evidence.relationshipEvents {
             activity.ingest(event)
@@ -423,52 +363,6 @@ final class AppRuntime {
         requestedSessionID = nil
     }
 
-    func runSelfTest(for provider: AgentProvider) {
-        guard selfTestStatuses[provider] != .running else { return }
-        guard let integration = integration(for: provider) else {
-            selfTestStatuses[provider] = .failed("This provider does not support relay self-tests.")
-            return
-        }
-        selfTestStatuses[provider] = .running
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await integration.prepareForMonitoring()
-            guard !integration.status.canInstall else {
-                selfTestStatuses[provider] = .failed(
-                    integration.lastError ?? "Install the provider hooks before testing the relay."
-                )
-                return
-            }
-
-            let nativeSessionID = "self-test:\(UUID().uuidString)"
-            let sessionID = "\(provider.rawValue):\(nativeSessionID)"
-            do {
-                let payload = try relaySelfTestPayload(provider: provider, sessionID: nativeSessionID)
-                let executableURL = integration.installedRelayURL
-                let socketURL = socketURL
-                try await Task.detached {
-                    try RelaySelfTestRunner.run(
-                        executableURL: executableURL,
-                        provider: provider,
-                        socketURL: socketURL,
-                        payload: payload
-                    )
-                }.value
-                for _ in 0..<20 {
-                    if activity.sessions.contains(where: { $0.id == sessionID }) {
-                        activity.removeSession(id: sessionID)
-                        selfTestStatuses[provider] = .passed(Date())
-                        return
-                    }
-                    try await Task.sleep(for: .milliseconds(50))
-                }
-                selfTestStatuses[provider] = .failed("The installed relay did not deliver the test event.")
-            } catch {
-                selfTestStatuses[provider] = .failed(error.localizedDescription)
-            }
-        }
-    }
-
     func clearHistory() {
         activity.clearRecent()
     }
@@ -509,87 +403,7 @@ final class AppRuntime {
         activity.pruneCompleted(olderThan: TimeInterval(days * 24 * 60 * 60))
     }
 
-    private func integration(for provider: AgentProvider) -> ProviderIntegrationManager? {
-        switch provider {
-        case .codex: codexIntegration
-        case .claudeCode: claudeIntegration
-        case .grok: grokIntegration
-        case .geminiCLI: geminiIntegration
-        case .openCode: openCodeIntegration
-        case .cursor: cursorIntegration
-        default: nil
-        }
-    }
-
-    private func relaySelfTestPayload(provider: AgentProvider, sessionID: String) throws -> Data {
-        let hookEventName = switch provider {
-        case .geminiCLI: "BeforeAgent"
-        case .grok: "user_prompt_submit"
-        case .cursor: "beforeSubmitPrompt"
-        default: "UserPromptSubmit"
-        }
-        var object: [String: Any] = [
-            "session_id": sessionID,
-            "cwd": FileManager.default.homeDirectoryForCurrentUser.path,
-            "hook_event_name": hookEventName,
-            "prompt": "Connection self-test",
-        ]
-        if provider == .cursor {
-            object["conversation_id"] = object.removeValue(forKey: "session_id")
-            object["workspace_roots"] = [object.removeValue(forKey: "cwd") as? String].compactMap { $0 }
-        }
-        return try JSONSerialization.data(withJSONObject: object)
-    }
-}
-
-private struct GrokRestoreEvidence: Sendable {
-    let relationshipEvents: [AgentEvent]
-    let workflowEvents: [AgentEvent]
-}
-
-private enum RelaySelfTestRunner {
-    static func run(
-        executableURL: URL,
-        provider: AgentProvider,
-        socketURL: URL,
-        payload: Data
-    ) throws {
-        let process = Process()
-        let input = Pipe()
-        let completed = DispatchSemaphore(value: 0)
-        process.executableURL = executableURL
-        process.arguments = [
-            "--provider", provider.rawValue,
-            "--socket", socketURL.path,
-            "--self-test",
-        ]
-        process.standardInput = input
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        process.terminationHandler = { _ in completed.signal() }
-
-        try process.run()
-        try input.fileHandleForWriting.write(contentsOf: payload)
-        try input.fileHandleForWriting.close()
-
-        guard completed.wait(timeout: .now() + 3) == .success else {
-            process.terminate()
-            throw RelaySelfTestError.timedOut
-        }
-        guard process.terminationStatus == 0 else {
-            throw RelaySelfTestError.failed(process.terminationStatus)
-        }
-    }
-}
-
-private enum RelaySelfTestError: LocalizedError {
-    case timedOut
-    case failed(Int32)
-
-    var errorDescription: String? {
-        switch self {
-        case .timedOut: "The installed relay self-test timed out."
-        case let .failed(status): "The installed relay exited with status \(status)."
-        }
+    func integration(for provider: AgentProvider) -> ProviderIntegrationManager? {
+        integrations.first { $0.provider == provider }
     }
 }

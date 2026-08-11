@@ -9,7 +9,7 @@ struct AgentListView: View {
     let onOpenActivityCenter: () -> Void
     let onSelect: (String) -> Void
 
-    static func rowsHeight(for sessions: [AgentSession], relatedSessions _: [AgentSession]) -> CGFloat {
+    static func rowsHeight(for sessions: [AgentSession]) -> CGFloat {
         CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
     }
 
