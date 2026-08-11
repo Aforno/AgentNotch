@@ -95,12 +95,23 @@ final class RoadmapFeatureTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let socketURL = root.appendingPathComponent("agent.sock")
+        let bundledRelayURL = root.appendingPathComponent("agentsnotch-hook")
+        try Data("test relay".utf8).write(to: bundledRelayURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: bundledRelayURL.path
+        )
         let runtime = AppRuntime(
             persistence: SessionPersistence(fileURL: root.appendingPathComponent("sessions.json")),
             socketURL: socketURL,
             monitorProviders: false,
+            grokHome: root.appendingPathComponent(".grok", isDirectory: true),
+            providerHomeDirectoryURL: root,
+            bundledRelayURL: bundledRelayURL,
             historyRetentionDays: { 7 }
         )
+        runtime.codexIntegration.install()
+        XCTAssertEqual(runtime.codexIntegration.status, .awaitingFirstEvent)
         await runtime.start()
         defer { runtime.stop() }
 

@@ -63,6 +63,8 @@ final class AppRuntime {
         socketURL: URL = AgentSocketLocation.defaultURL,
         monitorProviders: Bool = true,
         grokHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".grok"),
+        providerHomeDirectoryURL: URL? = nil,
+        bundledRelayURL: URL? = nil,
         historyRetentionDays: @escaping () -> Int? = {
             UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int
         }
@@ -73,12 +75,36 @@ final class AppRuntime {
         self.grokHome = grokHome
         self.historyRetentionDays = historyRetentionDays
         activity = AgentActivityService()
-        codexIntegration = ProviderIntegrationManager(provider: .codex)
-        claudeIntegration = ProviderIntegrationManager(provider: .claudeCode)
-        grokIntegration = ProviderIntegrationManager(provider: .grok)
-        geminiIntegration = ProviderIntegrationManager(provider: .geminiCLI)
-        openCodeIntegration = ProviderIntegrationManager(provider: .openCode)
-        cursorIntegration = ProviderIntegrationManager(provider: .cursor)
+        codexIntegration = ProviderIntegrationManager(
+            provider: .codex,
+            homeDirectoryURL: providerHomeDirectoryURL,
+            bundledRelayURL: bundledRelayURL
+        )
+        claudeIntegration = ProviderIntegrationManager(
+            provider: .claudeCode,
+            homeDirectoryURL: providerHomeDirectoryURL,
+            bundledRelayURL: bundledRelayURL
+        )
+        grokIntegration = ProviderIntegrationManager(
+            provider: .grok,
+            homeDirectoryURL: providerHomeDirectoryURL,
+            bundledRelayURL: bundledRelayURL
+        )
+        geminiIntegration = ProviderIntegrationManager(
+            provider: .geminiCLI,
+            homeDirectoryURL: providerHomeDirectoryURL,
+            bundledRelayURL: bundledRelayURL
+        )
+        openCodeIntegration = ProviderIntegrationManager(
+            provider: .openCode,
+            homeDirectoryURL: providerHomeDirectoryURL,
+            bundledRelayURL: bundledRelayURL
+        )
+        cursorIntegration = ProviderIntegrationManager(
+            provider: .cursor,
+            homeDirectoryURL: providerHomeDirectoryURL,
+            bundledRelayURL: bundledRelayURL
+        )
         providerAdapters = [
             codexIntegration,
             claudeIntegration,
