@@ -25,7 +25,10 @@ shasum -a 256 -c Agents-Notch-*-macOS-arm64.zip.sha256
 ```
 
 Unzip the archive, move **Agents Notch.app** to `/Applications`, and open it.
-Published binary releases are Developer ID signed and notarized by Apple.
+Production binary releases are Developer ID signed and notarized by Apple.
+Unsigned previews are explicitly marked as prereleases and may trigger a
+Gatekeeper warning; Control-click the app, choose **Open**, and review the
+prompt before continuing.
 
 ## Develop from source
 
