@@ -22,14 +22,43 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate tag and repository
+        env:
+          RELEASE_MODE: ${{ vars.RELEASE_MODE }}
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
         run: |
+          set -euo pipefail
           ./script/validate_version.sh "$GITHUB_REF_NAME"
           ./script/check_repository.sh
+          if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
+            echo "Publishing an explicitly opted-in unsigned prerelease"
+          elif [[ -z "$RELEASE_MODE" || "$RELEASE_MODE" == "signed" ]]; then
+            for value in \
+              "$MACOS_CERTIFICATE" \
+              "$MACOS_CERTIFICATE_PASSWORD" \
+              "$MACOS_SIGNING_IDENTITY" \
+              "$APPLE_API_KEY_ID" \
+              "$APPLE_API_ISSUER_ID" \
+              "$APPLE_API_PRIVATE_KEY"; do
+              if [[ -z "$value" ]]; then
+                echo "signed releases require all documented signing and notarization secrets" >&2
+                exit 1
+              fi
+            done
+          else
+            echo "unsupported RELEASE_MODE: $RELEASE_MODE" >&2
+            exit 1
+          fi
 
       - name: Test tagged release commit
         run: swift test -c release
 
       - name: Import Developer ID certificate
+        if: vars.RELEASE_MODE != 'unsigned-prerelease'
         env:
           CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE }}
           CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -59,12 +88,18 @@ jobs:
 
       - name: Package, notarize, and staple
         env:
+          RELEASE_MODE: ${{ vars.RELEASE_MODE }}
           SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
+            AGENTS_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+              ./script/package_release.sh --adhoc
+            exit 0
+          fi
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
           printf '%s' "$API_PRIVATE_KEY" > "$API_KEY_PATH"
           chmod 0600 "$API_KEY_PATH"
@@ -80,16 +115,33 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MODE: ${{ vars.RELEASE_MODE }}
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
           ARCHIVE="dist/Agents-Notch-$VERSION-macOS-arm64.zip"
-          gh release create "$GITHUB_REF_NAME" \
-            "$ARCHIVE" \
-            "$ARCHIVE.sha256" \
-            --verify-tag \
-            --generate-notes \
-            --title "Agents Notch $VERSION"
+          if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
+            NOTES_FILE="$RUNNER_TEMP/unsigned-prerelease-notes.md"
+            cat > "$NOTES_FILE" <<'EOF'
+          > [!WARNING]
+          > This preview is ad-hoc signed and has not been notarized by Apple. macOS Gatekeeper may block or warn about it. Verify the published SHA-256 checksum before opening the app.
+          EOF
+            gh release create "$GITHUB_REF_NAME" \
+              "$ARCHIVE" \
+              "$ARCHIVE.sha256" \
+              --verify-tag \
+              --generate-notes \
+              --notes-file "$NOTES_FILE" \
+              --prerelease \
+              --title "Agents Notch $VERSION (Unsigned Preview)"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "$ARCHIVE" \
+              "$ARCHIVE.sha256" \
+              --verify-tag \
+              --generate-notes \
+              --title "Agents Notch $VERSION"
+          fi
 
       - name: Remove temporary signing keychain
         if: always()

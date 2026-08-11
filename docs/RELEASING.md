@@ -1,8 +1,10 @@
 # Releasing Agents Notch
 
-Agents Notch releases are Apple Silicon ZIP archives signed with a Developer ID
-Application certificate, notarized by Apple, stapled, and accompanied by a
-SHA-256 checksum.
+Production Agents Notch releases are Apple Silicon ZIP archives signed with a
+Developer ID Application certificate, notarized by Apple, stapled, and
+accompanied by a SHA-256 checksum. Explicitly opted-in unsigned prereleases are
+ad-hoc signed, clearly labeled as previews, and are never presented as
+notarized builds.
 
 ## Prepare the release
 
@@ -60,3 +62,24 @@ the app, creates the checksum, and publishes both files to the GitHub release.
 
 Signing credentials are an external release gate. They must never be committed
 to this repository or printed in workflow logs.
+
+## Unsigned prerelease
+
+When signing credentials are unavailable and an unsigned preview is explicitly
+approved, opt in before pushing the tag:
+
+```sh
+gh variable set RELEASE_MODE --repo Aforno/AgentNotch \
+  --body unsigned-prerelease
+git tag -a "v$(cat VERSION)" -m "Agents Notch $(cat VERSION)"
+git push origin "v$(cat VERSION)"
+```
+
+The workflow ad-hoc signs the app, marks the GitHub release as a prerelease,
+and puts a notarization and Gatekeeper warning at the top of its notes. After
+the release succeeds, remove the temporary opt-in so later tags default back to
+the signed release path:
+
+```sh
+gh variable delete RELEASE_MODE --repo Aforno/AgentNotch
+```

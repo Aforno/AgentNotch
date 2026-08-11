@@ -6,8 +6,15 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-11
+
 ### Added
 
+- Native notch-attached status UI for local coding-agent activity.
+- Observer-only lifecycle hook integrations for Codex, Claude Code, and Grok.
+- Provider-neutral local event protocol over a private Unix socket.
+- Structured plan, workflow, and subagent progress rendering.
+- Reproducible CI and signed/notarized release packaging workflows.
 - Activity Center with searchable, filterable local session history and
   detailed plans, workflows, relationships, files, and events.
 - First-run setup, integration health checks, and menu-bar access for displays
@@ -36,13 +43,3 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Activity Center.
 - Settings dropdowns use a T3-style dark pill trigger and solid borderless
   floating menu (no speech-bubble popover) with selected-row highlight.
-
-## [0.1.0] - 2026-08-08
-
-### Added
-
-- Native notch-attached status UI for local coding-agent activity.
-- Observer-only lifecycle hook integrations for Codex, Claude Code, and Grok.
-- Provider-neutral local event protocol over a private Unix socket.
-- Structured plan, workflow, and subagent progress rendering.
-- Reproducible CI and signed/notarized release packaging workflows.
