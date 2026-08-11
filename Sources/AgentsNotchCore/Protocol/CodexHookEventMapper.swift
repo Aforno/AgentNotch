@@ -25,6 +25,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var hookEventName: String
     public var model: String?
     public var turnId: String?
+    public var approvalsReviewer: String?
     public var prompt: String?
     public var source: String?
     public var reason: String?
@@ -48,6 +49,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         case hookEventName, hookEventNameSnake = "hook_event_name"
         case model
         case turnId, turnIdSnake = "turn_id"
+        case approvalsReviewer, approvalsReviewerSnake = "approvals_reviewer"
         case prompt, source, reason, status
         case toolName, toolNameSnake = "tool_name"
         case toolInput, toolInputSnake = "tool_input"
@@ -80,6 +82,11 @@ public struct AgentHookPayload: Decodable, Sendable {
         hookEventName = try values.decodeEither(String.self, forKey: .hookEventName, or: .hookEventNameSnake)
         model = try values.decodeIfPresent(String.self, forKey: .model)
         turnId = try values.decodeEitherIfPresent(String.self, forKey: .turnId, or: .turnIdSnake)
+        approvalsReviewer = try values.decodeEitherIfPresent(
+            String.self,
+            forKey: .approvalsReviewer,
+            or: .approvalsReviewerSnake
+        )
         prompt = try values.decodeIfPresent(String.self, forKey: .prompt)
         source = try values.decodeIfPresent(String.self, forKey: .source)
         reason = try values.decodeIfPresent(String.self, forKey: .reason)
@@ -108,6 +115,7 @@ public enum AgentHookEventMapper {
     public static func map(
         _ payload: AgentHookPayload,
         provider: AgentProvider,
+        permissionRequestRequiresUserInput: Bool = true,
         now: Date = Date()
     ) -> AgentEvent? {
         let nativeSessionId: String
@@ -190,7 +198,7 @@ public enum AgentHookEventMapper {
                 metadata: baseMetadata
             )
 
-        case "PermissionRequest":
+        case "PermissionRequest" where permissionRequestRequiresUserInput:
             event = AgentEvent(
                 type: .waiting,
                 sessionId: sessionId,
@@ -201,6 +209,9 @@ public enum AgentHookEventMapper {
                 workingDirectory: payload.cwd.nonEmpty,
                 metadata: baseMetadata
             )
+
+        case "PermissionRequest":
+            event = nil
 
         case "PermissionDenied":
             event = AgentEvent(
@@ -621,8 +632,17 @@ public enum AgentHookEventMapper {
 public typealias CodexHookPayload = AgentHookPayload
 
 public enum CodexHookEventMapper {
-    public static func map(_ payload: CodexHookPayload, now: Date = Date()) -> AgentEvent? {
-        AgentHookEventMapper.map(payload, provider: .codex, now: now)
+    public static func map(
+        _ payload: CodexHookPayload,
+        permissionRequestRequiresUserInput: Bool = true,
+        now: Date = Date()
+    ) -> AgentEvent? {
+        AgentHookEventMapper.map(
+            payload,
+            provider: .codex,
+            permissionRequestRequiresUserInput: permissionRequestRequiresUserInput,
+            now: now
+        )
     }
 }
 

@@ -50,8 +50,14 @@ do {
         payload.parentSessionId = grokContext.parentSessionId ?? payload.parentSessionId
         payload.description = grokContext.agentRole ?? payload.description
     }
+    let permissionRequestRequiresUserInput = provider != .codex
+        || CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
     if !isDuplicateClaudeCompatibilityHook,
-       var event = AgentHookEventMapper.map(payload, provider: provider)
+       var event = AgentHookEventMapper.map(
+           payload,
+           provider: provider,
+           permissionRequestRequiresUserInput: permissionRequestRequiresUserInput
+       )
     {
         event.origin = hookOrigin()
         if isSelfTest {

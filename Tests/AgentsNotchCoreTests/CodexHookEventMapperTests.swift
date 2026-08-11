@@ -62,6 +62,90 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.sessionId, "codex:thr_123")
     }
 
+    func testAutoReviewedPermissionPayloadDoesNotCreateAttention() throws {
+        let payload = try decode("""
+        {
+          "session_id": "thr_auto",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest",
+          "approvals_reviewer": "auto_review",
+          "tool_name": "Bash"
+        }
+        """)
+
+        let requiresUserInput = CodexApprovalContextResolver
+            .permissionRequestRequiresUserInput(for: payload)
+
+        XCTAssertFalse(requiresUserInput)
+        XCTAssertNil(
+            CodexHookEventMapper.map(
+                payload,
+                permissionRequestRequiresUserInput: requiresUserInput
+            )
+        )
+    }
+
+    func testAutoReviewerIsResolvedFromMatchingTranscriptTurn() throws {
+        let transcript = try temporaryTranscript("""
+        {"type":"turn_context","payload":{"turn_id":"target","approvals_reviewer":"auto_review"}}
+        {"type":"turn_context","payload":{"turn_id":"other","approvals_reviewer":"user"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_auto",
+          "turn_id": "target",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest"
+        }
+        """)
+
+        XCTAssertFalse(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+    }
+
+    func testExplicitUserReviewerOverridesAutomaticTranscriptContext() throws {
+        let transcript = try temporaryTranscript("""
+        {"type":"turn_context","payload":{"turn_id":"target","approvals_reviewer":"auto_review"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_user",
+          "turn_id": "target",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest",
+          "approvals_reviewer": "user"
+        }
+        """)
+
+        XCTAssertTrue(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+    }
+
+    func testMissingOrMalformedReviewerContextKeepsUserAttention() throws {
+        let transcript = try temporaryTranscript("not-json\n")
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_unknown",
+          "turn_id": "target",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest"
+        }
+        """)
+
+        XCTAssertTrue(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+        XCTAssertNotNil(CodexHookEventMapper.map(payload))
+    }
+
     func testApplyPatchExtractsChangedFile() throws {
         let payload = try decode("""
         {
@@ -379,5 +463,12 @@ final class CodexHookEventMapperTests: XCTestCase {
 
     private func decode(_ json: String) throws -> CodexHookPayload {
         try JSONDecoder().decode(CodexHookPayload.self, from: Data(json.utf8))
+    }
+
+    private func temporaryTranscript(_ contents: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agentsnotch-transcript-\(UUID().uuidString).jsonl")
+        try Data(contents.utf8).write(to: url, options: .atomic)
+        return url
     }
 }
