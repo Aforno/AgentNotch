@@ -2,7 +2,7 @@ import AgentsNotchCore
 import Darwin
 import Foundation
 
-let input = (try? FileHandle.standardInput.read(upToCount: AgentHookInput.maximumBytes + 1)) ?? Data()
+let input = readHookInput()
 let arguments = CommandLine.arguments
 let explicitProvider: AgentProvider? = {
     if let index = arguments.firstIndex(of: "--provider"), arguments.indices.contains(index + 1) {
@@ -11,8 +11,17 @@ let explicitProvider: AgentProvider? = {
     return nil
 }()
 let configuredProvider = explicitProvider ?? .codex
-let provider: AgentProvider = explicitProvider
-    ?? (ProcessInfo.processInfo.environment["GROK_HOOK_EVENT"] == nil ? .codex : .grok)
+let grokHookEvent = ProcessInfo.processInfo.environment["GROK_HOOK_EVENT"]
+// Grok can execute Claude settings hooks (--provider claude-code). Attribute
+// those to Grok so Claude-only installs do not mislabel Grok activity.
+let provider: AgentProvider = {
+    let resolved = explicitProvider
+        ?? (grokHookEvent == nil ? .codex : .grok)
+    if grokHookEvent != nil, resolved == .claudeCode {
+        return .grok
+    }
+    return resolved
+}()
 let socketURL: URL = {
     if let index = arguments.firstIndex(of: "--socket"), arguments.indices.contains(index + 1) {
         return URL(fileURLWithPath: arguments[index + 1])
@@ -23,15 +32,20 @@ let isSelfTest = arguments.contains("--self-test")
 let grokNativeConfiguration = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent(".grok/hooks/agentsnotch.json")
 let grokHasNativeRelay = configurationContainsNativeGrokRelay(at: grokNativeConfiguration)
-let isDuplicateClaudeCompatibilityHook = ProcessInfo.processInfo.environment["GROK_HOOK_EVENT"] != nil
+let isDuplicateClaudeCompatibilityHook = grokHookEvent != nil
     && configuredProvider == .claudeCode
     && grokHasNativeRelay
 
 do {
     var payload = try AgentHookInput.decode(input)
-    let grokContext = provider == .grok
-        ? GrokSessionContextResolver.resolve(payload)
-        : nil
+    // Skip the Grok session-tree walk on high-frequency tool hooks when the
+    // payload already has hierarchy and we do not need on-disk workflow state.
+    let grokContext: GrokSessionContext?
+    if provider == .grok, shouldResolveGrokSessionContext(payload) {
+        grokContext = GrokSessionContextResolver.resolve(payload)
+    } else {
+        grokContext = nil
+    }
     if let grokContext {
         payload.parentSessionId = grokContext.parentSessionId ?? payload.parentSessionId
         payload.description = grokContext.agentRole ?? payload.description
@@ -77,6 +91,25 @@ do {
 } catch {
     // Monitoring must never interrupt the agent. All providers treat exit 0 as success.
     FileHandle.standardOutput.write(Data("{}\n".utf8))
+}
+
+/// Reads stdin up to the safety cap and drains any remainder so an oversized
+/// provider payload cannot observe EPIPE mid-write.
+private func readHookInput() -> Data {
+    let handle = FileHandle.standardInput
+    let cap = AgentHookInput.maximumBytes + 1
+    var data = (try? handle.read(upToCount: cap)) ?? Data()
+    if data.count >= cap {
+        // Cap exceeded (or exactly filled the probe). Consume the rest of the
+        // pipe so the writer finishes cleanly; the decoder will still reject.
+        while let chunk = try? handle.read(upToCount: 65_536), !chunk.isEmpty {
+            // discard
+        }
+        if data.count > AgentHookInput.maximumBytes {
+            data = data.prefix(AgentHookInput.maximumBytes + 1)
+        }
+    }
+    return data
 }
 
 private func hookOrigin() -> AgentOrigin? {
@@ -143,6 +176,18 @@ private func containsNativeGrokRelay(_ value: Any) -> Bool {
     return false
 }
 
+/// Whether this Grok hook needs the on-disk session-tree walk.
+/// High-frequency PreToolUse/PostToolUse with hierarchy already present and
+/// no workflow publish requirement skip the unbounded FS scan.
+private func shouldResolveGrokSessionContext(_ payload: AgentHookPayload) -> Bool {
+    if shouldPublishWorkflowState(payload) { return true }
+    // Parent already known and no workflow publish: skip the tree walk.
+    if payload.parentSessionId?.nonEmpty != nil { return false }
+    // Otherwise resolve so children can attach (own-directory short-circuit
+    // keeps top-level parent tool hooks cheap).
+    return true
+}
+
 private func shouldPublishWorkflowState(_ payload: AgentHookPayload) -> Bool {
     let event = payload.hookEventName.replacingOccurrences(of: "_", with: "").lowercased()
     if ["subagentstart", "subagentstop", "sessionend", "stop"].contains(event) {
@@ -153,5 +198,5 @@ private func shouldPublishWorkflowState(_ payload: AgentHookPayload) -> Bool {
 
 private func isTerminalLifecycleHook(_ payload: AgentHookPayload) -> Bool {
     let event = payload.hookEventName.replacingOccurrences(of: "_", with: "").lowercased()
-    return ["stop", "stopfailure", "sessionend"].contains(event)
+    return ["stop", "stopfailure", "sessionend", "afteragent"].contains(event)
 }

@@ -150,9 +150,10 @@ public final class AgentActivityService {
         guard event.protocolVersion == 1 else { return }
         var event = event
         let now = Date()
-        if event.timestamp > now.addingTimeInterval(300) {
-            // The socket is local but extensible. A malformed clock must not pin
-            // a session in the future and make every later terminal event stale.
+        if event.timestamp > now {
+            // The socket is local but extensible. Any future skew (not only the
+            // extreme >5min case) must not pin updatedAt ahead of wall-clock
+            // completions, or later terminal/activity events become "stale".
             event.timestamp = now
             if event.plan?.updatedAt ?? .distantPast > now {
                 event.plan?.updatedAt = now
@@ -277,7 +278,12 @@ public final class AgentActivityService {
                 continue
             }
             if let pid = sessions[index].origin?.processIdentifier, !processAlive(pid) {
-                sessions[index].complete(as: .completed, at: sessions[index].updatedAt)
+                let completedAt = sessions[index].updatedAt
+                let parentID = sessions[index].id
+                sessions[index].complete(as: .completed, at: completedAt)
+                // Match ingest: active/waiting children under a terminal parent
+                // must not linger as attention pins after the origin dies.
+                completeActiveDescendants(of: parentID, as: .completed, at: completedAt)
                 changed = true
                 continue
             }
@@ -429,14 +435,33 @@ public final class AgentActivityService {
     }
 
     private func canonicalizedIdentity(for event: AgentEvent) -> AgentEvent {
+        var event = event
+        let prefix = "\(event.provider.rawValue):"
+
+        // After a prior cross-provider collision, rows are stored as provider:id.
+        // Later events still carrying the bare id must resolve to that row
+        // instead of creating a duplicate unprefixed session.
+        if !event.sessionId.hasPrefix(prefix) {
+            let canonicalID = prefix + event.sessionId
+            if sessions.contains(where: { $0.id == canonicalID && $0.provider == event.provider }) {
+                event.sessionId = canonicalID
+                if let parentID = event.parentSessionId, !parentID.hasPrefix(prefix),
+                   sessions.contains(where: {
+                       $0.id == prefix + parentID && $0.provider == event.provider
+                   })
+                {
+                    event.parentSessionId = prefix + parentID
+                }
+                return event
+            }
+        }
+
         let collidingIndices = sessions.indices.filter {
             sessions[$0].id == event.sessionId && sessions[$0].provider != event.provider
         }
         guard !collidingIndices.isEmpty else {
             return event
         }
-        var event = event
-        let prefix = "\(event.provider.rawValue):"
         let originalID = event.sessionId
         for index in collidingIndices {
             let existingProvider = sessions[index].provider
@@ -445,6 +470,13 @@ public final class AgentActivityService {
                 ? sessions[index].id
                 : existingPrefix + sessions[index].id
             sessions[index].id = canonicalID
+            // Keep recentEvents (and attentionEvent(for:)) on the renamed id so
+            // waiting attention cannot surface a stale bare sessionId.
+            for eventIndex in sessions[index].recentEvents.indices
+                where sessions[index].recentEvents[eventIndex].sessionId == originalID
+            {
+                sessions[index].recentEvents[eventIndex].sessionId = canonicalID
+            }
             for childIndex in sessions.indices
                 where sessions[childIndex].provider == existingProvider
                     && sessions[childIndex].parentSessionId == originalID

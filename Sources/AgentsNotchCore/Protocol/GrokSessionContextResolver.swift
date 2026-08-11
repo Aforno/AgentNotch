@@ -86,6 +86,31 @@ public enum GrokSessionContextResolver {
             let bucket = grokHome
                 .appendingPathComponent("sessions", isDirectory: true)
                 .appendingPathComponent(encodedWorkspacePath(workspacePath), isDirectory: true)
+            guard fileManager.fileExists(atPath: bucket.path) else { continue }
+
+            // Prefer the session's own directory. Top-level (non-child) sessions
+            // are the common PreToolUse/PostToolUse path; resolving them must
+            // not list every peer session and probe subagents/*/meta.json.
+            let ownDirectory = bucket.appendingPathComponent(sessionId, isDirectory: true)
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: ownDirectory.path, isDirectory: &isDirectory),
+               isDirectory.boolValue
+            {
+                if let workflow = latestWorkflow(in: ownDirectory, fileManager: fileManager) {
+                    return context(parent: nil, role: nil, owner: sessionId, workflow: workflow)
+                }
+                return GrokSessionContext(
+                    parentSessionId: fallbackParent,
+                    agentRole: fallbackRole,
+                    workflowOwnerSessionId: nil,
+                    workflowTask: nil,
+                    workflowPhase: nil,
+                    workflowState: nil,
+                    workflowUpdate: nil,
+                    workflowUpdatedAt: nil
+                )
+            }
+
             guard let sessionDirectories = try? fileManager.contentsOfDirectory(
                 at: bucket,
                 includingPropertiesForKeys: [.isDirectoryKey],
@@ -98,11 +123,6 @@ public enum GrokSessionContextResolver {
                 sessionDirectories: sessionDirectories
             ) {
                 return resolved
-            }
-
-            let ownDirectory = bucket.appendingPathComponent(sessionId, isDirectory: true)
-            if let workflow = latestWorkflow(in: ownDirectory, fileManager: fileManager) {
-                return context(parent: nil, role: nil, owner: sessionId, workflow: workflow)
             }
         }
 

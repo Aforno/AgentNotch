@@ -35,7 +35,9 @@ final class ProviderIntegrationManager {
     private(set) var status: ProviderIntegrationStatus = .notInstalled
     private(set) var lastError: String?
     /// Remembers that a real (non-self-test) provider event has been observed.
-    /// Survives refresh so Connected is not demoted until uninstall.
+    /// Survives refresh while hooks remain installed so Connected is not
+    /// demoted by a no-op status recompute. Cleared when hooks disappear or
+    /// on uninstall so reinstall cannot falsely report Connected.
     private(set) var hasReceivedEvent = false
 
     private let fileManager: FileManager
@@ -86,6 +88,10 @@ final class ProviderIntegrationManager {
         guard fileManager.isExecutableFile(atPath: installedRelayURL.path),
               hookConfigurationContainsRelay()
         else {
+            // Hooks/relay gone (manual removal or uninstall). Drop sticky
+            // verification so a later install() cannot report Connected
+            // without a post-reinstall event.
+            hasReceivedEvent = false
             status = .notInstalled
             return
         }
@@ -94,11 +100,12 @@ final class ProviderIntegrationManager {
 
     /// Promote to Connected after a genuine provider event (not self-test).
     func noteEventReceived() {
-        hasReceivedEvent = true
         switch status {
         case .awaitingFirstEvent, .connected:
+            hasReceivedEvent = true
             status = .connected
         case .notInstalled, .unavailable:
+            // Do not sticky-set while uninstalled; reinstall must await a new event.
             break
         }
     }

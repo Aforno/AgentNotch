@@ -55,14 +55,15 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         // are history and must never resurrect a completed row.
         let terminalTransitionIsAllowed = !isTerminal || eventIsTerminal || event.explicitlyResumesSession
         // Symmetric reorder case: concurrent ingest can apply a later-timestamp
-        // waiting event before an earlier completed/failed. Terminal still wins
-        // over waiting so the session cannot stick on waitingForUser forever.
-        let isReorderedTerminalVsWaiting = state == .waitingForUser && eventIsTerminal
+        // activity/tool event before an earlier completed/failed. Terminal still
+        // wins over any active non-terminal so the session cannot stick running
+        // (or waiting) forever while the terminal only appears in history.
+        let isReorderedTerminalVsActive = !isTerminal && eventIsTerminal
         let sameTimeKeepsAttention = event.timestamp == updatedAt
             && state == .waitingForUser
             && !eventIsTerminal
             && !event.explicitlyResumesSession
-        let advancesCurrentState = (event.timestamp >= updatedAt || isReorderedTerminalVsWaiting)
+        let advancesCurrentState = (event.timestamp >= updatedAt || isReorderedTerminalVsActive)
             && terminalTransitionIsAllowed
             && !sameTimeKeepsAttention
         if advancesCurrentState {
@@ -70,7 +71,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             if let task = event.task?.nonEmpty { self.task = task }
             if let activity = event.activity?.nonEmpty { currentActivity = activity }
             state = event.resolvedState
-            // Keep session clocks monotonic when an older terminal overrides waiting.
+            // Keep session clocks monotonic when an older terminal overrides active.
             updatedAt = max(updatedAt, event.timestamp)
             // Treat empty/whitespace cwd as absent so hook defaults of "" cannot
             // wipe a previously stored absolute path.
@@ -112,8 +113,36 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             }
             applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
             reconcilePlanWithTerminalState(at: event.timestamp)
-        } else if task == "Untitled task", let task = event.task?.nonEmpty {
-            self.task = task
+        } else {
+            // Non-advancing events (including equal-timestamp waiters blocked by
+            // sameTimeKeepsAttention) may still carry hierarchy/origin from
+            // reconciliation. Merge those without changing state or recency.
+            if let eventOrigin = event.origin, !eventOrigin.isEmpty {
+                origin = eventOrigin
+            }
+            parentSessionId = event.parentSessionId ?? parentSessionId
+            agentRole = event.agentRole ?? agentRole
+            if let directory = event.workingDirectory?.nonEmpty {
+                workingDirectory = workingDirectory ?? directory
+            }
+            applicationURL = applicationURL ?? event.applicationURL
+            // Plan/workflow only at equal-or-newer timestamps so a reordered
+            // stale snapshot cannot rewrite execution UI under a newer state.
+            if event.timestamp >= updatedAt {
+                if let eventPlan = event.plan {
+                    if let currentPlan = plan {
+                        if eventPlan.updatedAt >= currentPlan.updatedAt {
+                            plan = eventPlan
+                        }
+                    } else {
+                        plan = eventPlan
+                    }
+                }
+                applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
+            }
+            if task == "Untitled task", let task = event.task?.nonEmpty {
+                self.task = task
+            }
         }
 
         recentEvents.append(event)
@@ -320,9 +349,16 @@ private extension AgentEvent {
     var explicitlyResumesSession: Bool {
         if type == .started { return true }
         guard let hookEvent = metadata?["hookEvent"] else { return false }
-        return hookEvent
+        switch hookEvent
             .replacingOccurrences(of: "_", with: "")
-            .lowercased() == "userpromptsubmit"
+            .lowercased()
+        {
+        // Claude/Codex/Grok prompt events and Gemini's BeforeAgent alias.
+        case "userpromptsubmit", "beforeagent":
+            return true
+        default:
+            return false
+        }
     }
 }
 

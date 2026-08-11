@@ -110,7 +110,10 @@ public enum AgentHookEventMapper {
         let baseMetadata = [
             "model": payload.model,
             "turnId": payload.turnId,
-            "hookEvent": payload.hookEventName,
+            // Store the canonical lifecycle name when the provider uses an
+            // alias (e.g. Gemini BeforeAgent → UserPromptSubmit) so session
+            // resume and other hookEvent gates stay provider-neutral.
+            "hookEvent": metadataHookEventName(payload.hookEventName),
         ].compactMapValues { $0 }
 
         let event: AgentEvent?
@@ -494,6 +497,16 @@ public enum AgentHookEventMapper {
         case "subagentstop", "subagentend": "SubagentStop"
         default: eventName
         }
+    }
+
+    /// Prefer the canonical lifecycle name only when the provider sent an
+    /// alias that maps to a different event (BeforeAgent → UserPromptSubmit).
+    /// Unaliased names keep their original spelling for diagnostics.
+    private static func metadataHookEventName(_ eventName: String) -> String {
+        let normalized = normalizedEventName(eventName)
+        let rawKey = eventName.replacingOccurrences(of: "_", with: "").lowercased()
+        let normalizedKey = normalized.replacingOccurrences(of: "_", with: "").lowercased()
+        return rawKey == normalizedKey ? eventName : normalized
     }
 
     private static func normalizedToolName(_ toolName: String) -> String {

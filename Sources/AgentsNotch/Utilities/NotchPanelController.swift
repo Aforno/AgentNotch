@@ -46,19 +46,28 @@ final class NotchPanelController: NSWindowController {
             && (geometry.hasPhysicalNotch || UserDefaults.standard.bool(forKey: "showVirtualNotch"))
     }
 
-    func show() {
+    /// Makes the notch panel visible.
+    ///
+    /// - Parameter resetToCompact: When true, snap the AppKit frame to compact
+    ///   notch dimensions (display changes, first presentation). When false and
+    ///   the panel is already visible, only order front — leave size to
+    ///   NotchRootView so presentSession / detail re-entry cannot clip expanded
+    ///   content back to compact while SwiftUI layout stays on `.detail`.
+    func show(resetToCompact: Bool = false) {
         guard isSurfaceEnabled else {
             window?.orderOut(nil)
             return
         }
-        let hasActiveAgents = !runtime.activity.activeSessions.isEmpty
-        let compactEarWidth = DynamicIslandSpacing.compactEarWidth(
-            for: runtime.activity.activeGroupCount
-        )
-        reposition(
-            width: geometry.notchWidth + (hasActiveAgents ? compactEarWidth * 2 : 0),
-            height: geometry.notchHeight + (hasActiveAgents ? 2 : 0)
-        )
+        if resetToCompact || window?.isVisible != true {
+            let hasActiveAgents = !runtime.activity.activeSessions.isEmpty
+            let compactEarWidth = DynamicIslandSpacing.compactEarWidth(
+                for: runtime.activity.activeGroupCount
+            )
+            reposition(
+                width: geometry.notchWidth + (hasActiveAgents ? compactEarWidth * 2 : 0),
+                height: geometry.notchHeight + (hasActiveAgents ? 2 : 0)
+            )
+        }
         window?.orderFrontRegardless()
     }
 
@@ -79,9 +88,9 @@ final class NotchPanelController: NSWindowController {
             return
         }
         if geometryChanged {
-            show()
+            show(resetToCompact: true)
         } else if window?.isVisible != true {
-            show()
+            show(resetToCompact: true)
         }
     }
 
@@ -176,7 +185,7 @@ final class NotchPanelController: NSWindowController {
             geometry = updated
             if let panel = window as? NSPanel { installContent(in: panel) }
         }
-        show()
+        show(resetToCompact: true)
     }
 
     private func reposition(width: CGFloat, height: CGFloat, animated: Bool = false) {
