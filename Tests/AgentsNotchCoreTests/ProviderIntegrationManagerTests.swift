@@ -227,7 +227,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testMonitoringRefreshesAnInstalledRelayWithoutChangingHooks() throws {
+    func testMonitoringRefreshesAnInstalledRelayWithoutChangingHooks() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .grok)
@@ -242,7 +242,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
             [.posixPermissions: 0o755],
             ofItemAtPath: fixture.bundledRelay.path
         )
-        manager.prepareForMonitoring()
+        await manager.prepareForMonitoring()
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)

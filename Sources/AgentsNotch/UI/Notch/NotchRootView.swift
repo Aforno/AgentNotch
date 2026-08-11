@@ -3,7 +3,7 @@ import SwiftUI
 
 private enum NotchPresentation: Equatable {
     case collapsed
-    case temporary(UUID)
+    case temporary(String)
     case list
     case detail(String)
 }
@@ -59,19 +59,20 @@ struct NotchRootView: View {
     @AppStorage("animationsEnabled") private var animationsEnabled = true
 
     private var activity: AgentActivityService { runtime.activity }
+    private var snapshot: NotchActivitySnapshot { activity.notchSnapshot }
     private var visibleSessions: [AgentSession] {
-        activity.listSessions
+        snapshot.listSessions
     }
-    private var hasActiveAgents: Bool { !activity.activeSessions.isEmpty }
+    private var hasActiveAgents: Bool { !snapshot.activeSessions.isEmpty }
 
     private var presentation: NotchPresentation {
         if let selectedSessionID,
-           activity.sessions.contains(where: { $0.id == selectedSessionID }) {
+           snapshot.relatedSessions.contains(where: { $0.id == selectedSessionID }) {
             return .detail(selectedSessionID)
         }
         if isHovering { return .list }
-        if let session = activity.attentionSession {
-            return .temporary(session.recentEvents.first?.id ?? UUID())
+        if let session = snapshot.attentionSession {
+            return .temporary(session.id)
         }
         return .collapsed
     }
@@ -88,9 +89,9 @@ struct NotchRootView: View {
                     radius: min(10, geometry.notchHeight * 0.32)
                 )
             }
-            return NotchLayout(
-                width: geometry.notchWidth
-                    + DynamicIslandSpacing.compactEarWidth(for: activity.activeGroupCount) * 2,
+                return NotchLayout(
+                    width: geometry.notchWidth
+                    + DynamicIslandSpacing.compactEarWidth(for: snapshot.activeGroupCount) * 2,
                 height: geometry.notchHeight + 2,
                 radius: min(10, (geometry.notchHeight + 2) * 0.32)
             )
@@ -102,7 +103,7 @@ struct NotchRootView: View {
                     ? DynamicIslandSpacing.rowHeight
                     : AgentListView.rowsHeight(
                         for: visibleSessions,
-                        relatedSessions: activity.sessions
+                        relatedSessions: snapshot.relatedSessions
                     ))
                 + DynamicIslandSpacing.expandedBottom
             return NotchLayout(width: 424, height: geometry.notchHeight + contentHeight, radius: 20)
@@ -155,7 +156,7 @@ struct NotchRootView: View {
         }
         .onChange(of: runtime.requestedSessionID) { _, sessionID in
             guard let sessionID,
-                  activity.sessions.contains(where: { $0.id == sessionID }) else { return }
+                  snapshot.relatedSessions.contains(where: { $0.id == sessionID }) else { return }
             withPresentationAnimation { selectedSessionID = sessionID }
             runtime.consumeRequestedSession(sessionID)
         }
@@ -258,19 +259,19 @@ struct NotchRootView: View {
         case .collapsed:
             if hasActiveAgents {
                 CollapsedNotchView(
-                    activeProviders: activity.activeProviders,
-                    activeCount: activity.activeGroupCount
+                    activeProviders: snapshot.activeProviders,
+                    activeCount: snapshot.activeGroupCount
                 )
             }
 
         case .temporary:
-            if let session = activity.attentionSession {
+            if let session = snapshot.attentionSession {
                 Button {
                     withPresentationAnimation { selectedSessionID = session.id }
                 } label: {
                     TemporaryActivityView(
                         session: session,
-                        waitingCount: activity.attentionCount
+                        waitingCount: snapshot.attentionCount
                     )
                         .frame(height: 40)
                         .contentShape(Rectangle())
@@ -281,7 +282,7 @@ struct NotchRootView: View {
         case .list:
             AgentListView(
                 sessions: visibleSessions,
-                relatedSessions: activity.sessions,
+                relatedSessions: snapshot.relatedSessions,
                 topInset: geometry.notchHeight + DynamicIslandSpacing.expandedTop,
                 onOpenSettings: { runtime.openSettings() },
                 onOpenActivityCenter: { runtime.openActivityCenter() },
@@ -291,11 +292,15 @@ struct NotchRootView: View {
             )
 
         case let .detail(id):
-            if let session = activity.sessions.first(where: { $0.id == id }) {
+            if let session = snapshot.relatedSessions.first(where: { $0.id == id }) {
                 AgentDetailView(
                     session: session,
-                    parent: activity.parent(of: session),
-                    children: activity.children(of: session.id),
+                    parent: session.parentSessionId.flatMap { parentID in
+                        snapshot.relatedSessions.first(where: { $0.id == parentID })
+                    },
+                    children: snapshot.relatedSessions
+                        .filter { $0.parentSessionId == session.id }
+                        .sorted { $0.updatedAt > $1.updatedAt },
                     onBack: { withPresentationAnimation { selectedSessionID = nil } },
                     onSelectSession: { id in withPresentationAnimation { selectedSessionID = id } },
                     onOpen: { runtime.open(session) }
@@ -344,13 +349,6 @@ struct NotchRootView: View {
     }
 
     private func isVisibleDetailSession(_ sessionID: String) -> Bool {
-        let visibleRootIDs = Set(visibleSessions.map(\.id))
-        var currentID: String? = sessionID
-        var visited = Set<String>()
-        while let id = currentID, visited.insert(id).inserted {
-            if visibleRootIDs.contains(id) { return true }
-            currentID = activity.sessions.first(where: { $0.id == id })?.parentSessionId
-        }
-        return false
+        snapshot.relatedSessions.contains { $0.id == sessionID }
     }
 }

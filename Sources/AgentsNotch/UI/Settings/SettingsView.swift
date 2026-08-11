@@ -13,6 +13,8 @@ struct SettingsView: View {
     @AppStorage("notchEnabled") private var notchEnabled = true
     @AppStorage("showVirtualNotch") private var showVirtualNotch = false
     @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = false
+    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @AppStorage("globalActivityShortcut") private var globalActivityShortcut = GlobalActivityShortcut.off.rawValue
     #if DEBUG
     @AppStorage("debugMode") private var debugMode = false
     #endif
@@ -84,6 +86,7 @@ struct SettingsView: View {
         .onChange(of: displayPreference) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: notchEnabled) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: showVirtualNotch) { _, _ in runtime.refreshNotchSurface() }
+        .onChange(of: globalActivityShortcut) { _, value in runtime.updateGlobalShortcut(value) }
     }
 
     private var paneSelector: some View {
@@ -158,6 +161,12 @@ struct SettingsView: View {
                         selection: $displayPreference,
                         options: DisplayPreference.allCases.map { ($0.rawValue, $0.title) }
                     )
+                    SettingsMenuRow(
+                        title: "Global activity shortcut",
+                        detail: "Open Activity Center from any app without Accessibility permission.",
+                        selection: $globalActivityShortcut,
+                        options: GlobalActivityShortcut.allCases.map { ($0.rawValue, $0.title) }
+                    )
                     SettingsControlRow(title: "Version", detail: "Current app version and update status.") {
                         HStack(spacing: 8) {
                             Text(runtime.updates.currentVersion)
@@ -188,6 +197,14 @@ struct SettingsView: View {
                     )
                     .disabled(!attentionNotificationsEnabled)
                     .opacity(attentionNotificationsEnabled ? 1 : 0.45)
+                }
+
+                SettingsSection(title: "Privacy") {
+                    SettingsToggleRow(
+                        title: "Hide activity details",
+                        detail: "Show only provider, project, and state in the notch, menu bar, and notifications.",
+                        isOn: $privacyModeEnabled
+                    )
                 }
 
                 SettingsSection(title: "Local History") {
@@ -579,7 +596,8 @@ private struct SettingsMenuRow<Value: Hashable>: View {
         SettingsControlRow(title: title, detail: detail) {
             NotchMenuPicker(
                 selection: $selection,
-                options: options.map { (value: $0.0, title: $0.1) }
+                options: options.map { (value: $0.0, title: $0.1) },
+                accessibilityLabel: title
             )
         }
     }

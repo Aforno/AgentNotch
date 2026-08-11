@@ -114,7 +114,7 @@ struct ActivitySessionDetailView: View {
                 Button(action: onOpen) {
                     Label("Open Origin", systemImage: "arrow.up.forward.app")
                 }
-                .buttonStyle(ActivityActionButtonStyle())
+                .buttonStyle(NotchPillButtonStyle())
             }
 
             Text(session.task)
@@ -217,4 +217,3 @@ struct ActivitySessionDetailView: View {
         }
     }
 }
-

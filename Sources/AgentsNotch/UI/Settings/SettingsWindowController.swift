@@ -2,7 +2,9 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class SettingsWindowController: NSWindowController {
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+    var onClose: (() -> Void)?
+
     init(runtime: AppRuntime) {
         let root = SettingsView(runtime: runtime)
         let window = NSWindow(
@@ -26,6 +28,7 @@ final class SettingsWindowController: NSWindowController {
             window.center()
         }
         super.init(window: window)
+        window.delegate = self
     }
 
     @available(*, unavailable)
@@ -37,5 +40,9 @@ final class SettingsWindowController: NSWindowController {
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
     }
 }

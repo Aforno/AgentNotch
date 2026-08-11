@@ -59,9 +59,10 @@ final class NotchPanelController: NSWindowController {
             return
         }
         if resetToCompact || window?.isVisible != true {
-            let hasActiveAgents = !runtime.activity.activeSessions.isEmpty
+            let snapshot = runtime.activity.notchSnapshot
+            let hasActiveAgents = !snapshot.activeSessions.isEmpty
             let compactEarWidth = DynamicIslandSpacing.compactEarWidth(
-                for: runtime.activity.activeGroupCount
+                for: snapshot.activeGroupCount
             )
             reposition(
                 width: geometry.notchWidth + (hasActiveAgents ? compactEarWidth * 2 : 0),

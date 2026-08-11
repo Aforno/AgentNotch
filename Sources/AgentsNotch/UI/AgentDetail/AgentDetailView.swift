@@ -8,6 +8,7 @@ struct AgentDetailView: View {
     let onBack: () -> Void
     let onSelectSession: (String) -> Void
     let onOpen: () -> Void
+    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: DynamicIslandSpacing.standard) {
@@ -49,11 +50,11 @@ struct AgentDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
                     VStack(alignment: .leading, spacing: DynamicIslandSpacing.tight) {
-                        Text(session.task)
+                        Text(privacyModeEnabled ? "Private activity" : session.task)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .lineLimit(2)
-                        Text(session.currentActivity)
+                        Text(privacyModeEnabled ? session.state.displayName : session.currentActivity)
                             .font(.system(size: 12))
                             .foregroundStyle(.white.opacity(0.58))
                             .lineLimit(2)
@@ -66,47 +67,53 @@ struct AgentDetailView: View {
                             .lineLimit(1)
                     }
 
-                    AgentRelationshipsView(
-                        parent: parent,
-                        children: children,
-                        onSelect: onSelectSession
-                    )
+                    if privacyModeEnabled {
+                        Label("Activity details are hidden by Privacy mode", systemImage: "eye.slash")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.48))
+                    } else {
+                        AgentRelationshipsView(
+                            parent: parent,
+                            children: children,
+                            onSelect: onSelectSession
+                        )
 
-                    if let plan = session.plan {
-                        AgentPlanProgressView(plan: plan)
-                    }
+                        if let plan = session.plan {
+                            AgentPlanProgressView(plan: plan)
+                        }
 
-                    if !session.workflows.isEmpty {
-                        AgentWorkflowsView(workflows: session.workflows)
-                    }
+                        if !session.workflows.isEmpty {
+                            AgentWorkflowsView(workflows: session.workflows)
+                        }
 
-                    if !session.recentFiles.isEmpty {
-                        VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
-                            ForEach(session.recentFiles.prefix(3), id: \.self) { file in
-                                HStack(spacing: DynamicIslandSpacing.related) {
-                                    Image(systemName: "doc")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.white.opacity(0.3))
-                                    Text(URL(fileURLWithPath: file).lastPathComponent)
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundStyle(.white.opacity(0.58))
-                                        .lineLimit(1)
+                        if !session.recentFiles.isEmpty {
+                            VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
+                                ForEach(session.recentFiles.prefix(3), id: \.self) { file in
+                                    HStack(spacing: DynamicIslandSpacing.related) {
+                                        Image(systemName: "doc")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.white.opacity(0.3))
+                                        Text(URL(fileURLWithPath: file).lastPathComponent)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(.white.opacity(0.58))
+                                            .lineLimit(1)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
-                        ForEach(session.recentEvents.prefix(4)) { event in
-                            HStack(alignment: .firstTextBaseline, spacing: DynamicIslandSpacing.related) {
-                                Text(event.timestamp, style: .time)
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.25))
-                                    .frame(width: 50, alignment: .leading)
-                                Text(event.activity ?? event.resolvedState.displayName)
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.white.opacity(0.5))
-                                    .lineLimit(1)
+                        VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
+                            ForEach(session.recentEvents.prefix(4)) { event in
+                                HStack(alignment: .firstTextBaseline, spacing: DynamicIslandSpacing.related) {
+                                    Text(event.timestamp, style: .time)
+                                        .font(.system(size: 9, design: .monospaced))
+                                        .foregroundStyle(.white.opacity(0.25))
+                                        .frame(width: 50, alignment: .leading)
+                                    Text(event.activity ?? event.resolvedState.displayName)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.white.opacity(0.5))
+                                        .lineLimit(1)
+                                }
                             }
                         }
                     }

@@ -118,6 +118,54 @@ public enum AgentHookEventMapper {
         permissionRequestRequiresUserInput: Bool = true,
         now: Date = Date()
     ) -> AgentEvent? {
+        let context = mappingContext(for: payload, provider: provider, now: now)
+        guard var event = mappedEvent(
+            payload,
+            permissionRequestRequiresUserInput: permissionRequestRequiresUserInput,
+            context: context
+        ) else { return nil }
+
+        let eventTimestamp = payload.timestamp ?? now
+        event.timestamp = eventTimestamp
+        event.plan?.updatedAt = eventTimestamp
+        event.parentSessionId = context.parentSessionId
+        event.agentRole = payload.description?.nonEmpty ?? payload.agentType
+        return event
+    }
+
+    private struct MappingContext {
+        let provider: AgentProvider
+        let sessionId: String
+        let parentSessionId: String?
+        let now: Date
+        let workingDirectory: String?
+        let metadata: [String: String]
+
+        func event(
+            type: AgentEventType,
+            task: String? = nil,
+            activity: String,
+            state: AgentState
+        ) -> AgentEvent {
+            AgentEvent(
+                type: type,
+                sessionId: sessionId,
+                provider: provider,
+                task: task,
+                activity: activity,
+                state: state,
+                timestamp: now,
+                workingDirectory: workingDirectory,
+                metadata: metadata
+            )
+        }
+    }
+
+    private static func mappingContext(
+        for payload: AgentHookPayload,
+        provider: AgentProvider,
+        now: Date
+    ) -> MappingContext {
         let nativeSessionId: String
         if let agentId = payload.agentId, !agentId.isEmpty {
             nativeSessionId = "\(payload.sessionId):\(agentId)"
@@ -129,7 +177,7 @@ public enum AgentHookEventMapper {
             ?? (payload.agentId?.isEmpty == false ? payload.sessionId : nil)
         let parentSessionId = nativeParentSessionId.map { "\(provider.rawValue):\($0)" }
 
-        let baseMetadata = [
+        let metadata = [
             "model": payload.model,
             "turnId": payload.turnId,
             // Store the canonical lifecycle name when the provider uses an
@@ -138,249 +186,184 @@ public enum AgentHookEventMapper {
             "hookEvent": metadataHookEventName(payload.hookEventName),
         ].compactMapValues { $0 }
 
-        let event: AgentEvent?
+        return MappingContext(
+            provider: provider,
+            sessionId: sessionId,
+            parentSessionId: parentSessionId,
+            now: now,
+            workingDirectory: payload.cwd.nonEmpty,
+            metadata: metadata
+        )
+    }
+
+    private static func mappedEvent(
+        _ payload: AgentHookPayload,
+        permissionRequestRequiresUserInput: Bool,
+        context: MappingContext
+    ) -> AgentEvent? {
         switch normalizedEventName(payload.hookEventName) {
         case "SessionStart":
-            if provider == .grok {
-                // Grok emits SessionStart while initializing non-agent commands
-                // such as `grok --version`, then exits without a prompt or a
-                // matching SessionEnd. Wait for the first turn event so those
-                // lifecycle-only probes never become permanently active agents.
-                event = nil
-            } else if isLifecycleReentry(source: payload.source) {
-                // Providers re-emit SessionStart on resume/compact. Mapping those
-                // to .starting with a cwd-basename task would clobber the
-                // prompt-derived title and regress in-progress sessions.
-                event = nil
-            } else {
-                event = AgentEvent(
-                    type: .started,
-                    sessionId: sessionId,
-                    provider: provider,
-                    task: repositoryName(from: payload.cwd, provider: provider),
-                    activity: "Session started",
-                    state: .starting,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            }
+            return sessionStartEvent(payload, context: context)
 
         case "UserPromptSubmit":
-            let task = payload.prompt.map { concise($0, limit: 140) }
-            event = AgentEvent(
+            return context.event(
                 type: .activity,
-                sessionId: sessionId,
-                provider: provider,
-                task: task,
+                task: payload.prompt.map { concise($0, limit: 140) },
                 activity: "Thinking",
-                state: .thinking,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
+                state: .thinking
             )
 
         case "PreToolUse":
-            event = toolEvent(payload, provider: provider, sessionId: sessionId, completed: false, now: now, metadata: baseMetadata)
+            return toolEvent(payload, completed: false, context: context)
 
         case "PostToolUse":
-            event = toolEvent(payload, provider: provider, sessionId: sessionId, completed: true, now: now, metadata: baseMetadata)
+            return toolEvent(payload, completed: true, context: context)
 
         case "PostToolUseFailure":
-            event = AgentEvent(
+            return context.event(
                 type: .toolCompleted,
-                sessionId: sessionId,
-                provider: provider,
                 activity: payload.error.map { "Tool failed: \(concise($0, limit: 76))" } ?? "Tool failed",
-                state: .running,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
+                state: .running
             )
 
         case "PermissionRequest" where permissionRequestRequiresUserInput:
-            event = AgentEvent(
+            return context.event(
                 type: .waiting,
-                sessionId: sessionId,
-                provider: provider,
                 activity: approvalActivity(for: payload),
-                state: .waitingForUser,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
+                state: .waitingForUser
             )
 
         case "PermissionRequest":
-            event = nil
+            return nil
 
         case "PermissionDenied":
-            event = AgentEvent(
+            return context.event(
                 type: .activity,
-                sessionId: sessionId,
-                provider: provider,
                 activity: "Tool permission denied",
-                state: .running,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
+                state: .running
             )
 
         case "Notification" where isWaitingNotification(payload.notificationType):
-            event = AgentEvent(
+            return context.event(
                 type: .waiting,
-                sessionId: sessionId,
-                provider: provider,
                 activity: waitingNotificationActivity(
                     for: payload.notificationType,
                     message: payload.notificationMessage
                 ),
-                state: .waitingForUser,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
+                state: .waitingForUser
             )
 
         case "Stop":
-            if isFailureReason(payload.reason) {
-                event = AgentEvent(
-                    type: .failed,
-                    sessionId: sessionId,
-                    provider: provider,
-                    activity: payload.error.map { concise($0, limit: 90) } ?? "Task failed",
-                    state: .failed,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            } else {
-                event = AgentEvent(
-                    type: .completed,
-                    sessionId: sessionId,
-                    provider: provider,
-                    activity: completionActivity(from: payload.lastAssistantMessage),
-                    state: .completed,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            }
+            return terminalEvent(
+                payload,
+                successActivity: completionActivity(from: payload.lastAssistantMessage),
+                failureActivity: "Task failed",
+                context: context
+            )
 
         case "StopFailure":
-            event = AgentEvent(
+            return context.event(
                 type: .failed,
-                sessionId: sessionId,
-                provider: provider,
                 activity: payload.error.map { concise($0, limit: 90) } ?? "Turn failed",
-                state: .failed,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
+                state: .failed
             )
 
         case "SessionEnd":
-            if isFailureReason(payload.reason) {
-                event = AgentEvent(
-                    type: .failed,
-                    sessionId: sessionId,
-                    provider: provider,
-                    activity: payload.error.map { concise($0, limit: 90) } ?? "Session failed",
-                    state: .failed,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            } else {
-                event = AgentEvent(
-                    type: .completed,
-                    sessionId: sessionId,
-                    provider: provider,
-                    activity: "Session ended",
-                    state: .completed,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            }
+            return terminalEvent(
+                payload,
+                successActivity: "Session ended",
+                failureActivity: "Session failed",
+                context: context
+            )
 
         case "SubagentStart":
-            if provider == .grok, payload.agentId?.nonEmpty == nil, parentSessionId == nil {
-                // Grok fires this hook in the parent and puts the parent's ID in
-                // sessionId. The child later emits its own lifecycle/tool hooks.
-                // Keep the parent alive without turning it into a fake child row.
-                event = AgentEvent(
-                    type: .activity,
-                    sessionId: sessionId,
-                    provider: provider,
-                    activity: "Running subagents",
-                    state: .running,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            } else {
-                let role = payload.description?.nonEmpty
-                    ?? payload.agentType?.nonEmpty.map { $0.capitalized }
-                event = AgentEvent(
-                    type: .started,
-                    sessionId: sessionId,
-                    provider: provider,
-                    task: role.map { "\($0) subagent" } ?? "\(provider.displayName) subagent",
-                    activity: "Subagent started",
-                    state: .starting,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            }
+            return subagentEvent(payload, started: true, context: context)
 
         case "SubagentStop":
-            if provider == .grok, payload.agentId?.nonEmpty == nil, parentSessionId == nil {
-                // Mirror SubagentStart: Grok parent-scoped SubagentStop uses the
-                // parent sessionId without agent_id. Completing the parent would
-                // end the turn while other subagents may still be live.
-                event = AgentEvent(
-                    type: .activity,
-                    sessionId: sessionId,
-                    provider: provider,
-                    activity: "Subagent completed",
-                    state: .running,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            } else {
-                event = AgentEvent(
-                    type: .completed,
-                    sessionId: sessionId,
-                    provider: provider,
-                    activity: "Subagent completed",
-                    state: .completed,
-                    timestamp: now,
-                    workingDirectory: payload.cwd.nonEmpty,
-                    metadata: baseMetadata
-                )
-            }
+            return subagentEvent(payload, started: false, context: context)
 
         default:
-            event = nil
+            return nil
         }
+    }
 
-        guard var event else { return nil }
-        let eventTimestamp = payload.timestamp ?? now
-        event.timestamp = eventTimestamp
-        event.plan?.updatedAt = eventTimestamp
-        event.parentSessionId = parentSessionId
-        event.agentRole = payload.description?.nonEmpty ?? payload.agentType
-        return event
+    private static func sessionStartEvent(
+        _ payload: AgentHookPayload,
+        context: MappingContext
+    ) -> AgentEvent? {
+        // Grok emits SessionStart while initializing non-agent commands such as
+        // `grok --version`, then exits without a prompt or matching SessionEnd.
+        guard context.provider != .grok else { return nil }
+        // Providers re-emit SessionStart on resume/compact. Treating those as a
+        // new start would clobber the prompt-derived title and active state.
+        guard !isLifecycleReentry(source: payload.source) else { return nil }
+        return context.event(
+            type: .started,
+            task: repositoryName(from: payload.cwd, provider: context.provider),
+            activity: "Session started",
+            state: .starting
+        )
+    }
+
+    private static func terminalEvent(
+        _ payload: AgentHookPayload,
+        successActivity: String,
+        failureActivity: String,
+        context: MappingContext
+    ) -> AgentEvent {
+        if isFailureReason(payload.reason) {
+            return context.event(
+                type: .failed,
+                activity: payload.error.map { concise($0, limit: 90) } ?? failureActivity,
+                state: .failed
+            )
+        }
+        return context.event(
+            type: .completed,
+            activity: successActivity,
+            state: .completed
+        )
+    }
+
+    private static func subagentEvent(
+        _ payload: AgentHookPayload,
+        started: Bool,
+        context: MappingContext
+    ) -> AgentEvent {
+        let isParentScopedGrokEvent = context.provider == .grok
+            && payload.agentId?.nonEmpty == nil
+            && context.parentSessionId == nil
+        if isParentScopedGrokEvent {
+            // Grok fires these hooks in the parent and puts the parent's ID in
+            // sessionId. Keep the parent active without creating a fake child or
+            // completing the parent while other children may still be live.
+            return context.event(
+                type: .activity,
+                activity: started ? "Running subagents" : "Subagent completed",
+                state: .running
+            )
+        }
+        if started {
+            let role = payload.description?.nonEmpty
+                ?? payload.agentType?.nonEmpty.map { $0.capitalized }
+            return context.event(
+                type: .started,
+                task: role.map { "\($0) subagent" } ?? "\(context.provider.displayName) subagent",
+                activity: "Subagent started",
+                state: .starting
+            )
+        }
+        return context.event(
+            type: .completed,
+            activity: "Subagent completed",
+            state: .completed
+        )
     }
 
     private static func toolEvent(
         _ payload: AgentHookPayload,
-        provider: AgentProvider,
-        sessionId: String,
         completed: Bool,
-        now: Date,
-        metadata: [String: String]
+        context: MappingContext
     ) -> AgentEvent {
         let rawTool = payload.toolName ?? "tool"
         let tool = normalizedToolName(rawTool)
@@ -416,16 +399,16 @@ public enum AgentHookEventMapper {
 
         return AgentEvent(
             type: type,
-            sessionId: sessionId,
-            provider: provider,
+            sessionId: context.sessionId,
+            provider: context.provider,
             activity: activity,
             state: state,
-            timestamp: now,
-            workingDirectory: payload.cwd.nonEmpty,
+            timestamp: context.now,
+            workingDirectory: context.workingDirectory,
             file: file,
-            metadata: metadata.merging(["tool": rawTool], uniquingKeysWith: { _, new in new }),
-            plan: planSnapshot(from: payload, tool: semanticTool, now: now),
-            workflowUpdate: workflowUpdate(from: payload, tool: semanticTool, sessionId: sessionId)
+            metadata: context.metadata.merging(["tool": rawTool], uniquingKeysWith: { _, new in new }),
+            plan: planSnapshot(from: payload, tool: semanticTool, now: context.now),
+            workflowUpdate: workflowUpdate(from: payload, tool: semanticTool, sessionId: context.sessionId)
         )
     }
 

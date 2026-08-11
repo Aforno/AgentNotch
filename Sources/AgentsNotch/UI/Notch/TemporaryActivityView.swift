@@ -4,6 +4,7 @@ import SwiftUI
 struct TemporaryActivityView: View {
     let session: AgentSession
     let waitingCount: Int
+    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
 
     var body: some View {
         HStack(spacing: DynamicIslandSpacing.related) {
@@ -24,7 +25,7 @@ struct TemporaryActivityView: View {
                 .font(.system(size: 11))
                 .lineLimit(1)
 
-                Text(session.currentActivity)
+                Text(privacyModeEnabled ? session.state.displayName : session.currentActivity)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)
@@ -46,7 +47,9 @@ struct TemporaryActivityView: View {
     }
 
     private var projectName: String {
-        guard let directory = session.workingDirectory else { return session.task }
+        guard let directory = session.workingDirectory else {
+            return privacyModeEnabled ? session.provider.displayName : session.task
+        }
         return URL(fileURLWithPath: directory).lastPathComponent
     }
 }

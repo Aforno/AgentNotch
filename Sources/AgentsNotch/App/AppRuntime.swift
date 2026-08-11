@@ -32,10 +32,12 @@ final class AppRuntime {
     private(set) var persistenceError: String?
     private(set) var lastEventReceivedAt: [AgentProvider: Date] = [:]
     private(set) var requestedSessionID: String?
+    private(set) var activitySearchRequest: UInt64 = 0
     private(set) var selfTestStatuses: [AgentProvider: SelfTestStatus] = [:]
     var openActivityCenterHandler: (() -> Void)?
     var openOnboardingHandler: (() -> Void)?
     var openSettingsHandler: (() -> Void)?
+    var updateGlobalShortcutHandler: ((String) -> Void)?
     weak var panelController: NotchPanelController?
 
     private let persistence: SessionPersistence
@@ -47,12 +49,16 @@ final class AppRuntime {
     private var socketServer: UnixSocketServer?
     /// Coalesces rapid session writes so an older snapshot cannot overwrite a newer one.
     private var persistTask: Task<Void, Never>?
+    /// Bounds persistence latency during a continuous stream of hook events.
+    private var persistDeadlineTask: Task<Void, Never>?
     /// Completes sessions still in `.unknown` when no live hook confirms them.
     private var unknownGraceTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
     private var acceptsEvents = false
     private var isRestoring = false
     private var startupEvents: [AgentEvent] = []
+    private let persistDebounceDuration: Duration
+    private let persistMaximumDelay: Duration
 
     /// How long restored unverified runners stay in `.unknown` before the app
     /// assumes they ended without a hook. Live events cancel this per session.
@@ -65,6 +71,8 @@ final class AppRuntime {
         grokHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".grok"),
         providerHomeDirectoryURL: URL? = nil,
         bundledRelayURL: URL? = nil,
+        persistDebounceDuration: Duration = .milliseconds(350),
+        persistMaximumDelay: Duration = .seconds(2),
         historyRetentionDays: @escaping () -> Int? = {
             UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int
         }
@@ -73,6 +81,8 @@ final class AppRuntime {
         self.socketURL = socketURL
         self.monitorProviders = monitorProviders
         self.grokHome = grokHome
+        self.persistDebounceDuration = persistDebounceDuration
+        self.persistMaximumDelay = persistMaximumDelay
         self.historyRetentionDays = historyRetentionDays
         activity = AgentActivityService()
         codexIntegration = ProviderIntegrationManager(
@@ -158,7 +168,13 @@ final class AppRuntime {
         // completed; everything else becomes `.unknown` until a live hook or
         // the reconnect grace period resolves them. Waiting rows stay waiting.
         activity.reconcileUnverifiedActiveSessions()
-        reconcileGrokSessionContext()
+        let restoredSessions = activity.sessions
+        let grokHome = self.grokHome
+        let grokEvidence = await Task.detached(priority: .utility) {
+            Self.discoverGrokSessionContext(in: restoredSessions, grokHome: grokHome)
+        }.value
+        guard acceptsEvents, generation == lifecycleGeneration else { return }
+        applyGrokSessionContext(grokEvidence)
         pruneHistory()
         #if DEBUG
         // Simulator state is intentionally ephemeral. This also removes rows
@@ -202,6 +218,8 @@ final class AppRuntime {
         unknownGraceTask = nil
         persistTask?.cancel()
         persistTask = nil
+        persistDeadlineTask?.cancel()
+        persistDeadlineTask = nil
         do {
             try persistence.saveSynchronously(persistableSessions)
         } catch {
@@ -212,15 +230,37 @@ final class AppRuntime {
     }
 
     private func schedulePersist() {
+        if persistDeadlineTask == nil {
+            persistDeadlineTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try await Task.sleep(for: persistMaximumDelay)
+                } catch {
+                    return
+                }
+                await flushScheduledPersistence()
+            }
+        }
         persistTask?.cancel()
         persistTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            // Yield so a burst of ingests collapses into one write of the latest state.
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            if let error = await persistence.save(persistableSessions) {
-                persistenceError = error
+            do {
+                try await Task.sleep(for: persistDebounceDuration)
+            } catch {
+                return
             }
+            await flushScheduledPersistence()
+        }
+    }
+
+    private func flushScheduledPersistence() async {
+        persistTask?.cancel()
+        persistTask = nil
+        persistDeadlineTask?.cancel()
+        persistDeadlineTask = nil
+        let snapshot = persistableSessions
+        if let error = await persistence.save(snapshot) {
+            persistenceError = error
         }
     }
 
@@ -236,7 +276,9 @@ final class AppRuntime {
     private func process(_ event: AgentEvent, notify: Bool) {
         let previousState = activity.sessions.first { $0.id == event.sessionId }?.state
         activity.ingest(event)
-        pruneHistory()
+        if event.resolvedState == .completed || event.resolvedState == .failed {
+            pruneHistory()
+        }
         if event.metadata?["source"] != "self-test" {
             lastEventReceivedAt[event.provider] = Date()
             integration(for: event.provider)?.noteEventReceived()
@@ -269,11 +311,15 @@ final class AppRuntime {
         }
     }
 
-    private func reconcileGrokSessionContext() {
+    nonisolated private static func discoverGrokSessionContext(
+        in sessions: [AgentSession],
+        grokHome: URL
+    ) -> GrokRestoreEvidence {
         let grokPrefix = "\(AgentProvider.grok.rawValue):"
         var workflowContexts: [String: GrokSessionContext] = [:]
+        var relationshipEvents: [AgentEvent] = []
 
-        for session in activity.sessions where session.provider == .grok {
+        for session in sessions where session.provider == .grok {
             guard session.id.hasPrefix(grokPrefix),
                   let workspace = session.workingDirectory else { continue }
             let nativeSessionID = String(session.id.dropFirst(grokPrefix.count))
@@ -284,7 +330,7 @@ final class AppRuntime {
             )
 
             if let parent = context.parentSessionId {
-                activity.ingest(AgentEvent(
+                relationshipEvents.append(AgentEvent(
                     type: .activity,
                     sessionId: session.id,
                     provider: .grok,
@@ -301,13 +347,25 @@ final class AppRuntime {
             }
         }
 
-        for context in workflowContexts.values {
-            guard let workflowUpdatedAt = context.workflowUpdatedAt,
-                  var event = context.workflowEvent(now: workflowUpdatedAt, workingDirectory: nil)
-            else {
-                continue
-            }
-            if let session = activity.sessions.first(where: { $0.id == event.sessionId }) {
+        let workflowEvents = workflowContexts.values.compactMap { context -> AgentEvent? in
+            guard let workflowUpdatedAt = context.workflowUpdatedAt else { return nil }
+            return context.workflowEvent(now: workflowUpdatedAt, workingDirectory: nil)
+        }
+        .sorted { $0.sessionId < $1.sessionId }
+        return GrokRestoreEvidence(
+            relationshipEvents: relationshipEvents,
+            workflowEvents: workflowEvents
+        )
+    }
+
+    private func applyGrokSessionContext(_ evidence: GrokRestoreEvidence) {
+        for event in evidence.relationshipEvents {
+            activity.ingest(event)
+        }
+
+        for discoveredEvent in evidence.workflowEvents {
+            var event = discoveredEvent
+            if let session = activity.session(id: event.sessionId) {
                 if session.state == .unknown {
                     // On-disk Grok workflow status is stronger evidence than
                     // cold-start uncertainty: complete finished runs and restore
@@ -316,7 +374,7 @@ final class AppRuntime {
                         sessionId: session.id,
                         state: event.resolvedState,
                         activity: event.activity,
-                        at: workflowUpdatedAt
+                        at: event.timestamp
                     )
                 } else if !session.isActive, event.resolvedState.isActive {
                     // Leftover on-disk workflow status (e.g. active/running) must
@@ -350,9 +408,10 @@ final class AppRuntime {
     }
 
     func presentSession(_ sessionID: String) {
-        guard activity.sessions.contains(where: { $0.id == sessionID }) else { return }
+        guard activity.session(id: sessionID) != nil else { return }
         requestedSessionID = sessionID
-        if panelController?.isSurfaceEnabled == true {
+        let isInNotchSnapshot = activity.notchSnapshot.relatedSessions.contains { $0.id == sessionID }
+        if panelController?.isSurfaceEnabled == true, isInNotchSnapshot {
             panelController?.show()
         } else {
             openActivityCenter()
@@ -370,30 +429,23 @@ final class AppRuntime {
             selfTestStatuses[provider] = .failed("This provider does not support relay self-tests.")
             return
         }
-        integration.prepareForMonitoring()
-        guard !integration.status.canInstall else {
-            selfTestStatuses[provider] = .failed(
-                integration.lastError ?? "Install the provider hooks before testing the relay."
-            )
-            return
-        }
-
         selfTestStatuses[provider] = .running
-        let nativeSessionID = "self-test:\(UUID().uuidString)"
-        let sessionID = "\(provider.rawValue):\(nativeSessionID)"
-        let payload: Data
-        do {
-            payload = try relaySelfTestPayload(provider: provider, sessionID: nativeSessionID)
-        } catch {
-            selfTestStatuses[provider] = .failed(error.localizedDescription)
-            return
-        }
-        let executableURL = integration.installedRelayURL
-        let socketURL = socketURL
-
         Task { @MainActor [weak self] in
             guard let self else { return }
+            await integration.prepareForMonitoring()
+            guard !integration.status.canInstall else {
+                selfTestStatuses[provider] = .failed(
+                    integration.lastError ?? "Install the provider hooks before testing the relay."
+                )
+                return
+            }
+
+            let nativeSessionID = "self-test:\(UUID().uuidString)"
+            let sessionID = "\(provider.rawValue):\(nativeSessionID)"
             do {
+                let payload = try relaySelfTestPayload(provider: provider, sessionID: nativeSessionID)
+                let executableURL = integration.installedRelayURL
+                let socketURL = socketURL
                 try await Task.detached {
                     try RelaySelfTestRunner.run(
                         executableURL: executableURL,
@@ -434,12 +486,21 @@ final class AppRuntime {
         openActivityCenterHandler?()
     }
 
+    func focusActivitySearch() {
+        openActivityCenter()
+        activitySearchRequest &+= 1
+    }
+
     func openOnboarding() {
         openOnboardingHandler?()
     }
 
     func openSettings() {
         openSettingsHandler?()
+    }
+
+    func updateGlobalShortcut(_ rawValue: String) {
+        updateGlobalShortcutHandler?(rawValue)
     }
 
     private func pruneHistory() {
@@ -479,6 +540,11 @@ final class AppRuntime {
         }
         return try JSONSerialization.data(withJSONObject: object)
     }
+}
+
+private struct GrokRestoreEvidence: Sendable {
+    let relationshipEvents: [AgentEvent]
+    let workflowEvents: [AgentEvent]
 }
 
 private enum RelaySelfTestRunner {

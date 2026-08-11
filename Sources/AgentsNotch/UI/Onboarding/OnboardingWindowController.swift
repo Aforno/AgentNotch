@@ -2,7 +2,9 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class OnboardingWindowController: NSWindowController {
+final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
+    var onClose: (() -> Void)?
+
     init(runtime: AppRuntime) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
@@ -18,6 +20,7 @@ final class OnboardingWindowController: NSWindowController {
         window.isOpaque = true
         window.isReleasedWhenClosed = false
         super.init(window: window)
+        window.delegate = self
         window.contentView = NSHostingView(rootView: OnboardingView(
             runtime: runtime,
             onDone: { [weak self] in self?.close() }
@@ -34,5 +37,9 @@ final class OnboardingWindowController: NSWindowController {
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
     }
 }

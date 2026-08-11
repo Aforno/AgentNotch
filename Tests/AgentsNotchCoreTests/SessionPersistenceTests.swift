@@ -63,6 +63,41 @@ final class SessionPersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testRuntimeDebouncesBurstPersistenceWrites() async throws {
+        let fixture = try PersistenceFixture()
+        defer { fixture.remove() }
+        let persistence = SessionPersistence(fileURL: fixture.fileURL)
+        let runtime = AppRuntime(
+            persistence: persistence,
+            socketURL: fixture.socketURL,
+            monitorProviders: false,
+            persistDebounceDuration: .milliseconds(120),
+            persistMaximumDelay: .seconds(1)
+        )
+        await runtime.start()
+        defer { runtime.stop() }
+        let startupSaveCount = await persistence.saveInvocationCount
+
+        for index in 0..<20 {
+            runtime.activity.ingest(AgentEvent(
+                type: .activity,
+                sessionId: "burst",
+                provider: .codex,
+                activity: "Event \(index)",
+                state: .running,
+                timestamp: Date().addingTimeInterval(TimeInterval(index))
+            ))
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
+        let saveCountDuringBurst = await persistence.saveInvocationCount
+        XCTAssertEqual(saveCountDuringBurst, startupSaveCount)
+        try await Task.sleep(for: .milliseconds(160))
+        let saveCountAfterDebounce = await persistence.saveInvocationCount
+        XCTAssertEqual(saveCountAfterDebounce, startupSaveCount + 1)
+    }
+
+    @MainActor
     func testRuntimeMarksRestoredRunnersUnknownInsteadOfCompleted() async throws {
         let fixture = try PersistenceFixture()
         defer { fixture.remove() }

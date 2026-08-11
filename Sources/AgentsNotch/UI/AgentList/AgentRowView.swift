@@ -4,6 +4,7 @@ import SwiftUI
 struct AgentRowView: View {
     let session: AgentSession
     let subagents: [AgentSession]
+    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
 
     var body: some View {
         HStack(spacing: DynamicIslandSpacing.standard) {
@@ -22,7 +23,12 @@ struct AgentRowView: View {
                 .foregroundStyle(.white)
                 .frame(width: session.isSubagent ? 78 : 62, alignment: .leading)
 
-            if let attention = groupAttentionSession {
+            if privacyModeEnabled {
+                Text(privateSummary)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(1)
+            } else if let attention = groupAttentionSession {
                 AttentionInlineSummary(session: attention)
             } else if let workflow = session.workflows.first {
                 ExecutionInlineSummary(
@@ -51,6 +57,7 @@ struct AgentRowView: View {
         .padding(.horizontal, DynamicIslandSpacing.outer)
         .frame(height: DynamicIslandSpacing.rowHeight, alignment: .center)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }
 
@@ -66,6 +73,9 @@ struct AgentRowView: View {
         let identity = session.isSubagent
             ? "\(subagentLabel) subagent"
             : session.provider.displayName
+        if privacyModeEnabled {
+            return "\(identity), \(privateSummary), \(groupState.displayName)"
+        }
         if let attention = groupAttentionSession {
             return "\(identity), \(attention.currentActivity), \(groupState.displayName)"
         }
@@ -83,6 +93,12 @@ struct AgentRowView: View {
             return "\(identity), \(session.currentActivity), \(subagents), \(groupState.displayName)"
         }
         return "\(identity), \(session.currentActivity), \(groupState.displayName)"
+    }
+
+    private var privateSummary: String {
+        session.workingDirectory
+            .map { URL(fileURLWithPath: $0).lastPathComponent }
+            ?? "Private activity"
     }
 
     private var groupAttentionSession: AgentSession? {

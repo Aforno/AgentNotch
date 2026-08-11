@@ -65,70 +65,75 @@ public enum GrokSessionContextResolver {
         grokHome: URL
     ) -> GrokSessionContext {
         guard isSafePathComponent(sessionId) else {
-            return GrokSessionContext(
-                parentSessionId: fallbackParent,
-                agentRole: fallbackRole,
-                workflowOwnerSessionId: nil,
-                workflowTask: nil,
-                workflowPhase: nil,
-                workflowState: nil,
-                workflowUpdate: nil,
-                workflowUpdatedAt: nil
-            )
+            return emptyContext(parent: fallbackParent, role: fallbackRole)
         }
-        let fileManager = FileManager.default
-        let paths = workspacePaths
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        var seenPaths = Set<String>()
-
-        for workspacePath in paths where seenPaths.insert(workspacePath).inserted {
-            let bucket = grokHome
-                .appendingPathComponent("sessions", isDirectory: true)
-                .appendingPathComponent(encodedWorkspacePath(workspacePath), isDirectory: true)
-            guard fileManager.fileExists(atPath: bucket.path) else { continue }
-
-            // Prefer the session's own directory. Top-level (non-child) sessions
-            // are the common PreToolUse/PostToolUse path; resolving them must
-            // not list every peer session and probe subagents/*/meta.json.
-            let ownDirectory = bucket.appendingPathComponent(sessionId, isDirectory: true)
-            var isDirectory: ObjCBool = false
-            if fileManager.fileExists(atPath: ownDirectory.path, isDirectory: &isDirectory),
-               isDirectory.boolValue
-            {
-                if let workflow = latestWorkflow(in: ownDirectory, fileManager: fileManager) {
-                    return context(parent: nil, role: nil, owner: sessionId, workflow: workflow)
-                }
-                return GrokSessionContext(
-                    parentSessionId: fallbackParent,
-                    agentRole: fallbackRole,
-                    workflowOwnerSessionId: nil,
-                    workflowTask: nil,
-                    workflowPhase: nil,
-                    workflowState: nil,
-                    workflowUpdate: nil,
-                    workflowUpdatedAt: nil
-                )
-            }
-
-            guard let sessionDirectories = try? fileManager.contentsOfDirectory(
-                at: bucket,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else { continue }
-
-            if let resolved = resolveChild(
+        for workspacePath in uniqueWorkspacePaths(workspacePaths) {
+            if let resolved = resolve(
                 sessionId: sessionId,
-                bucket: bucket,
-                sessionDirectories: sessionDirectories
+                workspacePath: workspacePath,
+                fallbackParent: fallbackParent,
+                fallbackRole: fallbackRole,
+                grokHome: grokHome
             ) {
                 return resolved
             }
         }
+        return emptyContext(parent: fallbackParent, role: fallbackRole)
+    }
 
-        return GrokSessionContext(
-            parentSessionId: fallbackParent,
-            agentRole: fallbackRole,
+    private static func uniqueWorkspacePaths(_ paths: [String?]) -> [String] {
+        var seen = Set<String>()
+        return paths
+            .compactMap { path in
+                guard let path else { return nil }
+                let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            .filter { seen.insert($0).inserted }
+    }
+
+    private static func resolve(
+        sessionId: String,
+        workspacePath: String,
+        fallbackParent: String?,
+        fallbackRole: String?,
+        grokHome: URL
+    ) -> GrokSessionContext? {
+        let fileManager = FileManager.default
+        let bucket = grokHome
+            .appendingPathComponent("sessions", isDirectory: true)
+            .appendingPathComponent(encodedWorkspacePath(workspacePath), isDirectory: true)
+        guard fileManager.fileExists(atPath: bucket.path) else { return nil }
+
+        // Prefer the session's own directory. Top-level sessions are the common
+        // tool-hook path and should not require probing every peer subagent.
+        let ownDirectory = bucket.appendingPathComponent(sessionId, isDirectory: true)
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: ownDirectory.path, isDirectory: &isDirectory),
+           isDirectory.boolValue
+        {
+            guard let workflow = latestWorkflow(in: ownDirectory, fileManager: fileManager) else {
+                return emptyContext(parent: fallbackParent, role: fallbackRole)
+            }
+            return context(parent: nil, role: nil, owner: sessionId, workflow: workflow)
+        }
+
+        guard let sessionDirectories = try? fileManager.contentsOfDirectory(
+            at: bucket,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+        return resolveChild(
+            sessionId: sessionId,
+            bucket: bucket,
+            sessionDirectories: sessionDirectories
+        )
+    }
+
+    private static func emptyContext(parent: String?, role: String?) -> GrokSessionContext {
+        GrokSessionContext(
+            parentSessionId: parent,
+            agentRole: role,
             workflowOwnerSessionId: nil,
             workflowTask: nil,
             workflowPhase: nil,

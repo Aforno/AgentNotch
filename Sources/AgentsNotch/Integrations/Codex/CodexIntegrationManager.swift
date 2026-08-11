@@ -28,10 +28,32 @@ enum ProviderIntegrationStatus: Equatable {
     }
 }
 
+private struct MonitoringPreparation: Sendable {
+    let isInstalled: Bool
+    let error: String?
+}
+
+private final class ProviderFileSystem: @unchecked Sendable {
+    let manager: FileManager
+    /// Every provider shares the installed relay path, so disk maintenance must
+    /// be serialized across manager instances as well as within one provider.
+    private static let lock = NSLock()
+
+    init(_ manager: FileManager) {
+        self.manager = manager
+    }
+
+    func withLock<Result>(_ operation: () throws -> Result) rethrows -> Result {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return try operation()
+    }
+}
+
 @Observable
 @MainActor
 final class ProviderIntegrationManager {
-    let provider: AgentProvider
+    nonisolated let provider: AgentProvider
     private(set) var status: ProviderIntegrationStatus = .notInstalled
     private(set) var lastError: String?
     /// Remembers that a real (non-self-test) provider event has been observed.
@@ -39,10 +61,11 @@ final class ProviderIntegrationManager {
     /// demoted by a no-op status recompute. Cleared when hooks disappear or
     /// on uninstall so reinstall cannot falsely report Connected.
     private(set) var hasReceivedEvent = false
+    private var maintenanceGeneration = 0
 
-    private let fileManager: FileManager
-    private let homeDirectoryURL: URL
-    private let bundledRelayURLOverride: URL?
+    nonisolated private let fileSystem: ProviderFileSystem
+    nonisolated private let homeDirectoryURL: URL
+    nonisolated private let bundledRelayURLOverride: URL?
 
     init(
         provider: AgentProvider,
@@ -51,19 +74,18 @@ final class ProviderIntegrationManager {
         bundledRelayURL: URL? = nil
     ) {
         self.provider = provider
-        self.fileManager = fileManager
+        fileSystem = ProviderFileSystem(fileManager)
         self.homeDirectoryURL = homeDirectoryURL ?? fileManager.homeDirectoryForCurrentUser
         bundledRelayURLOverride = bundledRelayURL
-        refreshStatus()
     }
 
-    var installedRelayURL: URL {
+    nonisolated var installedRelayURL: URL {
         homeDirectoryURL
             .appendingPathComponent(".agentsnotch/bin", isDirectory: true)
             .appendingPathComponent("agentsnotch-hook")
     }
 
-    var bundledRelayURL: URL? {
+    nonisolated var bundledRelayURL: URL? {
         if let bundledRelayURLOverride {
             return bundledRelayURLOverride
         }
@@ -93,8 +115,11 @@ final class ProviderIntegrationManager {
             hasReceivedEvent = true
         }
         lastError = nil
-        guard fileManager.isExecutableFile(atPath: installedRelayURL.path),
-              hookConfigurationContainsRelay()
+        let isInstalled = fileSystem.withLock {
+            fileSystem.manager.isExecutableFile(atPath: installedRelayURL.path)
+                && hookConfigurationContainsRelay()
+        }
+        guard isInstalled
         else {
             // Hooks/relay gone (manual removal or uninstall). Drop sticky
             // verification so a later install() cannot report Connected
@@ -118,23 +143,50 @@ final class ProviderIntegrationManager {
         }
     }
 
-    func prepareForMonitoring() {
-        refreshStatus()
-        guard status != .notInstalled else { return }
-
-        do {
-            try updateInstalledRelayIfNeeded()
-            try updateOpenCodePluginIfNeeded()
-        } catch {
-            lastError = error.localizedDescription
+    func prepareForMonitoring() async {
+        maintenanceGeneration &+= 1
+        let generation = maintenanceGeneration
+        let preparation = await Task.detached(priority: .utility) { [self] in
+            prepareForMonitoringOnDisk()
+        }.value
+        guard generation == maintenanceGeneration else { return }
+        if let error = preparation.error {
+            lastError = error
             status = .unavailable("Integration update failed")
+        } else if preparation.isInstalled {
+            lastError = nil
+            status = hasReceivedEvent ? .connected : .awaitingFirstEvent
+        } else {
+            hasReceivedEvent = false
+            lastError = nil
+            status = .notInstalled
+        }
+    }
+
+    nonisolated private func prepareForMonitoringOnDisk() -> MonitoringPreparation {
+        fileSystem.withLock {
+            guard fileSystem.manager.isExecutableFile(atPath: installedRelayURL.path),
+                  hookConfigurationContainsRelay()
+            else {
+                return MonitoringPreparation(isInstalled: false, error: nil)
+            }
+            do {
+                try updateInstalledRelayIfNeeded()
+                try updateOpenCodePluginIfNeeded()
+                return MonitoringPreparation(isInstalled: true, error: nil)
+            } catch {
+                return MonitoringPreparation(isInstalled: true, error: error.localizedDescription)
+            }
         }
     }
 
     func install() {
+        maintenanceGeneration &+= 1
         do {
-            try writeBundledRelay()
-            try installHookConfiguration()
+            try fileSystem.withLock {
+                try writeBundledRelay()
+                try installHookConfiguration()
+            }
             status = hasReceivedEvent ? .connected : .awaitingFirstEvent
             lastError = nil
         } catch {
@@ -144,8 +196,11 @@ final class ProviderIntegrationManager {
     }
 
     func uninstall() {
+        maintenanceGeneration &+= 1
         do {
-            try removeHookConfiguration()
+            try fileSystem.withLock {
+                try removeHookConfiguration()
+            }
             hasReceivedEvent = false
             status = .notInstalled
             lastError = nil
@@ -155,7 +210,7 @@ final class ProviderIntegrationManager {
         }
     }
 
-    private var hooksURL: URL {
+    nonisolated private var hooksURL: URL {
         switch provider {
         case .codex:
             homeDirectoryURL
@@ -188,7 +243,7 @@ final class ProviderIntegrationManager {
         }
     }
 
-    private var eventNames: [String] {
+    nonisolated private var eventNames: [String] {
         switch provider {
         case .codex:
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop", "SessionEnd", "SubagentStart", "SubagentStop"]
@@ -205,7 +260,7 @@ final class ProviderIntegrationManager {
         }
     }
 
-    private var quotedCommand: String {
+    nonisolated private var quotedCommand: String {
         let path = installedRelayURL.path.replacingOccurrences(of: "'", with: "'\\''")
         let providerName = provider.rawValue.replacingOccurrences(of: "'", with: "'\\''")
         return "'\(path)' --provider '\(providerName)'"
@@ -216,8 +271,8 @@ final class ProviderIntegrationManager {
         let originalData: Data?
     }
 
-    private func readRootConfiguration() throws -> RootConfiguration {
-        guard fileManager.fileExists(atPath: hooksURL.path) else {
+    nonisolated private func readRootConfiguration() throws -> RootConfiguration {
+        guard fileSystem.manager.fileExists(atPath: hooksURL.path) else {
             return RootConfiguration(root: [:], originalData: nil)
         }
         let data = try Data(contentsOf: hooksURL)
@@ -230,7 +285,7 @@ final class ProviderIntegrationManager {
         return RootConfiguration(root: root, originalData: data)
     }
 
-    private func installHookConfiguration() throws {
+    nonisolated private func installHookConfiguration() throws {
         if provider == .openCode {
             try installOpenCodePlugin()
             return
@@ -271,7 +326,7 @@ final class ProviderIntegrationManager {
         }
     }
 
-    private func removeHookConfiguration() throws {
+    nonisolated private func removeHookConfiguration() throws {
         if provider == .openCode {
             try removeOpenCodePlugin()
             return
@@ -281,7 +336,7 @@ final class ProviderIntegrationManager {
             return
         }
 
-        guard fileManager.fileExists(atPath: hooksURL.path) else { return }
+        guard fileSystem.manager.fileExists(atPath: hooksURL.path) else { return }
         let configuration = try readRootConfiguration()
         var root = configuration.root
         guard root["hooks"] != nil else { return }
@@ -303,7 +358,7 @@ final class ProviderIntegrationManager {
         try writeRootConfiguration(root, expectedData: configuration.originalData)
     }
 
-    private func installCursorHookConfiguration() throws {
+    nonisolated private func installCursorHookConfiguration() throws {
         let configuration = try readRootConfiguration()
         var root = configuration.root
         var hooks = try hooksDictionary(in: root)
@@ -332,8 +387,8 @@ final class ProviderIntegrationManager {
         }
     }
 
-    private func removeCursorHookConfiguration() throws {
-        guard fileManager.fileExists(atPath: hooksURL.path) else { return }
+    nonisolated private func removeCursorHookConfiguration() throws {
+        guard fileSystem.manager.fileExists(atPath: hooksURL.path) else { return }
         let configuration = try readRootConfiguration()
         var root = configuration.root
         guard root["hooks"] != nil else { return }
@@ -356,8 +411,8 @@ final class ProviderIntegrationManager {
         try writeRootConfiguration(root, expectedData: configuration.originalData)
     }
 
-    private func installOpenCodePlugin() throws {
-        let currentData = fileManager.fileExists(atPath: hooksURL.path)
+    nonisolated private func installOpenCodePlugin() throws {
+        let currentData = fileSystem.manager.fileExists(atPath: hooksURL.path)
             ? try Data(contentsOf: hooksURL)
             : nil
         if let currentData, !isOwnedOpenCodePlugin(currentData) {
@@ -369,40 +424,40 @@ final class ProviderIntegrationManager {
         }
     }
 
-    private func removeOpenCodePlugin() throws {
-        guard fileManager.fileExists(atPath: hooksURL.path) else { return }
+    nonisolated private func removeOpenCodePlugin() throws {
+        guard fileSystem.manager.fileExists(atPath: hooksURL.path) else { return }
         let data = try Data(contentsOf: hooksURL)
         guard isOwnedOpenCodePlugin(data) else { return }
-        try fileManager.removeItem(at: hooksURL)
+        try fileSystem.manager.removeItem(at: hooksURL)
     }
 
-    private func updateOpenCodePluginIfNeeded() throws {
+    nonisolated private func updateOpenCodePluginIfNeeded() throws {
         guard provider == .openCode,
-              fileManager.fileExists(atPath: hooksURL.path)
+              fileSystem.manager.fileExists(atPath: hooksURL.path)
         else { return }
         let currentData = try Data(contentsOf: hooksURL)
         guard isOwnedOpenCodePlugin(currentData), currentData != openCodePluginData else { return }
         try writeOpenCodePlugin(expectedData: currentData)
     }
 
-    private func writeOpenCodePlugin(expectedData: Data?) throws {
+    nonisolated private func writeOpenCodePlugin(expectedData: Data?) throws {
         let destination = hooksURL.resolvingSymlinksInPath()
-        try fileManager.createDirectory(
+        try fileSystem.manager.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
-        let currentData = fileManager.fileExists(atPath: destination.path)
+        let currentData = fileSystem.manager.fileExists(atPath: destination.path)
             ? try Data(contentsOf: destination)
             : nil
         guard currentData == expectedData else {
             throw ProviderIntegrationError.configurationChanged(hooksURL.path)
         }
         try openCodePluginData.write(to: destination, options: .atomic)
-        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+        try fileSystem.manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
     }
 
-    private func hooksDictionary(in root: [String: Any]) throws -> [String: Any] {
+    nonisolated private func hooksDictionary(in root: [String: Any]) throws -> [String: Any] {
         guard let value = root["hooks"] else { return [:] }
         guard let hooks = value as? [String: Any] else {
             throw ProviderIntegrationError.invalidHooksSection(hooksURL.path)
@@ -410,15 +465,15 @@ final class ProviderIntegrationManager {
         return hooks
     }
 
-    private func writeRootConfiguration(_ root: [String: Any], expectedData: Data?) throws {
+    nonisolated private func writeRootConfiguration(_ root: [String: Any], expectedData: Data?) throws {
         let destination = hooksURL.resolvingSymlinksInPath()
-        let existingPermissions = (try? fileManager.attributesOfItem(atPath: destination.path))?[.posixPermissions]
-        try fileManager.createDirectory(
+        let existingPermissions = (try? fileSystem.manager.attributesOfItem(atPath: destination.path))?[.posixPermissions]
+        try fileSystem.manager.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
-        let currentData = fileManager.fileExists(atPath: destination.path)
+        let currentData = fileSystem.manager.fileExists(atPath: destination.path)
             ? try Data(contentsOf: destination)
             : nil
         guard currentData == expectedData else {
@@ -426,13 +481,13 @@ final class ProviderIntegrationManager {
         }
         let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: destination, options: .atomic)
-        try fileManager.setAttributes(
+        try fileSystem.manager.setAttributes(
             [.posixPermissions: existingPermissions ?? 0o600],
             ofItemAtPath: destination.path
         )
     }
 
-    private func hookConfigurationContainsRelay() -> Bool {
+    nonisolated private func hookConfigurationContainsRelay() -> Bool {
         if provider == .openCode {
             guard let data = try? Data(contentsOf: hooksURL), isOwnedOpenCodePlugin(data) else {
                 return false
@@ -459,15 +514,15 @@ final class ProviderIntegrationManager {
         }
     }
 
-    private func isOwnedOpenCodePlugin(_ data: Data) -> Bool {
+    nonisolated private func isOwnedOpenCodePlugin(_ data: Data) -> Bool {
         let source = String(decoding: data, as: UTF8.self)
         return source.contains(Self.openCodePluginMarker)
             && source.contains("export const AgentsNotchPlugin")
     }
 
-    private static let openCodePluginMarker = "// Managed by Agents Notch."
+    nonisolated private static let openCodePluginMarker = "// Managed by Agents Notch."
 
-    private var openCodePluginData: Data {
+    nonisolated private var openCodePluginData: Data {
         let relayPath = installedRelayURL.path
         let encoder = JSONEncoder()
         encoder.outputFormatting = .withoutEscapingSlashes
@@ -613,7 +668,7 @@ final class ProviderIntegrationManager {
 
     /// Drops only Agents Notch handlers from a matcher group. Returns nil when the
     /// group has no handlers left so install/uninstall can remove empty groups.
-    private func removeAgentsNotchHandlers(from group: [String: Any]) -> [String: Any]? {
+    nonisolated private func removeAgentsNotchHandlers(from group: [String: Any]) -> [String: Any]? {
         guard var handlers = group["hooks"] as? [[String: Any]] else { return group }
         handlers.removeAll { handler in
             guard let command = handler["command"] as? String else { return false }
@@ -625,7 +680,7 @@ final class ProviderIntegrationManager {
         return updated
     }
 
-    private func groupContainsAgentsNotchHandler(_ group: [String: Any]) -> Bool {
+    nonisolated private func groupContainsAgentsNotchHandler(_ group: [String: Any]) -> Bool {
         guard let handlers = group["hooks"] as? [[String: Any]] else { return false }
         return handlers.contains { handler in
             guard let command = handler["command"] as? String else { return false }
@@ -635,7 +690,7 @@ final class ProviderIntegrationManager {
 
     /// True when `command` invokes the installed relay binary (as the executable),
     /// not merely mentions its path in an echo/logging string.
-    private func isAgentsNotchCommand(_ command: String) -> Bool {
+    nonisolated private func isAgentsNotchCommand(_ command: String) -> Bool {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed == quotedCommand { return true }
 
@@ -655,21 +710,21 @@ final class ProviderIntegrationManager {
         return false
     }
 
-    private func commandStartsWithExecutable(_ command: String, executable: String) -> Bool {
+    nonisolated private func commandStartsWithExecutable(_ command: String, executable: String) -> Bool {
         guard command.hasPrefix(executable) else { return false }
         let rest = command.dropFirst(executable.count)
         return rest.isEmpty || rest.first?.isWhitespace == true
     }
 
-    private func hookTimeout(for eventName: String) -> Int {
+    nonisolated private func hookTimeout(for eventName: String) -> Int {
         if provider == .codex { return CodexHookConfiguration.timeout(for: eventName) }
         if provider == .geminiCLI { return 5_000 }
         return 5
     }
 
-    private func updateInstalledRelayIfNeeded() throws {
+    nonisolated private func updateInstalledRelayIfNeeded() throws {
         guard let bundledRelayURL,
-              fileManager.isExecutableFile(atPath: bundledRelayURL.path)
+              fileSystem.manager.isExecutableFile(atPath: bundledRelayURL.path)
         else { throw ProviderIntegrationError.relayMissing }
 
         let bundledData = try Data(contentsOf: bundledRelayURL)
@@ -678,23 +733,23 @@ final class ProviderIntegrationManager {
         try writeBundledRelay(data: bundledData)
     }
 
-    private func writeBundledRelay(data: Data? = nil) throws {
+    nonisolated private func writeBundledRelay(data: Data? = nil) throws {
         guard let bundledRelayURL,
-              fileManager.isExecutableFile(atPath: bundledRelayURL.path)
+              fileSystem.manager.isExecutableFile(atPath: bundledRelayURL.path)
         else { throw ProviderIntegrationError.relayMissing }
 
-        try fileManager.createDirectory(
+        try fileSystem.manager.createDirectory(
             at: installedRelayURL.deletingLastPathComponent(),
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
-        try fileManager.setAttributes(
+        try fileSystem.manager.setAttributes(
             [.posixPermissions: 0o700],
             ofItemAtPath: installedRelayURL.deletingLastPathComponent().path
         )
         let relayData = try data ?? Data(contentsOf: bundledRelayURL)
         try relayData.write(to: installedRelayURL, options: .atomic)
-        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installedRelayURL.path)
+        try fileSystem.manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installedRelayURL.path)
     }
 }
 

@@ -46,7 +46,7 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
             ? "\(waitingCount) agents need you"
             : "\(session.provider.displayName) needs you"
         content.subtitle = projectName(for: session)
-        content.body = session.currentActivity
+        content.body = notificationBody(for: session)
         content.categoryIdentifier = Self.categoryIdentifier
         content.userInfo = ["sessionID": session.id]
         if UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled") {
@@ -67,7 +67,7 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
         let content = UNMutableNotificationContent()
         content.title = "\(session.provider.displayName) failed"
         content.subtitle = projectName(for: session)
-        content.body = session.currentActivity
+        content.body = notificationBody(for: session)
         content.categoryIdentifier = Self.categoryIdentifier
         content.userInfo = ["sessionID": session.id]
         if UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled") {
@@ -132,8 +132,17 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     }
 
     private func projectName(for session: AgentSession) -> String {
-        session.workingDirectory
-            .map { URL(fileURLWithPath: $0).lastPathComponent }
-            ?? session.task
+        if let directory = session.workingDirectory {
+            return URL(fileURLWithPath: directory).lastPathComponent
+        }
+        return UserDefaults.standard.bool(forKey: "privacyModeEnabled")
+            ? session.provider.displayName
+            : session.task
+    }
+
+    private func notificationBody(for session: AgentSession) -> String {
+        UserDefaults.standard.bool(forKey: "privacyModeEnabled")
+            ? session.state.displayName
+            : session.currentActivity
     }
 }

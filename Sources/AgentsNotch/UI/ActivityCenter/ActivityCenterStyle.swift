@@ -49,20 +49,22 @@ struct NotchIconButtonStyle: ButtonStyle {
     }
 }
 
-/// Quiet, borderless control that matches the notch's primary action button
-/// (`AgentDetailView`): 11pt semibold on a soft white fill, radius 8.
-struct ActivityActionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(NotchWindowFont.control.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.78))
-            .padding(.horizontal, 11)
-            .frame(height: 28)
+/// Static icon label for menu triggers that should match `NotchIconButtonStyle`.
+struct NotchIconControlLabel: View {
+    let systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Color.white.opacity(0.72))
+            .frame(width: 26, height: 26)
             .background(
-                configuration.isPressed
-                    ? NotchWindowPalette.raisedPressed
-                    : NotchWindowPalette.raisedStrong,
-                in: RoundedRectangle(cornerRadius: NotchWindowMetrics.controlRadius, style: .continuous)
+                NotchWindowPalette.raisedStrong,
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
             )
     }
 }
@@ -93,6 +95,8 @@ struct NotchSectionLabel: View {
 struct NotchMenuPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
+    let accessibilityLabel: String
+    var fillsAvailableWidth = false
 
     @State private var anchorView: NSView?
     @State private var isExpanded = false
@@ -119,7 +123,12 @@ struct NotchMenuPicker<Value: Hashable>: View {
                     .foregroundStyle(Color.white.opacity(0.45))
             }
             .padding(.horizontal, 12)
-            .frame(height: 28)
+            .frame(
+                maxWidth: fillsAvailableWidth ? .infinity : nil,
+                minHeight: 28,
+                maxHeight: 28,
+                alignment: .leading
+            )
             .background(
                 Self.triggerBackground,
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -130,6 +139,8 @@ struct NotchMenuPicker<Value: Hashable>: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(selectedTitle)
         .background(
             NotchViewAnchor { view in
                 anchorView = view
@@ -193,14 +204,14 @@ private struct NotchViewAnchor: NSViewRepresentable {
 }
 
 /// Borderless opaque panel positioned under a control — matches T3's flat menu, not a popover balloon.
-/// Dismisses on outside click, scroll, or window move/resize so it never floats detached from its control.
+/// Dismisses on outside interaction, owner-window changes, or app deactivation so it never floats detached.
 @MainActor
 final class NotchDropdownPanel {
     private var panel: NSPanel?
     private weak var anchor: NSView?
     private var eventMonitor: Any?
     private var scrollObservation: NSObjectProtocol?
-    private var windowObservations: [NSObjectProtocol] = []
+    private var lifecycleObservations: [NSObjectProtocol] = []
     private var onDismiss: (() -> Void)?
 
     private static let menuFill = NSColor(srgbRed: 0.13, green: 0.13, blue: 0.14, alpha: 1)
@@ -252,7 +263,7 @@ final class NotchDropdownPanel {
         panel.level = .popUpMenu
         panel.collectionBehavior = [.transient, .ignoresCycle]
         panel.isMovable = false
-        panel.hidesOnDeactivate = false
+        panel.hidesOnDeactivate = true
         panel.contentView = hosting
 
         if let window = anchor.window {
@@ -276,6 +287,19 @@ final class NotchDropdownPanel {
     }
 
     private func installDismissObservers(anchor: NSView) {
+        let center = NotificationCenter.default
+        lifecycleObservations.append(
+            center.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.dismiss()
+                }
+            }
+        )
+
         // Outside click, and any scroll gesture — menus should not stick while the page moves.
         eventMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .scrollWheel]
@@ -327,13 +351,14 @@ final class NotchDropdownPanel {
         }
 
         if let window = anchor.window {
-            let center = NotificationCenter.default
             for name in [
                 NSWindow.didMoveNotification,
                 NSWindow.didResizeNotification,
+                NSWindow.didResignKeyNotification,
+                NSWindow.willMiniaturizeNotification,
                 NSWindow.willCloseNotification,
             ] {
-                windowObservations.append(
+                lifecycleObservations.append(
                     center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                         Task { @MainActor in
                             self?.dismiss()
@@ -353,10 +378,10 @@ final class NotchDropdownPanel {
             NotificationCenter.default.removeObserver(scrollObservation)
             self.scrollObservation = nil
         }
-        for observation in windowObservations {
+        for observation in lifecycleObservations {
             NotificationCenter.default.removeObserver(observation)
         }
-        windowObservations.removeAll()
+        lifecycleObservations.removeAll()
 
         panel?.orderOut(nil)
         panel = nil

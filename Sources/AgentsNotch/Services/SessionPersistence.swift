@@ -11,6 +11,7 @@ actor SessionPersistence {
     nonisolated let fileURL: URL
     private nonisolated let writeLock = NSLock()
     private let loadDelay: Duration?
+    private(set) var saveInvocationCount = 0
 
     init(fileURL: URL? = nil, loadDelay: Duration? = nil) {
         self.loadDelay = loadDelay
@@ -65,6 +66,7 @@ actor SessionPersistence {
     }
 
     func save(_ sessions: [AgentSession]) -> String? {
+        saveInvocationCount += 1
         do {
             try saveSynchronously(sessions)
             return nil

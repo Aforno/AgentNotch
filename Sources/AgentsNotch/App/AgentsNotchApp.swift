@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var activityCenterWindowController: ActivityCenterWindowController?
     private var onboardingWindowController: OnboardingWindowController?
     private var settingsWindowController: SettingsWindowController?
+    private var globalShortcutController: GlobalActivityShortcutController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         var defaults: [String: Any] = [
@@ -22,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "showVirtualNotch": false,
             "hasCompletedOnboarding": false,
             "automaticallyCheckForUpdates": false,
+            "privacyModeEnabled": false,
+            "globalActivityShortcut": GlobalActivityShortcut.off.rawValue,
         ]
         #if DEBUG
         defaults["debugMode"] = false
@@ -35,20 +38,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = NotchPanelController(runtime: runtime)
         panelController = panel
         runtime.panelController = panel
-        let activityCenter = ActivityCenterWindowController(runtime: runtime)
-        activityCenterWindowController = activityCenter
-        let onboarding = OnboardingWindowController(runtime: runtime)
-        onboardingWindowController = onboarding
-        let settings = SettingsWindowController(runtime: runtime)
-        settingsWindowController = settings
-        runtime.openActivityCenterHandler = { [weak activityCenter] in activityCenter?.show() }
-        runtime.openOnboardingHandler = { [weak onboarding] in onboarding?.show() }
-        runtime.openSettingsHandler = { [weak settings] in settings?.show() }
+        runtime.openActivityCenterHandler = { [weak self] in self?.showActivityCenter() }
+        runtime.openOnboardingHandler = { [weak self] in self?.showOnboarding() }
+        runtime.openSettingsHandler = { [weak self] in self?.showSettings() }
+        let shortcutController = GlobalActivityShortcutController { [weak self] in
+            self?.runtime.openActivityCenter()
+        }
+        globalShortcutController = shortcutController
+        runtime.updateGlobalShortcutHandler = { [weak shortcutController] rawValue in
+            shortcutController?.configure(rawValue: rawValue)
+        }
+        shortcutController.configure(
+            rawValue: UserDefaults.standard.string(forKey: "globalActivityShortcut")
+                ?? GlobalActivityShortcut.off.rawValue
+        )
         panel.show()
 
         Task { await runtime.start() }
         if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-            onboarding.show()
+            showOnboarding()
         }
     }
 
@@ -57,6 +65,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.enableAutomaticTermination(
             "Agents Notch monitors local agent activity"
         )
+    }
+
+    private func showActivityCenter() {
+        let controller = activityCenterWindowController ?? ActivityCenterWindowController(runtime: runtime)
+        controller.onClose = { [weak self] in self?.activityCenterWindowController = nil }
+        activityCenterWindowController = controller
+        controller.show()
+    }
+
+    private func showOnboarding() {
+        let controller = onboardingWindowController ?? OnboardingWindowController(runtime: runtime)
+        controller.onClose = { [weak self] in self?.onboardingWindowController = nil }
+        onboardingWindowController = controller
+        controller.show()
+    }
+
+    private func showSettings() {
+        let controller = settingsWindowController ?? SettingsWindowController(runtime: runtime)
+        controller.onClose = { [weak self] in self?.settingsWindowController = nil }
+        settingsWindowController = controller
+        controller.show()
     }
 }
 
@@ -69,8 +98,8 @@ struct AgentsNotchApp: App {
             AgentMenuBarView(runtime: appDelegate.runtime)
         } label: {
             MenuBarNotchIcon(
-                activeCount: appDelegate.runtime.activity.activeSessions.count,
-                attentionCount: appDelegate.runtime.activity.attentionCount
+                activeCount: appDelegate.runtime.activity.notchSnapshot.activeSessions.count,
+                attentionCount: appDelegate.runtime.activity.notchSnapshot.attentionCount
             )
         }
         .commands {
@@ -89,6 +118,11 @@ struct AgentsNotchApp: App {
                     appDelegate.runtime.openActivityCenter()
                 }
                 .keyboardShortcut("1", modifiers: [.command])
+
+                Button("Find Sessions…") {
+                    appDelegate.runtime.focusActivitySearch()
+                }
+                .keyboardShortcut("f", modifiers: [.command])
 
                 Button("Show Setup") {
                     appDelegate.runtime.openOnboarding()

@@ -48,6 +48,19 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     @discardableResult
     public mutating func apply(_ event: AgentEvent) -> Bool {
         startedAt = min(startedAt, event.timestamp)
+        let advancesCurrentState = shouldAdvanceCurrentState(for: event)
+
+        if advancesCurrentState {
+            applyAdvancingEvent(event)
+        } else {
+            mergeNonAdvancingEvent(event)
+        }
+
+        recordRecentEvent(event)
+        return advancesCurrentState
+    }
+
+    private func shouldAdvanceCurrentState(for event: AgentEvent) -> Bool {
         let isTerminal = state == .completed || state == .failed
         let eventIsTerminal = event.resolvedState == .completed || event.resolvedState == .failed
         // A terminal session may begin another turn, but only an explicit lifecycle
@@ -63,92 +76,85 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             && state == .waitingForUser
             && !eventIsTerminal
             && !event.explicitlyResumesSession
-        let advancesCurrentState = (event.timestamp >= updatedAt || isReorderedTerminalVsActive)
+        return (event.timestamp >= updatedAt || isReorderedTerminalVsActive)
             && terminalTransitionIsAllowed
             && !sameTimeKeepsAttention
-        if advancesCurrentState {
-            provider = event.provider
-            if let task = event.task?.nonEmpty { self.task = task }
-            if let activity = event.activity?.nonEmpty { currentActivity = activity }
-            state = event.resolvedState
-            // Keep session clocks monotonic when an older terminal overrides active.
-            updatedAt = max(updatedAt, event.timestamp)
-            // Treat empty/whitespace cwd as absent so hook defaults of "" cannot
-            // wipe a previously stored absolute path.
-            if let directory = event.workingDirectory?.nonEmpty {
-                workingDirectory = directory
-            }
-            applicationURL = event.applicationURL ?? applicationURL
-            if let eventOrigin = event.origin, !eventOrigin.isEmpty {
-                origin = eventOrigin
-            }
-            parentSessionId = event.parentSessionId ?? parentSessionId
-            agentRole = event.agentRole ?? agentRole
+    }
 
-            if state == .completed || state == .failed {
-                completedAt = event.timestamp
-            } else {
-                completedAt = nil
-            }
+    private mutating func applyAdvancingEvent(_ event: AgentEvent) {
+        provider = event.provider
+        if let task = event.task?.nonEmpty { self.task = task }
+        if let activity = event.activity?.nonEmpty { currentActivity = activity }
+        state = event.resolvedState
+        // Keep session clocks monotonic when an older terminal overrides active.
+        updatedAt = max(updatedAt, event.timestamp)
+        // Treat empty/whitespace cwd as absent so hook defaults of "" cannot
+        // wipe a previously stored absolute path.
+        if let directory = event.workingDirectory?.nonEmpty {
+            workingDirectory = directory
+        }
+        applicationURL = event.applicationURL ?? applicationURL
+        mergeRelationshipContext(from: event)
+        completedAt = state == .completed || state == .failed ? event.timestamp : nil
 
-            // Only promote files from events that advance session time so
-            // reordered stale file events cannot reshuffle recency.
-            if let file = event.file?.nonEmpty {
-                recentFiles.removeAll { $0 == file }
-                recentFiles.insert(file, at: 0)
-                recentFiles = Array(recentFiles.prefix(6))
-            }
-
-            // Plan/workflow follow the same session-time gate as state/files so a
-            // reordered stale update_goal or plan snapshot cannot rewrite execution
-            // UI while live state stays on a newer event.
-            if let eventPlan = event.plan {
-                if let currentPlan = plan {
-                    if eventPlan.updatedAt >= currentPlan.updatedAt {
-                        plan = eventPlan
-                    }
-                } else {
-                    plan = eventPlan
-                }
-            }
-            applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
-            reconcilePlanWithTerminalState(at: event.timestamp)
-        } else {
-            // Non-advancing events (including equal-timestamp waiters blocked by
-            // sameTimeKeepsAttention) may still carry hierarchy/origin from
-            // reconciliation. Merge those without changing state or recency.
-            if let eventOrigin = event.origin, !eventOrigin.isEmpty {
-                origin = eventOrigin
-            }
-            parentSessionId = event.parentSessionId ?? parentSessionId
-            agentRole = event.agentRole ?? agentRole
-            if let directory = event.workingDirectory?.nonEmpty {
-                workingDirectory = workingDirectory ?? directory
-            }
-            applicationURL = applicationURL ?? event.applicationURL
-            // Plan/workflow only at equal-or-newer timestamps so a reordered
-            // stale snapshot cannot rewrite execution UI under a newer state.
-            if event.timestamp >= updatedAt {
-                if let eventPlan = event.plan {
-                    if let currentPlan = plan {
-                        if eventPlan.updatedAt >= currentPlan.updatedAt {
-                            plan = eventPlan
-                        }
-                    } else {
-                        plan = eventPlan
-                    }
-                }
-                applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
-            }
-            if task == "Untitled task", let task = event.task?.nonEmpty {
-                self.task = task
-            }
+        // Only promote files from events that advance session time so
+        // reordered stale file events cannot reshuffle recency.
+        if let file = event.file?.nonEmpty {
+            recentFiles.removeAll { $0 == file }
+            recentFiles.insert(file, at: 0)
+            recentFiles = Array(recentFiles.prefix(6))
         }
 
+        // Plan/workflow follow the same session-time gate as state/files so a
+        // reordered stale update_goal or plan snapshot cannot rewrite execution
+        // UI while live state stays on a newer event.
+        mergePlan(from: event)
+        applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
+        reconcilePlanWithTerminalState(at: event.timestamp)
+    }
+
+    private mutating func mergeNonAdvancingEvent(_ event: AgentEvent) {
+        // Non-advancing events may still carry relationship context discovered
+        // during reconciliation. Merge it without changing state or recency.
+        mergeRelationshipContext(from: event)
+        if let directory = event.workingDirectory?.nonEmpty {
+            workingDirectory = workingDirectory ?? directory
+        }
+        applicationURL = applicationURL ?? event.applicationURL
+        // Plan/workflow only at equal-or-newer timestamps so a reordered stale
+        // snapshot cannot rewrite execution UI under a newer state.
+        if event.timestamp >= updatedAt {
+            mergePlan(from: event)
+            applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
+        }
+        if task == "Untitled task", let task = event.task?.nonEmpty {
+            self.task = task
+        }
+    }
+
+    private mutating func mergeRelationshipContext(from event: AgentEvent) {
+        if let eventOrigin = event.origin, !eventOrigin.isEmpty {
+            origin = eventOrigin
+        }
+        parentSessionId = event.parentSessionId ?? parentSessionId
+        agentRole = event.agentRole ?? agentRole
+    }
+
+    private mutating func mergePlan(from event: AgentEvent) {
+        guard let eventPlan = event.plan else { return }
+        guard let currentPlan = plan else {
+            plan = eventPlan
+            return
+        }
+        if eventPlan.updatedAt >= currentPlan.updatedAt {
+            plan = eventPlan
+        }
+    }
+
+    private mutating func recordRecentEvent(_ event: AgentEvent) {
         recentEvents.append(event)
         recentEvents.sort { $0.timestamp > $1.timestamp }
         recentEvents = Array(recentEvents.prefix(10))
-        return advancesCurrentState
     }
 
     public mutating func complete(as terminalState: AgentState, at timestamp: Date) {

@@ -2,7 +2,9 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class ActivityCenterWindowController: NSWindowController {
+final class ActivityCenterWindowController: NSWindowController, NSWindowDelegate {
+    var onClose: (() -> Void)?
+
     init(runtime: AppRuntime) {
         let root = ActivityCenterView(runtime: runtime)
         let window = NSWindow(
@@ -26,6 +28,7 @@ final class ActivityCenterWindowController: NSWindowController {
             window.center()
         }
         super.init(window: window)
+        window.delegate = self
     }
 
     @available(*, unavailable)
@@ -37,5 +40,9 @@ final class ActivityCenterWindowController: NSWindowController {
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
     }
 }

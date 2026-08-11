@@ -4,14 +4,26 @@ import SwiftUI
 
 struct AgentMenuBarView: View {
     let runtime: AppRuntime
+    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
 
     var body: some View {
-        if runtime.activity.attentionCount > 0 {
-            Section("Needs Attention") {
-                ForEach(runtime.activity.attentionSessions.prefix(3)) { session in
+        let snapshot = runtime.activity.notchSnapshot
+        if snapshot.attentionCount > 0 {
+            Section("Needs Attention (\(snapshot.attentionCount))") {
+                ForEach(snapshot.attentionSessions.prefix(3)) { session in
                     Button(shortTitle(for: session)) {
-                        runtime.presentSession(session.id)
-                        runtime.openActivityCenter()
+                        runtime.open(session)
+                    }
+                }
+            }
+        }
+
+        let active = snapshot.activeSessions.filter { $0.state != .waitingForUser }
+        if !active.isEmpty {
+            Section("Active (\(active.count))") {
+                ForEach(active.prefix(3)) { session in
+                    Button(shortTitle(for: session)) {
+                        runtime.open(session)
                     }
                 }
             }
@@ -37,7 +49,8 @@ struct AgentMenuBarView: View {
         let project = session.workingDirectory
             .map { URL(fileURLWithPath: $0).lastPathComponent }
             ?? session.provider.displayName
-        let title = "\(project): \(session.currentActivity)"
+        let activity = privacyModeEnabled ? session.state.displayName : session.currentActivity
+        let title = "\(project): \(activity)"
         guard title.count > 30 else { return title }
         return String(title.prefix(27)) + "…"
     }

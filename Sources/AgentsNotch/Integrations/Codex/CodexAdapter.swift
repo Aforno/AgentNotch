@@ -14,7 +14,7 @@ final class HookProviderAdapter: AgentProviderAdapter {
     var statusDescription: String { integration.status.title }
 
     func startMonitoring() async throws {
-        integration.prepareForMonitoring()
+        await integration.prepareForMonitoring()
     }
 
     func stopMonitoring() async {

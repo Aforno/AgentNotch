@@ -821,6 +821,69 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testAttentionGroupRemainsAvailableOutsideThreeRowList() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "waiting-parent",
+            provider: .codex,
+            state: .waitingForUser,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "waiting-child",
+            provider: .codex,
+            state: .running,
+            timestamp: base,
+            parentSessionId: "waiting-parent"
+        ))
+        for index in 0..<4 {
+            service.ingest(AgentEvent(
+                type: .completed,
+                sessionId: "newer-\(index)",
+                provider: .claudeCode,
+                state: .completed,
+                timestamp: base.addingTimeInterval(TimeInterval(index + 1))
+            ))
+        }
+
+        XCTAssertFalse(service.listSessions.contains { $0.id == "waiting-parent" })
+        XCTAssertEqual(service.notchSnapshot.attentionSession?.id, "waiting-parent")
+        XCTAssertTrue(service.notchSnapshot.relatedSessions.contains { $0.id == "waiting-parent" })
+        XCTAssertTrue(service.notchSnapshot.relatedSessions.contains { $0.id == "waiting-child" })
+    }
+
+    @MainActor
+    func testNonVisibleHistoryEventDoesNotRepublishNotchSnapshot() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        for index in 0..<4 {
+            service.ingest(AgentEvent(
+                type: .completed,
+                sessionId: "done-\(index)",
+                provider: .codex,
+                state: .completed,
+                timestamp: base.addingTimeInterval(TimeInterval(index))
+            ))
+        }
+        let snapshot = service.notchSnapshot
+
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "done-0",
+            provider: .codex,
+            activity: "Delayed terminal detail",
+            state: .completed,
+            timestamp: base.addingTimeInterval(-1)
+        ))
+
+        XCTAssertEqual(service.notchSnapshot, snapshot)
+        XCTAssertEqual(service.sessions.first(where: { $0.id == "done-0" })?.recentEvents.count, 2)
+    }
+
+    @MainActor
     func testRelationshipCycleStillProducesVisibleActiveGroup() {
         let service = AgentActivityService()
         let base = Date(timeIntervalSince1970: 100)
