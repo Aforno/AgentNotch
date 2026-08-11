@@ -34,8 +34,8 @@ It modifies only its own entries in supported provider hook configuration.
   even when delivered by a supported provider.
 - Processes running as the same macOS user are trusted to connect to the local
   socket; other users must not be able to read from or write to it.
-- Existing Codex, Claude Code, and Grok configuration belongs to the user and
-  must be preserved across install, refresh, and removal.
+- Existing provider configuration and plugins belong to the user and must be
+  preserved across install, refresh, and removal.
 - Provider hooks are observers. Their availability or output must never grant,
   deny, or block a tool action.
 - Release artifacts cross a separate trust boundary and must match reviewed

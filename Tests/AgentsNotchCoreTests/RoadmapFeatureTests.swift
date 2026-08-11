@@ -4,6 +4,16 @@ import Foundation
 import XCTest
 
 final class RoadmapFeatureTests: XCTestCase {
+    @MainActor
+    func testRuntimeConstructsEveryBuiltInProviderAdapter() {
+        let runtime = AppRuntime(monitorProviders: false)
+
+        XCTAssertEqual(
+            runtime.providerAdapters.map(\.provider),
+            [.codex, .claudeCode, .grok, .geminiCLI, .openCode, .cursor]
+        )
+    }
+
     func testOriginMetadataRoundTripsThroughSessionPersistenceModel() throws {
         let origin = AgentOrigin(
             bundleIdentifier: "com.apple.Terminal",

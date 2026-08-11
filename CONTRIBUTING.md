@@ -45,7 +45,7 @@ Before opening a pull request, run the commands above and include:
 - tests performed, including packaged-app verification when UI or runtime code
   changes;
 - screenshots for meaningful UI changes;
-- any compatibility implications for Codex, Claude Code, or Grok hooks.
+- any compatibility implications for supported provider hooks or plugins.
 
 By contributing, you agree that your contribution is licensed under the
 project's license.

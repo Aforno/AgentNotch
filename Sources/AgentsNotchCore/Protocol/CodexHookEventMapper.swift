@@ -42,43 +42,56 @@ public struct AgentHookPayload: Decodable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case sessionId, sessionIdSnake = "session_id"
+        case conversationIdSnake = "conversation_id"
         case transcriptPath, transcriptPathSnake = "transcript_path"
-        case cwd, workspaceRoot, workspaceRootSnake = "workspace_root"
+        case cwd, workspaceRoot, workspaceRootSnake = "workspace_root", workspaceRootsSnake = "workspace_roots"
         case hookEventName, hookEventNameSnake = "hook_event_name"
         case model
         case turnId, turnIdSnake = "turn_id"
-        case prompt, source, reason
+        case prompt, source, reason, status
         case toolName, toolNameSnake = "tool_name"
         case toolInput, toolInputSnake = "tool_input"
-        case agentId, agentIdSnake = "agent_id"
-        case agentType, agentTypeSnake = "agent_type"
-        case parentSessionId, parentSessionIdSnake = "parent_session_id"
+        case agentId, agentIdSnake = "agent_id", subagentIdSnake = "subagent_id"
+        case agentType, agentTypeSnake = "agent_type", subagentTypeSnake = "subagent_type"
+        case parentSessionId, parentSessionIdSnake = "parent_session_id", parentConversationIdSnake = "parent_conversation_id"
         case description
         case lastAssistantMessage, lastAssistantMessageSnake = "last_assistant_message"
         case notificationType, notificationTypeSnake = "notification_type"
         case notificationMessage = "message"
         case promptResponse, promptResponseSnake = "prompt_response"
-        case error
+        case error, errorMessageSnake = "error_message"
         case timestamp, createdAt, createdAtSnake = "created_at"
     }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        sessionId = try values.decodeEither(String.self, forKey: .sessionId, or: .sessionIdSnake)
+        if let decodedSessionId = try values.decodeEitherIfPresent(String.self, forKey: .sessionId, or: .sessionIdSnake) {
+            sessionId = decodedSessionId
+        } else {
+            sessionId = try values.decode(String.self, forKey: .conversationIdSnake)
+        }
         transcriptPath = try values.decodeEitherIfPresent(String.self, forKey: .transcriptPath, or: .transcriptPathSnake)
-        cwd = try values.decodeIfPresent(String.self, forKey: .cwd) ?? ""
         workspaceRoot = try values.decodeEitherIfPresent(String.self, forKey: .workspaceRoot, or: .workspaceRootSnake)
+        let workspaceRoots = try values.decodeIfPresent([String].self, forKey: .workspaceRootsSnake)
+        cwd = try values.decodeIfPresent(String.self, forKey: .cwd)
+            ?? workspaceRoot
+            ?? workspaceRoots?.first
+            ?? ""
         hookEventName = try values.decodeEither(String.self, forKey: .hookEventName, or: .hookEventNameSnake)
         model = try values.decodeIfPresent(String.self, forKey: .model)
         turnId = try values.decodeEitherIfPresent(String.self, forKey: .turnId, or: .turnIdSnake)
         prompt = try values.decodeIfPresent(String.self, forKey: .prompt)
         source = try values.decodeIfPresent(String.self, forKey: .source)
         reason = try values.decodeIfPresent(String.self, forKey: .reason)
+            ?? values.decodeIfPresent(String.self, forKey: .status)
         toolName = try values.decodeEitherIfPresent(String.self, forKey: .toolName, or: .toolNameSnake)
         toolInput = try values.decodeEitherIfPresent(JSONValue.self, forKey: .toolInput, or: .toolInputSnake)
         agentId = try values.decodeEitherIfPresent(String.self, forKey: .agentId, or: .agentIdSnake)
+            ?? values.decodeIfPresent(String.self, forKey: .subagentIdSnake)
         agentType = try values.decodeEitherIfPresent(String.self, forKey: .agentType, or: .agentTypeSnake)
+            ?? values.decodeIfPresent(String.self, forKey: .subagentTypeSnake)
         parentSessionId = try values.decodeEitherIfPresent(String.self, forKey: .parentSessionId, or: .parentSessionIdSnake)
+            ?? values.decodeIfPresent(String.self, forKey: .parentConversationIdSnake)
         description = try values.decodeIfPresent(String.self, forKey: .description)
         lastAssistantMessage = try values.decodeEitherIfPresent(String.self, forKey: .lastAssistantMessage, or: .lastAssistantMessageSnake)
         notificationType = try values.decodeEitherIfPresent(String.self, forKey: .notificationType, or: .notificationTypeSnake)
@@ -86,6 +99,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         let promptResponse = try values.decodeEitherIfPresent(String.self, forKey: .promptResponse, or: .promptResponseSnake)
         lastAssistantMessage = lastAssistantMessage ?? promptResponse
         error = try values.decodeIfPresent(String.self, forKey: .error)
+            ?? values.decodeIfPresent(String.self, forKey: .errorMessageSnake)
         timestamp = values.decodeFlexibleDateIfPresent(forKeys: [.timestamp, .createdAt, .createdAtSnake])
     }
 }
@@ -216,16 +230,29 @@ public enum AgentHookEventMapper {
             )
 
         case "Stop":
-            event = AgentEvent(
-                type: .completed,
-                sessionId: sessionId,
-                provider: provider,
-                activity: completionActivity(from: payload.lastAssistantMessage),
-                state: .completed,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
-            )
+            if isFailureReason(payload.reason) {
+                event = AgentEvent(
+                    type: .failed,
+                    sessionId: sessionId,
+                    provider: provider,
+                    activity: payload.error.map { concise($0, limit: 90) } ?? "Task failed",
+                    state: .failed,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            } else {
+                event = AgentEvent(
+                    type: .completed,
+                    sessionId: sessionId,
+                    provider: provider,
+                    activity: completionActivity(from: payload.lastAssistantMessage),
+                    state: .completed,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            }
 
         case "StopFailure":
             event = AgentEvent(
@@ -240,16 +267,29 @@ public enum AgentHookEventMapper {
             )
 
         case "SessionEnd":
-            event = AgentEvent(
-                type: .completed,
-                sessionId: sessionId,
-                provider: provider,
-                activity: "Session ended",
-                state: .completed,
-                timestamp: now,
-                workingDirectory: payload.cwd.nonEmpty,
-                metadata: baseMetadata
-            )
+            if isFailureReason(payload.reason) {
+                event = AgentEvent(
+                    type: .failed,
+                    sessionId: sessionId,
+                    provider: provider,
+                    activity: payload.error.map { concise($0, limit: 90) } ?? "Session failed",
+                    state: .failed,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            } else {
+                event = AgentEvent(
+                    type: .completed,
+                    sessionId: sessionId,
+                    provider: provider,
+                    activity: "Session ended",
+                    state: .completed,
+                    timestamp: now,
+                    workingDirectory: payload.cwd.nonEmpty,
+                    metadata: baseMetadata
+                )
+            }
 
         case "SubagentStart":
             if provider == .grok, payload.agentId?.nonEmpty == nil, parentSessionId == nil {
@@ -335,9 +375,11 @@ public enum AgentHookEventMapper {
         let tool = normalizedToolName(rawTool)
         let semanticTool = toolIdentifier(tool)
         let command = payload.toolInput?["command"]?.stringValue
-        let isEdit = ["apply_patch", "Edit", "Write", "MultiEdit", "NotebookEdit"].contains(tool)
+        let isEdit = ["apply_patch", "edit", "write", "multiedit", "notebookedit", "patch"]
+            .contains(semanticTool)
         let file = isEdit
             ? payload.toolInput?["file_path"]?.stringValue
+                ?? payload.toolInput?["filePath"]?.stringValue
                 ?? payload.toolInput?["path"]?.stringValue
                 ?? changedFile(from: command)
             : nil
@@ -384,6 +426,13 @@ public enum AgentHookEventMapper {
             return true
         default:
             return false
+        }
+    }
+
+    private static func isFailureReason(_ reason: String?) -> Bool {
+        switch reason?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "error", "failed", "failure": true
+        default: false
         }
     }
 
@@ -480,6 +529,7 @@ public enum AgentHookEventMapper {
         switch eventName.replacingOccurrences(of: "_", with: "").lowercased() {
         case "sessionstart": "SessionStart"
         case "userpromptsubmit": "UserPromptSubmit"
+        case "beforesubmitprompt": "UserPromptSubmit"
         case "beforeagent": "UserPromptSubmit"
         case "pretooluse": "PreToolUse"
         case "beforetool": "PreToolUse"
@@ -510,9 +560,10 @@ public enum AgentHookEventMapper {
     }
 
     private static func normalizedToolName(_ toolName: String) -> String {
-        switch toolName {
-        case "run_terminal_command": "Bash"
-        case "search_replace": "Edit"
+        switch toolName.lowercased() {
+        case "bash", "shell", "run_shell_command", "run_terminal_command": "Bash"
+        case "edit", "search_replace": "Edit"
+        case "write": "Write"
         default: toolName
         }
     }

@@ -72,10 +72,18 @@ final class ProviderIntegrationManager {
             .appendingPathComponent("agentsnotch-hook")
     }
 
-    /// Codex-only guidance shown while hooks are installed but not yet verified by a live event.
+    /// Provider-specific guidance shown while an observer is installed but not
+    /// yet verified by a live event.
     var trustInstructions: String? {
-        guard provider == .codex, status == .awaitingFirstEvent else { return nil }
-        return "Open /hooks in Codex once to review and trust the installed lifecycle hooks."
+        guard status == .awaitingFirstEvent else { return nil }
+        return switch provider {
+        case .codex:
+            "Open /hooks in Codex once to review and trust the installed lifecycle hooks."
+        case .openCode:
+            "Restart OpenCode after installing the plugin, then start a new session."
+        default:
+            nil
+        }
     }
 
     /// Recomputes install health from disk. Pass `hasReceivedEvent: true` when the runtime
@@ -116,9 +124,10 @@ final class ProviderIntegrationManager {
 
         do {
             try updateInstalledRelayIfNeeded()
+            try updateOpenCodePluginIfNeeded()
         } catch {
             lastError = error.localizedDescription
-            status = .unavailable("Relay update failed")
+            status = .unavailable("Integration update failed")
         }
     }
 
@@ -164,6 +173,14 @@ final class ProviderIntegrationManager {
             homeDirectoryURL
                 .appendingPathComponent(".gemini", isDirectory: true)
                 .appendingPathComponent("settings.json")
+        case .openCode:
+            homeDirectoryURL
+                .appendingPathComponent(".config/opencode/plugins", isDirectory: true)
+                .appendingPathComponent("agentsnotch.js")
+        case .cursor:
+            homeDirectoryURL
+                .appendingPathComponent(".cursor", isDirectory: true)
+                .appendingPathComponent("hooks.json")
         default:
             homeDirectoryURL
                 .appendingPathComponent(".agentsnotch/integrations", isDirectory: true)
@@ -181,6 +198,8 @@ final class ProviderIntegrationManager {
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied", "Notification", "Stop", "StopFailure", "SessionEnd", "SubagentStart", "SubagentStop"]
         case .geminiCLI:
             ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"]
+        case .cursor:
+            ["sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse", "postToolUseFailure", "stop", "sessionEnd"]
         default:
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"]
         }
@@ -212,6 +231,15 @@ final class ProviderIntegrationManager {
     }
 
     private func installHookConfiguration() throws {
+        if provider == .openCode {
+            try installOpenCodePlugin()
+            return
+        }
+        if provider == .cursor {
+            try installCursorHookConfiguration()
+            return
+        }
+
         let configuration = try readRootConfiguration()
         var root = configuration.root
         var hooks = try hooksDictionary(in: root)
@@ -244,6 +272,15 @@ final class ProviderIntegrationManager {
     }
 
     private func removeHookConfiguration() throws {
+        if provider == .openCode {
+            try removeOpenCodePlugin()
+            return
+        }
+        if provider == .cursor {
+            try removeCursorHookConfiguration()
+            return
+        }
+
         guard fileManager.fileExists(atPath: hooksURL.path) else { return }
         let configuration = try readRootConfiguration()
         var root = configuration.root
@@ -264,6 +301,105 @@ final class ProviderIntegrationManager {
         }
         root["hooks"] = hooks
         try writeRootConfiguration(root, expectedData: configuration.originalData)
+    }
+
+    private func installCursorHookConfiguration() throws {
+        let configuration = try readRootConfiguration()
+        var root = configuration.root
+        var hooks = try hooksDictionary(in: root)
+
+        for eventName in eventNames {
+            let handler: [String: Any] = [
+                "command": quotedCommand,
+                "timeout": hookTimeout(for: eventName),
+            ]
+            guard var handlers = hooks[eventName] as? [[String: Any]] ?? (hooks[eventName] == nil ? [] : nil) else {
+                throw ProviderIntegrationError.invalidHookEvent(eventName, hooksURL.path)
+            }
+            handlers.removeAll { handler in
+                guard let command = handler["command"] as? String else { return false }
+                return isAgentsNotchCommand(command)
+            }
+            handlers.append(handler)
+            hooks[eventName] = handlers
+        }
+
+        root["version"] = root["version"] ?? 1
+        root["hooks"] = hooks
+        try writeRootConfiguration(root, expectedData: configuration.originalData)
+        guard hookConfigurationContainsRelay() else {
+            throw ProviderIntegrationError.incompleteInstallation
+        }
+    }
+
+    private func removeCursorHookConfiguration() throws {
+        guard fileManager.fileExists(atPath: hooksURL.path) else { return }
+        let configuration = try readRootConfiguration()
+        var root = configuration.root
+        guard root["hooks"] != nil else { return }
+        var hooks = try hooksDictionary(in: root)
+
+        for eventName in Array(hooks.keys) {
+            guard var handlers = hooks[eventName] as? [[String: Any]] else { continue }
+            handlers.removeAll { handler in
+                guard let command = handler["command"] as? String else { return false }
+                return isAgentsNotchCommand(command)
+            }
+            if handlers.isEmpty {
+                hooks.removeValue(forKey: eventName)
+            } else {
+                hooks[eventName] = handlers
+            }
+        }
+
+        root["hooks"] = hooks
+        try writeRootConfiguration(root, expectedData: configuration.originalData)
+    }
+
+    private func installOpenCodePlugin() throws {
+        let currentData = fileManager.fileExists(atPath: hooksURL.path)
+            ? try Data(contentsOf: hooksURL)
+            : nil
+        if let currentData, !isOwnedOpenCodePlugin(currentData) {
+            throw ProviderIntegrationError.existingOpenCodePlugin(hooksURL.path)
+        }
+        try writeOpenCodePlugin(expectedData: currentData)
+        guard hookConfigurationContainsRelay() else {
+            throw ProviderIntegrationError.incompleteInstallation
+        }
+    }
+
+    private func removeOpenCodePlugin() throws {
+        guard fileManager.fileExists(atPath: hooksURL.path) else { return }
+        let data = try Data(contentsOf: hooksURL)
+        guard isOwnedOpenCodePlugin(data) else { return }
+        try fileManager.removeItem(at: hooksURL)
+    }
+
+    private func updateOpenCodePluginIfNeeded() throws {
+        guard provider == .openCode,
+              fileManager.fileExists(atPath: hooksURL.path)
+        else { return }
+        let currentData = try Data(contentsOf: hooksURL)
+        guard isOwnedOpenCodePlugin(currentData), currentData != openCodePluginData else { return }
+        try writeOpenCodePlugin(expectedData: currentData)
+    }
+
+    private func writeOpenCodePlugin(expectedData: Data?) throws {
+        let destination = hooksURL.resolvingSymlinksInPath()
+        try fileManager.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let currentData = fileManager.fileExists(atPath: destination.path)
+            ? try Data(contentsOf: destination)
+            : nil
+        guard currentData == expectedData else {
+            throw ProviderIntegrationError.configurationChanged(hooksURL.path)
+        }
+        try openCodePluginData.write(to: destination, options: .atomic)
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
     }
 
     private func hooksDictionary(in root: [String: Any]) throws -> [String: Any] {
@@ -297,13 +433,182 @@ final class ProviderIntegrationManager {
     }
 
     private func hookConfigurationContainsRelay() -> Bool {
+        if provider == .openCode {
+            guard let data = try? Data(contentsOf: hooksURL), isOwnedOpenCodePlugin(data) else {
+                return false
+            }
+            let source = String(decoding: data, as: UTF8.self)
+            return source.contains(installedRelayURL.path) && source.contains("--provider\", \"opencode")
+        }
+
         guard let configuration = try? readRootConfiguration(),
               let hooks = try? hooksDictionary(in: configuration.root)
         else { return false }
+        if provider == .cursor {
+            return eventNames.allSatisfy { eventName in
+                let handlers = hooks[eventName] as? [[String: Any]] ?? []
+                return handlers.contains { handler in
+                    guard let command = handler["command"] as? String else { return false }
+                    return isAgentsNotchCommand(command)
+                }
+            }
+        }
         return eventNames.allSatisfy { eventName in
             let groups = hooks[eventName] as? [[String: Any]] ?? []
             return groups.contains(where: groupContainsAgentsNotchHandler)
         }
+    }
+
+    private func isOwnedOpenCodePlugin(_ data: Data) -> Bool {
+        let source = String(decoding: data, as: UTF8.self)
+        return source.contains(Self.openCodePluginMarker)
+            && source.contains("export const AgentsNotchPlugin")
+    }
+
+    private static let openCodePluginMarker = "// Managed by Agents Notch."
+
+    private var openCodePluginData: Data {
+        let relayPath = installedRelayURL.path
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        let encodedRelayPath = try? encoder.encode(relayPath)
+        let relayLiteral = encodedRelayPath.map { String(decoding: $0, as: UTF8.self) } ?? "\"\""
+        let source = """
+        \(Self.openCodePluginMarker)
+        // Reinstall from Agents Notch instead of editing this generated bridge.
+        const relayPath = \(relayLiteral)
+
+        const emit = async (payload) => {
+          if (!payload?.session_id) return
+          try {
+            const process = Bun.spawn([relayPath, "--provider", "opencode"], {
+              stdin: new Blob([JSON.stringify(payload)]),
+              stdout: "ignore",
+              stderr: "ignore",
+            })
+            await process.exited
+          } catch {
+            // Monitoring is passive and must never interrupt OpenCode.
+          }
+        }
+
+        const textFromParts = (parts) => (parts ?? [])
+          .filter((part) => part?.type === "text" && typeof part.text === "string")
+          .map((part) => part.text)
+          .join("\\n")
+
+        const errorMessage = (error) => error?.data?.message ?? error?.message ?? String(error ?? "OpenCode session failed")
+
+        export const AgentsNotchPlugin = async ({ directory }) => ({
+          event: async ({ event }) => {
+            const properties = event?.properties ?? {}
+            const info = properties.info ?? {}
+            const sessionID = properties.sessionID ?? info.id
+            const cwd = info.directory ?? directory
+
+            switch (event?.type) {
+              case "session.created":
+                await emit({
+                  session_id: sessionID,
+                  cwd,
+                  hook_event_name: "SessionStart",
+                  timestamp: info.time?.created,
+                  parent_session_id: info.parentID,
+                })
+                break
+              case "session.status":
+                if (properties.status?.type === "busy") {
+                  await emit({ session_id: sessionID, cwd, hook_event_name: "UserPromptSubmit" })
+                }
+                break
+              case "session.idle":
+                await emit({ session_id: sessionID, cwd, hook_event_name: "Stop" })
+                break
+              case "session.error":
+                await emit({
+                  session_id: sessionID,
+                  cwd,
+                  hook_event_name: "StopFailure",
+                  error: errorMessage(properties.error),
+                })
+                break
+              case "permission.replied":
+                const permissionReply = properties.reply ?? properties.response
+                await emit({
+                  session_id: sessionID,
+                  cwd,
+                  hook_event_name: permissionReply === "reject" || permissionReply === "deny"
+                    ? "PermissionDenied"
+                    : "UserPromptSubmit",
+                })
+                break
+              case "question.asked":
+                await emit({
+                  session_id: sessionID,
+                  cwd,
+                  hook_event_name: "Notification",
+                  notification_type: "agent_needs_input",
+                  message: properties.questions?.[0]?.question ?? "OpenCode needs input",
+                })
+                break
+              case "question.replied":
+              case "question.rejected":
+                await emit({ session_id: sessionID, cwd, hook_event_name: "UserPromptSubmit" })
+                break
+              case "message.part.updated":
+                if (properties.part?.type === "tool" && properties.part.state?.status === "error") {
+                  await emit({
+                    session_id: sessionID ?? properties.part.sessionID,
+                    cwd,
+                    hook_event_name: "PostToolUseFailure",
+                    tool_name: properties.part.tool,
+                    tool_input: properties.part.state.input,
+                    error: properties.part.state.error,
+                    timestamp: properties.part.state.time?.end,
+                  })
+                }
+                break
+            }
+          },
+          "chat.message": async (input, output) => {
+            await emit({
+              session_id: input.sessionID,
+              cwd: directory,
+              hook_event_name: "UserPromptSubmit",
+              prompt: textFromParts(output.parts),
+            })
+          },
+          "permission.ask": async (input) => {
+            await emit({
+              session_id: input.sessionID,
+              cwd: directory,
+              hook_event_name: "PermissionRequest",
+              tool_name: input.type ?? input.permission ?? input.title,
+              tool_input: input.metadata,
+              timestamp: input.time?.created,
+            })
+          },
+          "tool.execute.before": async (input, output) => {
+            await emit({
+              session_id: input.sessionID,
+              cwd: directory,
+              hook_event_name: "PreToolUse",
+              tool_name: input.tool,
+              tool_input: output.args,
+            })
+          },
+          "tool.execute.after": async (input) => {
+            await emit({
+              session_id: input.sessionID,
+              cwd: directory,
+              hook_event_name: "PostToolUse",
+              tool_name: input.tool,
+              tool_input: input.args,
+            })
+          },
+        })
+        """
+        return Data((source + "\n").utf8)
     }
 
     /// Drops only Agents Notch handlers from a matcher group. Returns nil when the
@@ -399,6 +704,7 @@ private enum ProviderIntegrationError: LocalizedError {
     case invalidHooksSection(String)
     case invalidHookEvent(String, String)
     case configurationChanged(String)
+    case existingOpenCodePlugin(String)
     case incompleteInstallation
 
     var errorDescription: String? {
@@ -413,6 +719,8 @@ private enum ProviderIntegrationError: LocalizedError {
             "The existing \(event) hooks in \(path) are not an array."
         case let .configurationChanged(path):
             "\(path) changed while Agents Notch was updating it. Try again."
+        case let .existingOpenCodePlugin(path):
+            "Agents Notch will not replace the existing OpenCode plugin at \(path)."
         case .incompleteInstallation:
             "One or more required lifecycle hooks could not be installed."
         }

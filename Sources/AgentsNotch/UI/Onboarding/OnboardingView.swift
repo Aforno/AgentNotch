@@ -31,6 +31,10 @@ struct OnboardingView: View {
                 providerRow(runtime.grokIntegration)
                 NotchHairline(leadingInset: 42)
                 providerRow(runtime.geminiIntegration)
+                NotchHairline(leadingInset: 42)
+                providerRow(runtime.openCodeIntegration)
+                NotchHairline(leadingInset: 42)
+                providerRow(runtime.cursorIntegration)
             }
             .padding(.horizontal, 14)
             .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
@@ -50,7 +54,7 @@ struct OnboardingView: View {
             }
         }
         .padding(24)
-        .frame(width: 640, height: 480)
+        .frame(width: 640, height: 560)
         .foregroundStyle(NotchWindowPalette.primaryText)
         .deepBlackWindowSurface()
     }

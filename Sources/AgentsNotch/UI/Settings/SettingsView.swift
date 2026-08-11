@@ -253,6 +253,10 @@ struct SettingsView: View {
                     integrationRow(runtime.grokIntegration)
                     NotchHairline(leadingInset: 42)
                     integrationRow(runtime.geminiIntegration)
+                    NotchHairline(leadingInset: 42)
+                    integrationRow(runtime.openCodeIntegration)
+                    NotchHairline(leadingInset: 42)
+                    integrationRow(runtime.cursorIntegration)
                 }
                 .padding(.horizontal, 14)
                 .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)

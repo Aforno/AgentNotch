@@ -35,6 +35,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)
+        XCTAssertNotNil(manager.trustInstructions)
         XCTAssertEqual(try Data(contentsOf: manager.installedRelayURL), Data("relay-v1".utf8))
         let permissions = try FileManager.default.attributesOfItem(
             atPath: manager.installedRelayURL.path
@@ -306,6 +307,138 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: hooksURL.path))
     }
 
+    @MainActor
+    func testCursorInstallUsesNativeHookShapeAndPreservesExistingHooks() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let hooksURL = fixture.home.appendingPathComponent(".cursor/hooks.json")
+        try FileManager.default.createDirectory(
+            at: hooksURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.writeJSON([
+            "version": 1,
+            "theme": "preserve",
+            "hooks": [
+                "preToolUse": [[
+                    "command": "echo existing",
+                    "timeout": 12,
+                ]],
+            ],
+        ], to: hooksURL)
+
+        let manager = fixture.manager(provider: .cursor)
+        manager.install()
+        manager.install()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertNil(manager.lastError)
+        let installed = try Self.readJSON(at: hooksURL)
+        XCTAssertEqual(installed["theme"] as? String, "preserve")
+        XCTAssertEqual(installed["version"] as? Int, 1)
+        let hooks = try XCTUnwrap(installed["hooks"] as? [String: Any])
+        let expectedEvents = [
+            "sessionStart",
+            "beforeSubmitPrompt",
+            "preToolUse",
+            "postToolUse",
+            "postToolUseFailure",
+            "stop",
+            "sessionEnd",
+        ]
+        XCTAssertEqual(Set(hooks.keys), Set(expectedEvents))
+        for eventName in expectedEvents {
+            let handlers = try XCTUnwrap(hooks[eventName] as? [[String: Any]])
+            XCTAssertEqual(
+                handlers.filter { ($0["command"] as? String)?.contains("--provider 'cursor'") == true }.count,
+                1,
+                "reinstalling must not duplicate the Cursor observer"
+            )
+            XCTAssertTrue(handlers.contains { ($0["timeout"] as? Int) == 5 })
+            XCTAssertNil(handlers.first?["hooks"], "Cursor uses direct command entries, not matcher groups")
+        }
+
+        manager.uninstall()
+
+        XCTAssertEqual(manager.status, .notInstalled)
+        let removed = try Self.readJSON(at: hooksURL)
+        XCTAssertEqual(removed["theme"] as? String, "preserve")
+        let remainingHooks = try XCTUnwrap(removed["hooks"] as? [String: Any])
+        let remainingPreTool = try XCTUnwrap(remainingHooks["preToolUse"] as? [[String: Any]])
+        XCTAssertEqual(remainingPreTool.first?["command"] as? String, "echo existing")
+        XCTAssertEqual(remainingHooks.keys.sorted(), ["preToolUse"])
+    }
+
+    @MainActor
+    func testOpenCodeInstallWritesOwnedGlobalPluginAndRemovesOnlyThatFile() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let pluginsURL = fixture.home.appendingPathComponent(".config/opencode/plugins", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginsURL, withIntermediateDirectories: true)
+        let siblingURL = pluginsURL.appendingPathComponent("existing.js")
+        try Data("export const Existing = async () => ({})\n".utf8).write(to: siblingURL)
+        let pluginURL = pluginsURL.appendingPathComponent("agentsnotch.js")
+
+        let manager = fixture.manager(provider: .openCode)
+        manager.install()
+        manager.install()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertNil(manager.lastError)
+        XCTAssertNotNil(manager.trustInstructions)
+        let source = String(decoding: try Data(contentsOf: pluginURL), as: UTF8.self)
+        XCTAssertTrue(source.contains("// Managed by Agents Notch."))
+        XCTAssertTrue(source.contains("export const AgentsNotchPlugin"))
+        XCTAssertTrue(source.contains("Bun.spawn"))
+        XCTAssertTrue(source.contains(manager.installedRelayURL.path))
+        XCTAssertTrue(source.contains("\"--provider\", \"opencode\""))
+        if let bunURL = Self.executableURL(named: "bun") {
+            let encodedPluginURL = try JSONEncoder().encode(pluginURL.absoluteString)
+            let pluginLiteral = String(decoding: encodedPluginURL, as: UTF8.self)
+            let process = Process()
+            process.executableURL = bunURL
+            process.arguments = [
+                "-e",
+                "const module = await import(\(pluginLiteral)); const hooks = await module.AgentsNotchPlugin({ directory: '/tmp' }); if (typeof hooks.event !== 'function') process.exit(1)",
+            ]
+            let errors = Pipe()
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errors
+            try process.run()
+            process.waitUntilExit()
+            let errorText = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            XCTAssertEqual(process.terminationStatus, 0, errorText)
+        }
+        let permissions = try FileManager.default.attributesOfItem(atPath: pluginURL.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o600)
+
+        manager.uninstall()
+
+        XCTAssertEqual(manager.status, .notInstalled)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pluginURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: siblingURL.path))
+    }
+
+    @MainActor
+    func testOpenCodeInstallRefusesToOverwriteUnownedPlugin() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let pluginURL = fixture.home.appendingPathComponent(".config/opencode/plugins/agentsnotch.js")
+        try FileManager.default.createDirectory(
+            at: pluginURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let original = Data("export const CustomPlugin = async () => ({})\n".utf8)
+        try original.write(to: pluginURL)
+
+        let manager = fixture.manager(provider: .openCode)
+        manager.install()
+
+        XCTAssertEqual(manager.status, .unavailable("Installation failed"))
+        XCTAssertEqual(try Data(contentsOf: pluginURL), original)
+        XCTAssertTrue(manager.lastError?.contains("will not replace") == true)
+    }
+
     private static func readJSON(at url: URL) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
         return try XCTUnwrap(object as? [String: Any])
@@ -320,6 +453,13 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         groups.flatMap { group in
             (group["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String }
         }
+    }
+
+    private static func executableURL(named name: String) -> URL? {
+        let paths = ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":") ?? []
+        return paths
+            .map { URL(fileURLWithPath: String($0), isDirectory: true).appendingPathComponent(name) }
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 }
 

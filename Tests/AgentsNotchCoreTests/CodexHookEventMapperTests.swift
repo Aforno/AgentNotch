@@ -322,6 +322,61 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.task, "Reviewer subagent")
     }
 
+    func testCursorPromptUsesConversationAndWorkspaceRootAliases() throws {
+        let payload = try decode("""
+        {
+          "conversation_id": "cursor-conversation",
+          "workspace_roots": ["/tmp/AgentsNotch"],
+          "hook_event_name": "beforeSubmitPrompt",
+          "prompt": "Add Cursor support"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .cursor))
+        XCTAssertEqual(event.sessionId, "cursor:cursor-conversation")
+        XCTAssertEqual(event.provider, .cursor)
+        XCTAssertEqual(event.task, "Add Cursor support")
+        XCTAssertEqual(event.workingDirectory, "/tmp/AgentsNotch")
+        XCTAssertEqual(event.state, .thinking)
+    }
+
+    func testCursorFailureUsesStatusAndErrorMessageAliases() throws {
+        let payload = try decode("""
+        {
+          "conversation_id": "cursor-conversation",
+          "workspace_roots": ["/tmp/AgentsNotch"],
+          "hook_event_name": "stop",
+          "status": "error",
+          "error_message": "Model request failed"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .cursor))
+        XCTAssertEqual(event.type, .failed)
+        XCTAssertEqual(event.state, .failed)
+        XCTAssertEqual(event.activity, "Model request failed")
+    }
+
+    func testOpenCodeEditToolUsesCamelCaseFilePath() throws {
+        let payload = try decode("""
+        {
+          "session_id": "open-code-session",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "edit",
+          "tool_input": {"filePath": "/tmp/AgentsNotch/Sources/App.swift"}
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .openCode))
+        XCTAssertEqual(event.sessionId, "opencode:open-code-session")
+        XCTAssertEqual(event.provider, .openCode)
+        XCTAssertEqual(event.type, .fileChanged)
+        XCTAssertEqual(event.state, .editing)
+        XCTAssertEqual(event.file, "/tmp/AgentsNotch/Sources/App.swift")
+        XCTAssertEqual(event.activity, "Editing App.swift")
+    }
+
     private func decode(_ json: String) throws -> CodexHookPayload {
         try JSONDecoder().decode(CodexHookPayload.self, from: Data(json.utf8))
     }

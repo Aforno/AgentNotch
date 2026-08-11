@@ -8,9 +8,9 @@ calls, file edits, and completions stay collapsed.
 > **Project status:** pre-1.0 public beta. The local protocol is versioned, but
 > UI details and provider lifecycle mappings may still evolve before 1.0.
 
-Built-in integrations support Codex, Claude Code, Grok, and Gemini CLI. The UI is
-provider-neutral: every integration ultimately sends the same `AgentEvent`
-values to the local socket.
+Built-in integrations support Codex, Claude Code, Grok, Gemini CLI, OpenCode,
+and Cursor. The UI is provider-neutral: every integration ultimately sends the
+same `AgentEvent` values to the local socket.
 
 ## Install
 
@@ -53,29 +53,36 @@ the Debug settings tab, and related wiring.
 
 ## Provider integrations
 
-Open **Settings → Integrations** and install Codex, Claude, Grok, Gemini, or any
-combination of them. Agents Notch:
+Open **Settings → Integrations** and install Codex, Claude, Grok, Gemini,
+OpenCode, Cursor, or any combination of them. Agents Notch:
 
 1. copies its small relay to `~/.agentsnotch/bin/agentsnotch-hook`;
-2. merges observer-only entries into the provider's hook configuration without
-   replacing existing hooks;
+2. installs an observer-only hook or plugin through the provider's supported
+   extension point without replacing existing integrations;
 3. listens on `~/.agentsnotch/agent.sock` with directory mode `0700` and socket
    mode `0600`.
 
 The configuration locations are `~/.codex/hooks.json` for Codex,
 `~/.claude/settings.json` for Claude Code,
 `~/.grok/hooks/agentsnotch.json` for Grok, and `~/.gemini/settings.json` for
-Gemini CLI. Open `/hooks` in providers that expose that command to inspect the
-installed entries; Codex also requires new command hooks to be trusted. The
-hooks do not return a decision, inject context, or block a tool. The relay
-always exits successfully, even when Agents Notch is not running.
+Gemini CLI. Cursor uses `~/.cursor/hooks.json`. OpenCode loads the generated
+`~/.config/opencode/plugins/agentsnotch.js` bridge. Open `/hooks` in providers
+that expose that command to inspect the installed entries; Codex also requires
+new command hooks to be trusted. The observers do not return a decision,
+inject context, or block a tool. The relay always exits successfully, even
+when Agents Notch is not running.
 
 The adapters use each provider's documented session, prompt, tool, permission,
-notification, stop, and subagent lifecycle events. The relay accepts the
-snake_case payload used by Codex, Claude Code, and Gemini CLI as well as Grok's
-camelCase payload. It deliberately does not parse provider transcripts. Tools
-that do not pass through a provider's local hook path cannot currently be shown as
-fine-grained activity.
+notification, and stop lifecycle events. The relay accepts the snake_case
+payload used by Codex, Claude Code, Gemini CLI, and Cursor as well as Grok's
+camelCase payload. The OpenCode bridge converts plugin events to that same
+observer payload. It deliberately does not parse provider transcripts. Tools
+that do not pass through a provider's local hook path cannot currently be
+shown as fine-grained activity.
+
+Cursor's current hook API does not expose a passive event for its native
+approval prompt. Cursor session, prompt, tool, failure, and completion activity
+is available, but its own approval dialog cannot trigger notch attention.
 
 Grok sessions become visible on their first agent-turn event. Grok also emits a
 `SessionStart` event for lifecycle-only CLI invocations such as version probes,
@@ -86,6 +93,8 @@ which the app intentionally ignores because no agent task has begun.
 - [Claude Code hooks reference](https://code.claude.com/docs/en/hooks)
 - [Grok hooks reference](https://docs.x.ai/build/features/hooks)
 - [Gemini CLI hooks reference](https://geminicli.com/docs/hooks/reference/)
+- [OpenCode plugins reference](https://opencode.ai/docs/plugins/)
+- [Cursor hooks reference](https://cursor.com/docs/hooks)
 
 ## Activity and attention
 
@@ -188,8 +197,8 @@ implement the few lines needed to connect and write newline-delimited JSON.
   hooks.
 
 `AgentProviderAdapter` defines `startMonitoring`, `stopMonitoring`, and
-`discoverSessions`. Future OpenCode and Cursor adapters can
-translate their native events into `AgentEvent` without changing the notch UI.
+`discoverSessions`. Provider adapters translate native events into `AgentEvent`
+without changing the notch UI.
 
 Hook adapters are push-only, so `discoverSessions` returns an empty list. On
 launch, Agents Notch reconciles restored runners instead of inventing

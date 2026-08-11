@@ -26,7 +26,7 @@ final class NotchPanelController: NSWindowController {
         configure(panel)
         installContent(in: panel)
         observeDisplayChanges()
-        observePointerDisplayChanges()
+        updatePointerDisplayObservation()
     }
 
     @available(*, unavailable)
@@ -76,6 +76,7 @@ final class NotchPanelController: NSWindowController {
     /// owned by NotchRootView so an expanded list/detail is never clipped back
     /// to compact dimensions by an unrelated preference write.
     func refreshPreferences() {
+        updatePointerDisplayObservation()
         guard let screen = DisplayResolver.preferredScreen() else { return }
         let updated = DisplayGeometry.detect(on: screen)
         let geometryChanged = updated != geometry
@@ -155,23 +156,48 @@ final class NotchPanelController: NSWindowController {
         }
     }
 
-    private func observePointerDisplayChanges() {
-        globalPointerObserver = NSEvent.addGlobalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
-        ) { [weak self] _ in
-            Task { @MainActor in self?.refreshPointerDisplayIfNeeded() }
+    private func updatePointerDisplayObservation() {
+        let followsPointer = UserDefaults.standard.string(forKey: "displayPreference")
+            == DisplayPreference.pointer.rawValue
+
+        guard followsPointer else {
+            removePointerDisplayObservation()
+            return
         }
-        localPointerObserver = NSEvent.addLocalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
-        ) { [weak self] event in
-            MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
-            return event
+
+        if globalPointerObserver == nil {
+            globalPointerObserver = NSEvent.addGlobalMonitorForEvents(
+                matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+            ) { [weak self] _ in
+                // AppKit delivers global and local monitor handlers on the main thread.
+                MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
+            }
+        }
+        if localPointerObserver == nil {
+            localPointerObserver = NSEvent.addLocalMonitorForEvents(
+                matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+            ) { [weak self] event in
+                MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
+                return event
+            }
+        }
+    }
+
+    private func removePointerDisplayObservation() {
+        if let globalPointerObserver {
+            NSEvent.removeMonitor(globalPointerObserver)
+            self.globalPointerObserver = nil
+        }
+        if let localPointerObserver {
+            NSEvent.removeMonitor(localPointerObserver)
+            self.localPointerObserver = nil
         }
     }
 
     private func refreshPointerDisplayIfNeeded() {
-        guard UserDefaults.standard.string(forKey: "displayPreference") == DisplayPreference.pointer.rawValue,
-              let screen = DisplayResolver.preferredScreen(),
+        let pointerLocation = NSEvent.mouseLocation
+        guard !geometry.screenFrame.contains(pointerLocation),
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(pointerLocation) }),
               screen.frame != geometry.screenFrame else { return }
         refreshDisplay(force: true)
     }

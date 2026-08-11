@@ -18,6 +18,8 @@ final class AppRuntime {
     let claudeIntegration: ProviderIntegrationManager
     let grokIntegration: ProviderIntegrationManager
     let geminiIntegration: ProviderIntegrationManager
+    let openCodeIntegration: ProviderIntegrationManager
+    let cursorIntegration: ProviderIntegrationManager
     let providerAdapters: [HookProviderAdapter]
     let notifications: AgentNotificationService
     let updates: UpdateService
@@ -75,7 +77,16 @@ final class AppRuntime {
         claudeIntegration = ProviderIntegrationManager(provider: .claudeCode)
         grokIntegration = ProviderIntegrationManager(provider: .grok)
         geminiIntegration = ProviderIntegrationManager(provider: .geminiCLI)
-        providerAdapters = [codexIntegration, claudeIntegration, grokIntegration, geminiIntegration]
+        openCodeIntegration = ProviderIntegrationManager(provider: .openCode)
+        cursorIntegration = ProviderIntegrationManager(provider: .cursor)
+        providerAdapters = [
+            codexIntegration,
+            claudeIntegration,
+            grokIntegration,
+            geminiIntegration,
+            openCodeIntegration,
+            cursorIntegration,
+        ]
             .map(HookProviderAdapter.init)
         notifications = AgentNotificationService()
         updates = UpdateService()
@@ -417,6 +428,8 @@ final class AppRuntime {
         case .claudeCode: claudeIntegration
         case .grok: grokIntegration
         case .geminiCLI: geminiIntegration
+        case .openCode: openCodeIntegration
+        case .cursor: cursorIntegration
         default: nil
         }
     }
@@ -425,14 +438,20 @@ final class AppRuntime {
         let hookEventName = switch provider {
         case .geminiCLI: "BeforeAgent"
         case .grok: "user_prompt_submit"
+        case .cursor: "beforeSubmitPrompt"
         default: "UserPromptSubmit"
         }
-        return try JSONSerialization.data(withJSONObject: [
+        var object: [String: Any] = [
             "session_id": sessionID,
             "cwd": FileManager.default.homeDirectoryForCurrentUser.path,
             "hook_event_name": hookEventName,
             "prompt": "Connection self-test",
-        ])
+        ]
+        if provider == .cursor {
+            object["conversation_id"] = object.removeValue(forKey: "session_id")
+            object["workspace_roots"] = [object.removeValue(forKey: "cwd") as? String].compactMap { $0 }
+        }
+        return try JSONSerialization.data(withJSONObject: object)
     }
 }
 

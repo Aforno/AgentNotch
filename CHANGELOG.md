@@ -13,6 +13,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - First-run setup, integration health checks, and menu-bar access for displays
   without a hardware notch.
 - Observer-only Gemini CLI integration using its official lifecycle hooks.
+- Observer-only OpenCode plugin and Cursor lifecycle-hook integrations.
 - Optional actionable macOS notifications for waiting and failed agents.
 - Source-application handoff using optional terminal and application origin
   metadata captured by the local relay.
