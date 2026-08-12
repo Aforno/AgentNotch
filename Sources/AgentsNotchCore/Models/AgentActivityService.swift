@@ -141,11 +141,19 @@ public final class AgentActivityService {
             sessions.append(AgentSession(event: event))
             advancesCurrentState = true
         }
+
+        // Build the session graph after ordering so ordinary activity only
+        // pays for one complete projection. A second projection is needed
+        // only when parent/descendant reconciliation mutates another row.
+        sessions.sort(by: Self.orderSessions)
         rebuildIndex()
 
         // A parent may finish before a concurrently delivered child event. Do
         // not create a permanently active child underneath a terminal parent.
-        completeSessionIfParentIsTerminal(event.sessionId, at: event.timestamp)
+        var reconciledRelatedSession = completeSessionIfParentIsTerminal(
+            event.sessionId,
+            at: event.timestamp
+        )
 
         // SessionEnd/Stop only complete the mapped sessionId. Cascade to active
         // descendants so composite subagent rows do not stay isActive after the
@@ -153,15 +161,17 @@ public final class AgentActivityService {
         let cascadedTerminal = advancesCurrentState
             && (event.resolvedState == .completed || event.resolvedState == .failed)
         if cascadedTerminal {
-            completeActiveDescendants(
+            reconciledRelatedSession = completeActiveDescendants(
                 of: event.sessionId,
                 as: event.resolvedState,
                 at: event.timestamp
-            )
+            ) || reconciledRelatedSession
         }
 
-        sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
+        if reconciledRelatedSession {
+            sessions.sort(by: Self.orderSessions)
+            rebuildIndex()
+        }
         if advancesCurrentState {
             if cascadedTerminal {
                 // Rebuild attention: a waiting child may have been cascade-completed.
@@ -334,27 +344,33 @@ public final class AgentActivityService {
         )
     }
 
+    @discardableResult
     private func completeActiveDescendants(
         of parentID: String,
         as state: AgentState,
         at timestamp: Date
-    ) {
+    ) -> Bool {
         let descendantIDs = index.descendantIDs(of: parentID)
-        guard !descendantIDs.isEmpty else { return }
+        guard !descendantIDs.isEmpty else { return false }
+        var completedAny = false
         for index in sessions.indices
             where descendantIDs.contains(sessions[index].id) && sessions[index].isActive
         {
             sessions[index].complete(as: state, at: timestamp)
+            completedAny = true
         }
+        return completedAny
     }
 
-    private func completeSessionIfParentIsTerminal(_ sessionID: String, at timestamp: Date) {
+    private func completeSessionIfParentIsTerminal(_ sessionID: String, at timestamp: Date) -> Bool {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              sessions[index].isActive,
               let parentID = sessions[index].parentSessionId,
               let parent = sessions.first(where: { $0.id == parentID }),
               parent.state == .completed || parent.state == .failed
-        else { return }
+        else { return false }
         sessions[index].complete(as: parent.state, at: max(parent.updatedAt, timestamp))
+        return true
     }
 
     private func canonicalizedIdentity(for incomingEvent: AgentEvent) -> AgentEvent {

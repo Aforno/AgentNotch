@@ -8,7 +8,9 @@ final class NotchPanelController: NSWindowController {
     private var screenObserver: NSObjectProtocol?
     private var globalPointerObserver: Any?
     private var localPointerObserver: Any?
-    private var resizeTask: Task<Void, Never>?
+    private lazy var frameScheduler = NotchPanelFrameScheduler { [weak self] size, animated in
+        self?.reposition(width: size.width, height: size.height, animated: animated)
+    }
 
     init(runtime: AppRuntime) {
         self.runtime = runtime
@@ -35,7 +37,6 @@ final class NotchPanelController: NSWindowController {
     }
 
     deinit {
-        resizeTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let globalPointerObserver { NSEvent.removeMonitor(globalPointerObserver) }
         if let localPointerObserver { NSEvent.removeMonitor(localPointerObserver) }
@@ -97,17 +98,7 @@ final class NotchPanelController: NSWindowController {
     }
 
     func updateSize(_ size: CGSize, animated: Bool) {
-        resizeTask?.cancel()
-        resizeTask = Task { @MainActor [weak self] in
-            // A SwiftUI state update can arrive while NSHostingView is inside
-            // AppKit's constraint pass. Mutating the window frame there causes
-            // a recursive display cycle and AppKit terminates the process.
-            // Yield to the next run-loop turn; avoid a long sleep so we can
-            // track SwiftUI's per-frame width/height morph closely.
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            self?.reposition(width: size.width, height: size.height, animated: animated)
-        }
+        frameScheduler.schedule(size: size, animated: animated)
     }
 
     private func configure(_ panel: NSPanel) {
@@ -235,7 +226,10 @@ final class NotchPanelController: NSWindowController {
         // Using animator().setFrame here was unreliable for height on top-edge
         // panels and fought the SwiftUI animation.
         _ = animated
-        panel.setFrame(targetFrame, display: true)
+        // `display: true` can synchronously re-enter NSHostingView's constraint
+        // pass. The layer-backed hosting view redraws on its normal display
+        // cycle, so a deferred, non-forcing frame change is sufficient.
+        panel.setFrame(targetFrame, display: false)
     }
 
     private func frame(for size: CGSize, screenTop: CGFloat? = nil) -> CGRect {

@@ -66,18 +66,7 @@ struct ActivitySessionDetailView: View {
                 }
 
                 detailSection("Recent Events", count: "\(session.recentEvents.count)") {
-                    ForEach(session.recentEvents) { event in
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(event.timestamp, style: .time)
-                                .font(NotchWindowFont.mono)
-                                .foregroundStyle(NotchWindowPalette.tertiaryText)
-                                .frame(width: 64, alignment: .leading)
-                            Text(event.activity ?? event.resolvedState.displayName)
-                                .font(NotchWindowFont.caption)
-                                .foregroundStyle(.white.opacity(0.72))
-                            Spacer()
-                        }
-                    }
+                    ActivityEventTimeline(events: session.recentEvents)
                 }
             }
             .padding(NotchWindowMetrics.contentInset)

@@ -104,6 +104,97 @@ final class ActivityCenterProjectionTests: XCTestCase {
         XCTAssertEqual(Set(projection.availableProjects.map(\.title)), ["Recent", "Old"])
     }
 
+    func testLegacyProviderAliasesShareOneFilterOptionAndMatchCanonicalSelection() {
+        let now = Date(timeIntervalSince1970: 30_000)
+        var legacy = makeSession(
+            id: "claude:legacy",
+            task: "Legacy Claude",
+            timestamp: now,
+            directory: "/tmp/Legacy"
+        )
+        legacy.provider = AgentProvider(rawValue: "claude")
+        var canonical = makeSession(
+            id: "claude-code:current",
+            task: "Current Claude",
+            timestamp: now,
+            directory: "/tmp/Current"
+        )
+        canonical.provider = .claudeCode
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [legacy, canonical],
+            searchText: "",
+            providerFilter: AgentProvider.claudeCode.rawValue,
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(projection.availableProviders.map(\.rawValue), [AgentProvider.claudeCode.rawValue])
+        XCTAssertEqual(Set(projection.filteredSessions.map(\.id)), [legacy.id, canonical.id])
+    }
+
+    func testDuplicateProjectNamesAreDisambiguatedByPath() {
+        let now = Date(timeIntervalSince1970: 40_000)
+        let first = makeSession(
+            id: "codex:first",
+            task: "First checkout",
+            timestamp: now,
+            directory: "/tmp/one/AgentNotch"
+        )
+        let second = makeSession(
+            id: "codex:second",
+            task: "Second checkout",
+            timestamp: now,
+            directory: "/tmp/two/AgentNotch"
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [first, second],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(
+            Set(projection.availableProjects.map(\.title)),
+            ["AgentNotch — /tmp/one/AgentNotch", "AgentNotch — /tmp/two/AgentNotch"]
+        )
+    }
+
+    func testEquivalentDisplayedProjectPathsRemainDistinct() {
+        let now = Date(timeIntervalSince1970: 50_000)
+        let absolutePath = "\(NSHomeDirectory())/Projects/AgentNotch"
+        let first = makeSession(
+            id: "codex:absolute",
+            task: "Absolute checkout",
+            timestamp: now,
+            directory: absolutePath
+        )
+        let second = makeSession(
+            id: "codex:tilde",
+            task: "Tilde checkout",
+            timestamp: now,
+            directory: "~/Projects/AgentNotch"
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [first, second],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(Set(projection.availableProjects.map(\.title)), [
+            "AgentNotch — ~/Projects/AgentNotch (1)",
+            "AgentNotch — ~/Projects/AgentNotch (2)",
+        ])
+    }
+
     private func makeSession(
         id: String,
         task: String,
