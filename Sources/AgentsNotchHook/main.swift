@@ -2,6 +2,11 @@ import AgentsNotchCore
 import Darwin
 import Foundation
 
+// Providers may close stdout on timeout/cancel. Ignore SIGPIPE and refuse
+// NSFileHandle's exception path so the required passive `{}` cannot exit 141.
+_ = signal(SIGPIPE, SIG_IGN)
+_ = fcntl(STDOUT_FILENO, F_SETNOSIGPIPE, 1)
+
 let input = readHookInput()
 let arguments = CommandLine.arguments
 let explicitProvider: AgentProvider? = {
@@ -12,12 +17,13 @@ let explicitProvider: AgentProvider? = {
 }()
 let configuredProvider = explicitProvider ?? .codex
 let grokHookEvent = ProcessInfo.processInfo.environment["GROK_HOOK_EVENT"]
-// Grok can execute Claude settings hooks (--provider claude-code). Attribute
-// those to Grok so Claude-only installs do not mislabel Grok activity.
+// Grok can execute Claude settings hooks and Cursor hooks.json
+// (--provider claude-code / --provider cursor). Attribute those to Grok so
+// compatibility installs do not mislabel Grok activity as Claude or Cursor.
 let provider: AgentProvider = {
     let resolved = explicitProvider
         ?? (grokHookEvent == nil ? .codex : .grok)
-    if grokHookEvent != nil, resolved == .claudeCode {
+    if grokHookEvent != nil, resolved == .claudeCode || resolved == .cursor {
         return .grok
     }
     return resolved
@@ -66,6 +72,21 @@ do {
         permissionRequestRequiresUserInput: permissionRequestRequiresUserInput
     )
     {
+        if AgentTaskTitle.displayable(event.task ?? "") == nil,
+           let sessionTitle = grokContext?.sessionTitle
+        {
+            event.task = sessionTitle
+        }
+        if provider == .codex,
+           payload.agentId?.nonEmpty == nil,
+           payload.parentSessionId?.nonEmpty == nil,
+           let title = CodexSessionTitleResolver.title(forNativeSessionId: payload.sessionId)
+        {
+            event.task = title
+            var metadata = event.metadata ?? [:]
+            metadata["titleSource"] = "session"
+            event.metadata = metadata
+        }
         event.origin = hookOrigin()
         if isSelfTest {
             var metadata = event.metadata ?? [:]
@@ -106,7 +127,11 @@ do {
 }
 
 private func writePassiveResponse() {
-    FileHandle.standardOutput.write(Data("{}\n".utf8))
+    let payload = Data("{}\n".utf8)
+    payload.withUnsafeBytes { buffer in
+        guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else { return }
+        _ = Darwin.write(STDOUT_FILENO, baseAddress, buffer.count)
+    }
 }
 
 /// Reads stdin up to the safety cap and drains any remainder so an oversized
@@ -197,6 +222,10 @@ private func containsNativeGrokRelay(_ value: Any) -> Bool {
 /// no workflow publish requirement skip the unbounded FS scan.
 private func shouldResolveGrokSessionContext(_ payload: AgentHookPayload) -> Bool {
     if shouldPublishWorkflowState(payload) { return true }
+    let event = payload.hookEventName.replacingOccurrences(of: "_", with: "").lowercased()
+    if ["userpromptsubmit", "beforesubmitprompt", "beforeagent"].contains(event) {
+        return true
+    }
     // Parent already known and no workflow publish: skip the tree walk.
     if payload.parentSessionId?.nonEmpty != nil { return false }
     // Otherwise resolve so children can attach (own-directory short-circuit

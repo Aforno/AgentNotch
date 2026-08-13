@@ -97,7 +97,7 @@ public enum AgentHookEventMapper {
         case "UserPromptSubmit":
             return context.event(
                 type: .activity,
-                task: payload.prompt.map { concise($0, limit: 140) },
+                task: payload.prompt.flatMap { AgentTaskTitle.fromPrompt($0) },
                 activity: "Thinking",
                 state: .thinking
             )
@@ -314,7 +314,7 @@ public enum AgentHookEventMapper {
 
     private static func isFailureReason(_ reason: String?) -> Bool {
         switch reason?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "error", "failed", "failure": true
+        case "error", "failed", "failure", "aborted", "abort": true
         default: false
         }
     }

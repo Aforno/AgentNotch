@@ -22,7 +22,13 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public init(event: AgentEvent) {
         id = event.sessionId
         provider = event.provider
-        task = event.task?.nonEmpty ?? "Untitled task"
+        task = Self.resolvedTask(
+            current: AgentTaskTitle.untitled,
+            event: event,
+            projectName: event.workingDirectory.flatMap {
+                URL(fileURLWithPath: $0).lastPathComponent.nonEmpty
+            }
+        )
         currentActivity = event.activity?.nonEmpty ?? event.resolvedState.displayName
         state = event.resolvedState
         startedAt = event.timestamp
@@ -76,14 +82,25 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             && state == .waitingForUser
             && !eventIsTerminal
             && !event.explicitlyResumesSession
+        // Delayed SessionStart is often stamped with Date() when the hook
+        // omits a timestamp. Do not rewind an already-progressed active
+        // session back to .starting or clear waiting attention.
+        let startMustNotRegressProgressedState = event.type == .started
+            && !eventIsTerminal
+            && (state == .thinking
+                || state == .running
+                || state == .executingTool
+                || state == .editing
+                || state == .waitingForUser)
         return (event.timestamp >= updatedAt || isReorderedTerminalVsActive)
             && terminalTransitionIsAllowed
             && !sameTimeKeepsAttention
+            && !startMustNotRegressProgressedState
     }
 
     private mutating func applyAdvancingEvent(_ event: AgentEvent) {
         provider = event.provider
-        if let task = event.task?.nonEmpty { self.task = task }
+        applyTask(from: event)
         if let activity = event.activity?.nonEmpty { currentActivity = activity }
         state = event.resolvedState
         // Keep session clocks monotonic when an older terminal overrides active.
@@ -127,9 +144,34 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             mergePlan(from: event)
             applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         }
-        if task == "Untitled task", let task = event.task?.nonEmpty {
-            self.task = task
+        applyTask(from: event)
+    }
+
+    private mutating func applyTask(from event: AgentEvent) {
+        task = Self.resolvedTask(
+            current: task,
+            event: event,
+            projectName: workingDirectory.flatMap {
+                URL(fileURLWithPath: $0).lastPathComponent.nonEmpty
+            }
+        )
+    }
+
+    private static func resolvedTask(
+        current: String,
+        event: AgentEvent,
+        projectName: String?
+    ) -> String {
+        if event.hasOfficialSessionTitle,
+           let official = event.task.flatMap(AgentTaskTitle.displayable)
+        {
+            return official
         }
+        return AgentTaskTitle.assigned(
+            current: current,
+            incoming: event.task,
+            projectName: projectName
+        )
     }
 
     private mutating func mergeRelationshipContext(from event: AgentEvent) {
@@ -209,7 +251,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             authoritativeTimestamp: event.timestamp
         )
 
-        if task == "Untitled task", let restoredTask = event.task?.nonEmpty {
+        if AgentTaskTitle.displayable(task) == nil, let restoredTask = event.task.flatMap(AgentTaskTitle.displayable) {
             task = restoredTask
             changed = true
         }
@@ -320,7 +362,10 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(String.self, forKey: .id)
         provider = try values.decode(AgentProvider.self, forKey: .provider)
-        task = try values.decode(String.self, forKey: .task)
+        let decodedTask = try values.decode(String.self, forKey: .task)
+        task = AgentTaskTitle.isHousekeeping(decodedTask)
+            ? decodedTask
+            : (AgentTaskTitle.displayable(decodedTask) ?? AgentTaskTitle.untitled)
         currentActivity = try values.decode(String.self, forKey: .currentActivity)
         state = try values.decode(AgentState.self, forKey: .state)
         startedAt = try values.decode(Date.self, forKey: .startedAt)
@@ -350,6 +395,10 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 private extension AgentEvent {
     var isGrokWorkflowState: Bool {
         metadata?["hookEvent"] == "grokWorkflowState"
+    }
+
+    var hasOfficialSessionTitle: Bool {
+        metadata?["titleSource"] == "session"
     }
 
     var explicitlyResumesSession: Bool {

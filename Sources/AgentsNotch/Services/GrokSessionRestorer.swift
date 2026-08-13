@@ -37,6 +37,13 @@ enum GrokSessionRestorer {
                     )
                 )
             }
+            if AgentTaskTitle.displayable(session.task) == nil,
+               let sessionTitle = context.sessionTitle
+            {
+                relationshipEvents.append(
+                    titleEvent(for: session, title: sessionTitle)
+                )
+            }
             if let owner = context.workflowOwnerSessionId {
                 workflowContexts[owner] = context
             }
@@ -70,6 +77,21 @@ enum GrokSessionRestorer {
             workingDirectory: session.workingDirectory,
             parentSessionId: parentSessionID,
             agentRole: agentRole
+        )
+    }
+
+    private static func titleEvent(for session: AgentSession, title: String) -> AgentEvent {
+        AgentEvent(
+            type: .activity,
+            sessionId: session.id,
+            provider: .grok,
+            task: title,
+            activity: session.currentActivity,
+            state: session.state,
+            timestamp: session.updatedAt,
+            workingDirectory: session.workingDirectory,
+            parentSessionId: session.parentSessionId,
+            agentRole: session.agentRole
         )
     }
 }

@@ -198,11 +198,11 @@ public final class AgentActivityService {
     /// without treating app startup as new agent activity.
     public func reconcileRestoredWorkflow(_ event: AgentEvent) {
         guard event.protocolVersion == 1, event.provider == .grok else { return }
-        if let index = sessions.firstIndex(where: { $0.id == event.sessionId }) {
-            guard sessions[index].reconcileRestoredWorkflow(event) else { return }
-        } else {
-            sessions.append(AgentSession(event: event))
-        }
+        // Missing rows are leftover on-disk evidence, not a new live agent.
+        // Creating AgentSession(event:) here would adopt the restore event's
+        // running state and skip cold-start unknown/cascade rules.
+        guard let index = sessions.firstIndex(where: { $0.id == event.sessionId }) else { return }
+        guard sessions[index].reconcileRestoredWorkflow(event) else { return }
         commitSessionChanges(orderSessions: true)
     }
 
@@ -281,7 +281,12 @@ public final class AgentActivityService {
     public func completeUnknownSessions() {
         var changed = false
         for index in sessions.indices where sessions[index].state == .unknown {
-            sessions[index].complete(as: .completed, at: sessions[index].updatedAt)
+            let parentID = sessions[index].id
+            let completedAt = sessions[index].updatedAt
+            sessions[index].complete(as: .completed, at: completedAt)
+            // Match ingest and dead-PID reconcile: waiting children under a
+            // terminal parent must not linger as attention pins.
+            completeActiveDescendants(of: parentID, as: .completed, at: completedAt)
             changed = true
         }
         guard changed else { return }
@@ -302,6 +307,9 @@ public final class AgentActivityService {
             activity: activity,
             at: timestamp
         ) else { return }
+        if state == .completed || state == .failed {
+            completeActiveDescendants(of: sessionId, as: state, at: timestamp)
+        }
         commitSessionChanges(orderSessions: true, attentionRefresh: .always)
     }
 
@@ -382,24 +390,50 @@ public final class AgentActivityService {
             incomingEvent,
             providerPrefix: prefix
         ) {
-            return resolved
+            return remappedParentIfNeeded(resolved, providerPrefix: prefix)
         }
 
         let collidingIndices = sessions.indices.filter {
             sessions[$0].id == incomingEvent.sessionId
                 && sessions[$0].provider != incomingEvent.provider
         }
-        guard !collidingIndices.isEmpty else { return incomingEvent }
+        guard !collidingIndices.isEmpty else {
+            return remappedParentIfNeeded(incomingEvent, providerPrefix: prefix)
+        }
 
         renameCollidingSessions(at: collidingIndices, originalID: incomingEvent.sessionId)
-        return eventCanonicalizedAfterCollision(incomingEvent, providerPrefix: prefix)
+        return remappedParentIfNeeded(
+            eventCanonicalizedAfterCollision(incomingEvent, providerPrefix: prefix),
+            providerPrefix: prefix
+        )
     }
 
     private func eventTargetingExistingCanonicalSession(
         _ event: AgentEvent,
         providerPrefix: String
     ) -> AgentEvent? {
-        guard !event.sessionId.hasPrefix(providerPrefix) else { return nil }
+        if event.sessionId.hasPrefix(providerPrefix) {
+            // Prefer the exact canonical row when both it and a legacy bare
+            // duplicate were persisted by an older build. Redirecting this
+            // event to the bare row could leave canonical waiting state stuck.
+            if sessions.contains(where: {
+                $0.id == event.sessionId && $0.provider == event.provider
+            }) {
+                return event
+            }
+            // Reverse of the bare→prefixed path: a later provider-prefixed
+            // hook must update the existing unprefixed same-provider row.
+            let bareID = String(event.sessionId.dropFirst(providerPrefix.count))
+            guard !bareID.isEmpty,
+                  sessions.contains(where: {
+                      $0.id == bareID && $0.provider == event.provider
+                  })
+            else { return nil }
+            var resolved = event
+            resolved.sessionId = bareID
+            return resolved
+        }
+
         let canonicalID = providerPrefix + event.sessionId
         guard sessions.contains(where: {
             $0.id == canonicalID && $0.provider == event.provider
@@ -407,15 +441,47 @@ public final class AgentActivityService {
 
         var resolved = event
         resolved.sessionId = canonicalID
-        if let parentID = event.parentSessionId,
-           !parentID.hasPrefix(providerPrefix),
-           sessions.contains(where: {
-               $0.id == providerPrefix + parentID && $0.provider == event.provider
-           })
-        {
-            resolved.parentSessionId = providerPrefix + parentID
-        }
         return resolved
+    }
+
+    private func remappedParentIfNeeded(
+        _ event: AgentEvent,
+        providerPrefix: String
+    ) -> AgentEvent {
+        guard let parentID = event.parentSessionId else { return event }
+        let resolvedParent = resolvedExistingSessionID(
+            parentID,
+            provider: event.provider,
+            providerPrefix: providerPrefix
+        )
+        guard resolvedParent != parentID else { return event }
+        var event = event
+        event.parentSessionId = resolvedParent
+        return event
+    }
+
+    private func resolvedExistingSessionID(
+        _ sessionID: String,
+        provider: AgentProvider,
+        providerPrefix: String
+    ) -> String {
+        if sessions.contains(where: { $0.id == sessionID && $0.provider == provider }) {
+            return sessionID
+        }
+        if sessionID.hasPrefix(providerPrefix) {
+            let bareID = String(sessionID.dropFirst(providerPrefix.count))
+            if !bareID.isEmpty,
+               sessions.contains(where: { $0.id == bareID && $0.provider == provider })
+            {
+                return bareID
+            }
+        } else {
+            let prefixedID = providerPrefix + sessionID
+            if sessions.contains(where: { $0.id == prefixedID && $0.provider == provider }) {
+                return prefixedID
+            }
+        }
+        return sessionID
     }
 
     private func renameCollidingSessions(

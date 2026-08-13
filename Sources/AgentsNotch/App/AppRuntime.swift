@@ -32,6 +32,7 @@ final class AppRuntime {
     private let socketURL: URL
     private let monitorProviders: Bool
     private let grokHome: URL
+    private let codexHome: URL
     private let historyRetentionDays: () -> Int?
     private let originActivation = OriginActivationService()
     private var socketServer: UnixSocketServer?
@@ -67,6 +68,7 @@ final class AppRuntime {
         socketURL: URL = AgentSocketLocation.defaultURL,
         monitorProviders: Bool = true,
         grokHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".grok"),
+        codexHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex"),
         providerHomeDirectoryURL: URL? = nil,
         bundledRelayURL: URL? = nil,
         persistDebounceDuration: Duration = .milliseconds(350),
@@ -79,6 +81,7 @@ final class AppRuntime {
         self.socketURL = socketURL
         self.monitorProviders = monitorProviders
         self.grokHome = grokHome
+        self.codexHome = codexHome
         self.persistDebounceDuration = persistDebounceDuration
         self.persistMaximumDelay = persistMaximumDelay
         self.historyRetentionDays = historyRetentionDays
@@ -165,6 +168,15 @@ final class AppRuntime {
         }.value
         guard isCurrentLifecycle(generation) else { return false }
         applyGrokSessionContext(grokEvidence)
+        let restoredAfterGrok = activity.sessions
+        let codexHome = self.codexHome
+        let codexTitleEvents = await Task.detached(priority: .utility) {
+            CodexSessionRestorer.titleEvents(in: restoredAfterGrok, codexHome: codexHome)
+        }.value
+        guard isCurrentLifecycle(generation) else { return false }
+        for event in codexTitleEvents {
+            activity.ingest(event)
+        }
         pruneHistory()
         #if DEBUG
         // Simulator state is intentionally ephemeral. This also removes rows

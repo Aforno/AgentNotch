@@ -23,6 +23,16 @@ final class GrokSessionContextResolverTests: XCTestCase {
             configuredProvider: .claudeCode,
             hasNativeRelay: false
         ))
+        XCTAssertTrue(GrokHookRouting.shouldSkipClaudeCompatibilityHook(
+            grokHookEvent: "PreToolUse",
+            configuredProvider: .cursor,
+            hasNativeRelay: true
+        ))
+        XCTAssertFalse(GrokHookRouting.shouldSkipClaudeCompatibilityHook(
+            grokHookEvent: "PreToolUse",
+            configuredProvider: .cursor,
+            hasNativeRelay: false
+        ))
     }
 
     func testResolvesChildRelationshipAndWorkflowPhasesFromWorkspaceMetadata() throws {
@@ -88,6 +98,7 @@ final class GrokSessionContextResolverTests: XCTestCase {
         XCTAssertEqual(context.parentSessionId, parent)
         XCTAssertEqual(context.agentRole, "audit:core-models")
         XCTAssertEqual(context.workflowOwnerSessionId, parent)
+        XCTAssertNil(context.sessionTitle)
         XCTAssertEqual(context.workflowTask, "Audit and fix Agents Notch")
         XCTAssertEqual(context.workflowPhase, "Audit")
         XCTAssertEqual(context.workflowState, .running)
@@ -98,6 +109,33 @@ final class GrokSessionContextResolverTests: XCTestCase {
             workflowUpdatedAt.timeIntervalSince1970,
             accuracy: 1
         )
+    }
+
+    func testReadsGeneratedTitleWhenWorkflowIsAbsent() throws {
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AgentsNotch-GrokTitle-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+
+        let sessionID = "grok-session"
+        let sessionDirectory = temporary
+            .appendingPathComponent("sessions/%2Ftmp%2FAgentsNotch", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+        try FileManager.default.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+        try Data("""
+        {
+          "generated_title": "UI improvement recommendations no file edits",
+          "session_summary": "UI improvement recommendations no file edits"
+        }
+        """.utf8).write(to: sessionDirectory.appendingPathComponent("summary.json"))
+
+        let context = GrokSessionContextResolver.resolve(
+            sessionId: sessionID,
+            workspaceRoot: "/tmp/AgentsNotch",
+            grokHome: temporary
+        )
+
+        XCTAssertEqual(context.sessionTitle, "UI improvement recommendations no file edits")
+        XCTAssertNil(context.workflowTask)
     }
 
     func testRejectsSessionIDPathTraversal() throws {

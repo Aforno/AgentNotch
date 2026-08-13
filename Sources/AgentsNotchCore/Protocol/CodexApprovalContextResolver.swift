@@ -17,10 +17,14 @@ public enum CodexApprovalContextResolver {
             return !isAutomaticReviewer(reviewer)
         }
 
+        // A transcript without turn_id has no matching turn. Using the newest
+        // turn_context would hide a user-facing approval behind a later
+        // auto_review / guardian_subagent context. Missing context fails open.
         guard let transcriptPath = payload.transcriptPath?.nonEmpty,
+              let turnId = payload.turnId?.nonEmpty,
               let reviewer = reviewer(
                   inTranscriptAt: URL(fileURLWithPath: transcriptPath),
-                  matchingTurnId: payload.turnId?.nonEmpty
+                  matchingTurnId: turnId
               )
         else {
             return true

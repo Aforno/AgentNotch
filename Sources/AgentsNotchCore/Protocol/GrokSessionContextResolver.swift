@@ -9,6 +9,7 @@ public struct GrokSessionContext: Sendable {
     public let workflowState: AgentState?
     public let workflowUpdate: AgentWorkflowUpdate?
     public let workflowUpdatedAt: Date?
+    public let sessionTitle: String?
 
     public func workflowEvent(now: Date, workingDirectory: String?) -> AgentEvent? {
         guard let owner = workflowOwnerSessionId,
@@ -112,10 +113,17 @@ public enum GrokSessionContextResolver {
         if fileManager.fileExists(atPath: ownDirectory.path, isDirectory: &isDirectory),
            isDirectory.boolValue
         {
+            let sessionTitle = readSessionTitle(in: ownDirectory)
             guard let workflow = latestWorkflow(in: ownDirectory, fileManager: fileManager) else {
-                return emptyContext(parent: fallbackParent, role: fallbackRole)
+                return emptyContext(parent: fallbackParent, role: fallbackRole, sessionTitle: sessionTitle)
             }
-            return context(parent: nil, role: nil, owner: sessionId, workflow: workflow)
+            return context(
+                parent: nil,
+                role: nil,
+                owner: sessionId,
+                sessionTitle: sessionTitle,
+                workflow: workflow
+            )
         }
 
         guard let sessionDirectories = try? fileManager.contentsOfDirectory(
@@ -130,7 +138,11 @@ public enum GrokSessionContextResolver {
         )
     }
 
-    private static func emptyContext(parent: String?, role: String?) -> GrokSessionContext {
+    private static func emptyContext(
+        parent: String?,
+        role: String?,
+        sessionTitle: String? = nil
+    ) -> GrokSessionContext {
         GrokSessionContext(
             parentSessionId: parent,
             agentRole: role,
@@ -139,7 +151,8 @@ public enum GrokSessionContextResolver {
             workflowPhase: nil,
             workflowState: nil,
             workflowUpdate: nil,
-            workflowUpdatedAt: nil
+            workflowUpdatedAt: nil,
+            sessionTitle: sessionTitle
         )
     }
 
@@ -163,6 +176,7 @@ public enum GrokSessionContextResolver {
                 parent: metadata.parentSessionId,
                 role: metadata.description ?? metadata.subagentType,
                 owner: metadata.parentSessionId,
+                sessionTitle: readSessionTitle(in: parentDirectory),
                 workflow: workflow
             )
         }
@@ -173,6 +187,7 @@ public enum GrokSessionContextResolver {
         parent: String?,
         role: String?,
         owner: String?,
+        sessionTitle: String?,
         workflow: StoredWorkflowSnapshot?
     ) -> GrokSessionContext {
         let state = workflow?.state
@@ -184,8 +199,18 @@ public enum GrokSessionContextResolver {
             workflowPhase: state?.currentPhase,
             workflowState: state.map(agentState),
             workflowUpdate: state.map(workflowUpdate),
-            workflowUpdatedAt: workflow?.updatedAt
+            workflowUpdatedAt: workflow?.updatedAt,
+            sessionTitle: sessionTitle
         )
+    }
+
+    private static func readSessionTitle(in sessionDirectory: URL) -> String? {
+        let summaryURL = sessionDirectory.appendingPathComponent("summary.json")
+        guard let data = try? Data(contentsOf: summaryURL),
+              let summary = try? JSONDecoder().decode(SessionSummaryFile.self, from: data)
+        else { return nil }
+        return AgentTaskTitle.displayable(summary.generatedTitle ?? "")
+            ?? AgentTaskTitle.displayable(summary.sessionSummary ?? "")
     }
 
     private static func latestWorkflow(
@@ -280,6 +305,16 @@ public enum GrokSessionContextResolver {
             && !value.contains("/")
             && !value.contains("\\")
             && !value.contains("\0")
+    }
+}
+
+private struct SessionSummaryFile: Decodable {
+    let generatedTitle: String?
+    let sessionSummary: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedTitle = "generated_title"
+        case sessionSummary = "session_summary"
     }
 }
 

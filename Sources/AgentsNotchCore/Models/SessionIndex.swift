@@ -135,6 +135,7 @@ struct SessionIndex {
     private func latestGroupRoots() -> [AgentSession] {
         Array(
             groupRoots
+                .filter { !AgentTaskTitle.isHousekeeping($0.task) }
                 .sorted { lhs, rhs in
                     let lhsUpdatedAt = groupAggregates[lhs.id]?.updatedAt ?? lhs.updatedAt
                     let rhsUpdatedAt = groupAggregates[rhs.id]?.updatedAt ?? rhs.updatedAt

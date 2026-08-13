@@ -87,9 +87,11 @@ public struct AgentHookPayload: Decodable, Sendable {
             or: .workspaceRootSnake
         )
         let workspaceRoots = try values.decodeIfPresent([String].self, forKey: .workspaceRootsSnake)
-        cwd = try values.decodeIfPresent(String.self, forKey: .cwd)
-            ?? workspaceRoot
-            ?? workspaceRoots?.first
+        // A present empty cwd (Cursor sends "") must not block workspace_root
+        // / workspace_roots. decodeIfPresent only falls through on nil.
+        cwd = try values.decodeIfPresent(String.self, forKey: .cwd)?.nonEmpty
+            ?? workspaceRoot?.nonEmpty
+            ?? workspaceRoots?.lazy.compactMap(\.nonEmpty).first
             ?? ""
         hookEventName = try values.decodeEither(
             String.self,
@@ -136,8 +138,10 @@ public struct AgentHookPayload: Decodable, Sendable {
             or: .promptResponseSnake
         )
         lastAssistantMessage = lastAssistantMessage ?? promptResponse
-        error = try values.decodeIfPresent(String.self, forKey: .error)
-            ?? values.decodeIfPresent(String.self, forKey: .errorMessageSnake)
+        // OpenCode and others emit error as {"message":"..."}. A strict String
+        // decode would throw and drop an otherwise-valid hook.
+        error = values.decodeFlexibleStringIfPresent(forKey: .error)
+            ?? values.decodeFlexibleStringIfPresent(forKey: .errorMessageSnake)
         timestamp = values.decodeFlexibleDateIfPresent(forKeys: [.timestamp, .createdAt, .createdAtSnake])
     }
 }
@@ -148,7 +152,10 @@ private extension KeyedDecodingContainer {
         forKey first: Key,
         or second: Key
     ) throws -> T {
-        if contains(first) { return try decode(type, forKey: first) }
+        // contains() is true for JSON null. decode() then throws valueNotFound
+        // and never tries the snake_case alias (e.g. hookEventName:null with
+        // a valid hook_event_name).
+        if let value = try? decodeIfPresent(type, forKey: first) { return value }
         return try decode(type, forKey: second)
     }
 
@@ -157,8 +164,19 @@ private extension KeyedDecodingContainer {
         forKey first: Key,
         or second: Key
     ) throws -> T? {
-        if contains(first) { return try decodeIfPresent(type, forKey: first) }
+        if let value = try? decodeIfPresent(type, forKey: first) { return value }
         return try decodeIfPresent(type, forKey: second)
+    }
+
+    func decodeFlexibleStringIfPresent(forKey key: Key) -> String? {
+        guard contains(key) else { return nil }
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        guard let value = try? decode(JSONValue.self, forKey: key) else { return nil }
+        if let string = value.stringValue { return string }
+        if let message = value.objectValue?["message"]?.stringValue { return message }
+        return value.objectValue?["error"]?.stringValue
     }
 
     func decodeFlexibleDateIfPresent(forKeys keys: [Key]) -> Date? {
@@ -180,5 +198,12 @@ private extension KeyedDecodingContainer {
             }
         }
         return nil
+    }
+}
+
+private extension String {
+    var nonEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

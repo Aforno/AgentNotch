@@ -933,6 +933,76 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPersistedUserQueryMarkupTaskIsTreatedAsUntitled() throws {
+        let session = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "wrapped",
+            provider: .grok,
+            task: "Keep this while encoding",
+            activity: "Hovering the notch now shows the job, not the vendor.",
+            state: .completed,
+            workingDirectory: "/Users/me/AgentNotch"
+        ))
+        let encoded = try JSONEncoder.agentsNotch.encode(session)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object["task"] = "<user_query>"
+        let dirty = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder.agentsNotch.decode(AgentSession.self, from: dirty)
+        XCTAssertEqual(decoded.task, AgentTaskTitle.untitled)
+    }
+
+    @MainActor
+    func testImageFollowUpDoesNotReplaceExistingTask() {
+        let service = AgentActivityService()
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "thread",
+            provider: .grok,
+            task: "UI improvement recommendations no file edits",
+            activity: "Thinking",
+            state: .thinking
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "thread",
+            provider: .grok,
+            task: "[Image #1]",
+            activity: "Thinking",
+            state: .thinking
+        ))
+
+        XCTAssertEqual(service.sessions[0].task, "UI improvement recommendations no file edits")
+    }
+
+    @MainActor
+    func testHousekeepingSessionsAreOmittedFromNotchList() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "memory",
+            provider: .codex,
+            task: "## Memory Writing Agent: Phase 2 (Consolidation)",
+            activity: "Consolidation complete.",
+            state: .completed,
+            timestamp: base.addingTimeInterval(2)
+        ))
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "real",
+            provider: .codex,
+            task: "Review the changes made",
+            activity: "Task completed",
+            state: .completed,
+            timestamp: base
+        ))
+
+        XCTAssertEqual(service.listSessions.map(\.id), ["real"])
+        XCTAssertTrue(service.sessions.contains { $0.id == "memory" })
+    }
+
+    @MainActor
     func testLateStartCorrectsSessionStartTimeWithoutRegressingState() {
         let service = AgentActivityService()
         let base = Date(timeIntervalSince1970: 100)
@@ -1031,5 +1101,228 @@ final class AgentActivityServiceTests: XCTestCase {
         XCTAssertEqual(service.sessions.count, 2)
         XCTAssertEqual(Set(service.sessions.map(\.id)), ["codex:shared", "grok:shared"])
         XCTAssertEqual(service.sessions.first(where: { $0.provider == .codex })?.task, "new")
+    }
+
+    @MainActor
+    func testLaterSessionStartDoesNotRegressProgressedState() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .toolStarted,
+            sessionId: "S",
+            provider: .codex,
+            state: .executingTool,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .started,
+            sessionId: "S",
+            provider: .codex,
+            activity: "Session started",
+            state: .starting,
+            timestamp: base.addingTimeInterval(1)
+        ))
+
+        XCTAssertEqual(service.sessions[0].state, .executingTool)
+        XCTAssertEqual(service.sessions[0].currentActivity, "Using tool")
+    }
+
+    @MainActor
+    func testLaterSessionStartDoesNotClearWaitingAttention() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "S",
+            provider: .codex,
+            activity: "Needs approval",
+            state: .waitingForUser,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .started,
+            sessionId: "S",
+            provider: .codex,
+            activity: "Session started",
+            state: .starting,
+            timestamp: base.addingTimeInterval(1)
+        ))
+
+        XCTAssertEqual(service.sessions[0].state, .waitingForUser)
+        XCTAssertEqual(service.attentionEvent?.sessionId, "S")
+    }
+
+    @MainActor
+    func testCompletingUnknownParentCompletesWaitingDescendants() {
+        let base = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "parent",
+                provider: .codex,
+                state: .running,
+                timestamp: base
+            )),
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "child",
+                provider: .codex,
+                activity: "Needs approval",
+                state: .waitingForUser,
+                timestamp: base.addingTimeInterval(1),
+                parentSessionId: "parent"
+            )),
+        ])
+        service.reconcileUnverifiedActiveSessions(processAlive: { _ in true })
+        XCTAssertEqual(service.sessions.first { $0.id == "parent" }?.state, .unknown)
+        XCTAssertEqual(service.sessions.first { $0.id == "child" }?.state, .waitingForUser)
+
+        service.completeUnknownSessions()
+
+        XCTAssertEqual(service.sessions.first { $0.id == "parent" }?.state, .completed)
+        XCTAssertEqual(service.sessions.first { $0.id == "child" }?.state, .completed)
+        XCTAssertNil(service.attentionEvent)
+    }
+
+    @MainActor
+    func testRestoredTerminalLifecycleCompletesWaitingDescendants() {
+        let base = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "grok:parent",
+                provider: .grok,
+                state: .running,
+                timestamp: base
+            )),
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "grok:child",
+                provider: .grok,
+                activity: "Needs approval",
+                state: .waitingForUser,
+                timestamp: base.addingTimeInterval(1),
+                parentSessionId: "grok:parent"
+            )),
+        ])
+        service.reconcileUnverifiedActiveSessions(processAlive: { _ in true })
+
+        service.applyRestoredLifecycle(
+            sessionId: "grok:parent",
+            state: .completed,
+            activity: "Workflow ended",
+            at: base.addingTimeInterval(20)
+        )
+
+        XCTAssertEqual(service.sessions.first { $0.id == "grok:parent" }?.state, .completed)
+        XCTAssertEqual(service.sessions.first { $0.id == "grok:child" }?.state, .completed)
+        XCTAssertNil(service.attentionEvent)
+    }
+
+    @MainActor
+    func testChildAfterCrossProviderCollisionAttachesToRenamedParent() {
+        let service = AgentActivityService()
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "shared",
+            provider: .codex,
+            state: .running
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "shared",
+            provider: .grok,
+            state: .running
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "child",
+            provider: .grok,
+            state: .running,
+            parentSessionId: "shared"
+        ))
+
+        XCTAssertEqual(service.sessions.first { $0.id == "child" }?.parentSessionId, "grok:shared")
+
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "grok:shared",
+            provider: .grok,
+            state: .completed
+        ))
+
+        XCTAssertEqual(service.sessions.first { $0.id == "child" }?.state, .completed)
+    }
+
+    @MainActor
+    func testPrefixedSameProviderEventMergesIntoExistingBareSession() {
+        let service = AgentActivityService()
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "abc",
+            provider: .codex,
+            state: .running
+        ))
+        service.ingest(AgentEvent(
+            type: .fileChanged,
+            sessionId: "codex:abc",
+            provider: .codex,
+            activity: "Editing App.swift",
+            state: .editing
+        ))
+
+        XCTAssertEqual(service.sessions.count, 1)
+        XCTAssertEqual(service.sessions[0].id, "abc")
+        XCTAssertEqual(service.sessions[0].state, .editing)
+        XCTAssertEqual(service.sessions[0].currentActivity, "Editing App.swift")
+    }
+
+    @MainActor
+    func testCanonicalEventPrefersExactRowOverPersistedBareDuplicate() {
+        let base = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "abc",
+                provider: .codex,
+                state: .running,
+                timestamp: base
+            )),
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "codex:abc",
+                provider: .codex,
+                activity: "Needs approval",
+                state: .waitingForUser,
+                timestamp: base.addingTimeInterval(1)
+            )),
+        ])
+
+        service.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "codex:abc",
+            provider: .codex,
+            state: .completed,
+            timestamp: base.addingTimeInterval(2)
+        ))
+
+        XCTAssertEqual(service.session(id: "codex:abc")?.state, .completed)
+        XCTAssertEqual(service.session(id: "abc")?.state, .running)
+        XCTAssertNil(service.attentionEvent)
+    }
+
+    @MainActor
+    func testReconcileRestoredWorkflowDoesNotCreateMissingActiveSession() {
+        let service = AgentActivityService()
+        service.reconcileRestoredWorkflow(AgentEvent(
+            protocolVersion: 1,
+            type: .activity,
+            sessionId: "grok:parent",
+            provider: .grok,
+            state: .running,
+            workflowUpdate: AgentWorkflowUpdate(id: "wf", title: "Audit", status: .running)
+        ))
+
+        XCTAssertTrue(service.sessions.isEmpty)
     }
 }

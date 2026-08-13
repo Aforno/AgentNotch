@@ -18,37 +18,32 @@ struct AgentRowView: View {
             ProviderIconView(provider: session.provider, size: 14)
                 .foregroundStyle(.white.opacity(0.9))
 
-            Text(session.isSubagent ? subagentLabel : session.provider.displayName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: session.isSubagent ? 78 : 62, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: DynamicIslandSpacing.related) {
+                    if session.isSubagent {
+                        Text(subagentLabel)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(.white.opacity(0.08), in: Capsule())
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
 
-            if privacyModeEnabled {
-                Text(privateSummary)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(1)
-            } else if let attention = groupAttentionSession {
-                AttentionInlineSummary(session: attention)
-            } else if let workflow = session.workflows.first {
-                ExecutionInlineSummary(
-                    progress: workflow.rowProgress,
-                    stage: workflow.rowStage,
-                    activeAgentCount: subagents.filter(\.isActive).count
-                )
-            } else if let plan = session.plan, !plan.steps.isEmpty {
-                PlanInlineSummary(plan: plan)
-            } else if !subagents.isEmpty {
-                SubagentActivityInlineSummary(
-                    activity: session.currentActivity,
-                    activeSubagentCount: subagents.filter(\.isActive).count
-                )
-            } else {
-                Text(session.currentActivity)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(1)
+                    if !headline.isEmpty {
+                        Text(headline)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
+                }
+
+                if showsActivitySummary {
+                    activitySummary
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: DynamicIslandSpacing.related)
 
@@ -61,44 +56,80 @@ struct AgentRowView: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
+    private var headline: String {
+        AgentRowPresentation.headline(for: session, privacyModeEnabled: privacyModeEnabled)
+    }
+
     private var subagentLabel: String {
-        session.agentRole?
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
-            .replacingOccurrences(of: ":", with: " ")
-            .capitalized ?? "Subagent"
+        AgentRowPresentation.formattedRole(session.agentRole)
+    }
+
+    @ViewBuilder
+    private var activitySummary: some View {
+        if let attention = groupAttentionSession {
+            AttentionInlineSummary(session: attention)
+        } else if let workflow = session.workflows.first {
+            ExecutionInlineSummary(
+                progress: workflow.rowProgress,
+                stage: workflow.rowStage,
+                activeAgentCount: subagents.filter(\.isActive).count
+            )
+        } else if let plan = session.plan, !plan.steps.isEmpty {
+            PlanInlineSummary(plan: plan)
+        } else if !subagents.isEmpty {
+            SubagentActivityInlineSummary(
+                activity: session.currentActivity,
+                activeSubagentCount: subagents.filter(\.isActive).count
+            )
+        } else {
+            Text(session.currentActivity)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(1)
+        }
+    }
+
+    private var showsActivitySummary: Bool {
+        if privacyModeEnabled { return false }
+        if groupAttentionSession != nil { return true }
+        if session.workflows.first != nil { return true }
+        if let plan = session.plan, !plan.steps.isEmpty { return true }
+        if !subagents.isEmpty { return true }
+        return session.currentActivity != headline
     }
 
     private var accessibilityLabel: String {
-        let identity = session.isSubagent
-            ? "\(subagentLabel) subagent"
-            : session.provider.displayName
+        var parts: [String] = []
+        if session.isSubagent {
+            parts.append("\(subagentLabel) subagent")
+        }
+        parts.append(session.provider.displayName)
+        if !headline.isEmpty {
+            parts.append(headline)
+        }
         if privacyModeEnabled {
-            return "\(identity), \(privateSummary), \(groupState.displayName)"
+            parts.append(groupState.displayName)
+            return parts.joined(separator: ", ")
         }
         if let attention = groupAttentionSession {
-            return "\(identity), \(attention.currentActivity), \(groupState.displayName)"
-        }
-        if let workflow = session.workflows.first {
+            parts.append(attention.currentActivity)
+        } else if let workflow = session.workflows.first {
             let active = subagents.filter(\.isActive).count
-            let agents = active == 1 ? "1 active agent" : "\(active) active agents"
-            return "\(identity), \(workflow.rowProgress), \(workflow.rowStage), \(agents), \(groupState.displayName)"
-        }
-        if let plan = session.plan, !plan.steps.isEmpty {
-            return "\(identity), \(plan.rowProgress), \(plan.rowStage), \(groupState.displayName)"
-        }
-        if !subagents.isEmpty {
+            parts.append(workflow.rowProgress)
+            parts.append(workflow.rowStage)
+            parts.append(active == 1 ? "1 active agent" : "\(active) active agents")
+        } else if let plan = session.plan, !plan.steps.isEmpty {
+            parts.append(plan.rowProgress)
+            parts.append(plan.rowStage)
+        } else if !subagents.isEmpty {
             let active = subagents.filter(\.isActive).count
-            let subagents = active == 1 ? "1 active subagent" : "\(active) active subagents"
-            return "\(identity), \(session.currentActivity), \(subagents), \(groupState.displayName)"
+            parts.append(session.currentActivity)
+            parts.append(active == 1 ? "1 active subagent" : "\(active) active subagents")
+        } else if session.currentActivity != headline {
+            parts.append(session.currentActivity)
         }
-        return "\(identity), \(session.currentActivity), \(groupState.displayName)"
-    }
-
-    private var privateSummary: String {
-        session.workingDirectory
-            .map { URL(fileURLWithPath: $0).lastPathComponent }
-            ?? "Private activity"
+        parts.append(groupState.displayName)
+        return parts.joined(separator: ", ")
     }
 
     private var groupAttentionSession: AgentSession? {
@@ -129,13 +160,8 @@ private struct AttentionInlineSummary: View {
     }
 
     private var label: String {
-        guard let role = session.agentRole else { return session.currentActivity }
-        let name = role
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
-            .replacingOccurrences(of: ":", with: " ")
-            .capitalized
-        return "\(name) needs input"
+        guard session.agentRole != nil else { return session.currentActivity }
+        return "\(AgentRowPresentation.formattedRole(session.agentRole)) needs input"
     }
 }
 
@@ -209,6 +235,44 @@ private struct ActiveAgentCountView: View {
 
 enum AgentRowPresentation {
     static let maximumVisibleSteps = 6
+    static func projectName(for session: AgentSession) -> String? {
+        session.workingDirectory
+            .map { URL(fileURLWithPath: $0).lastPathComponent }
+            .flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    static func formattedRole(_ role: String?) -> String {
+        let trimmed = role?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return "Subagent" }
+        return trimmed
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: ":", with: " ")
+            .capitalized
+    }
+
+    static func headline(for session: AgentSession, privacyModeEnabled: Bool) -> String {
+        let project = projectName(for: session)
+        if privacyModeEnabled {
+            return project ?? "Private activity"
+        }
+
+        let task = AgentTaskTitle.displayable(session.task)
+        if session.isSubagent {
+            return task ?? ""
+        }
+
+        switch (task, project) {
+        case let (task?, project?) where task != project:
+            return "\(task) · \(project)"
+        case let (task?, _):
+            return task
+        case let (nil, project?):
+            return project
+        case (nil, nil):
+            return session.currentActivity
+        }
+    }
 
     static func currentStep(in steps: [AgentStep]) -> AgentStep? {
         for status in [

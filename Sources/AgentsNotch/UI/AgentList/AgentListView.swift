@@ -10,22 +10,18 @@ struct AgentListView: View {
     let onSelect: (String) -> Void
 
     static func rowsHeight(for sessions: [AgentSession]) -> CGFloat {
-        CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
+        if sessions.isEmpty {
+            return DynamicIslandSpacing.rowHeight
+        }
+        return DynamicIslandSpacing.chromeHeight
+            + CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if sessions.isEmpty {
-                HStack(spacing: DynamicIslandSpacing.related) {
-                    Circle()
-                        .fill(.white.opacity(0.18))
-                        .frame(width: 6, height: 6)
-                    Text("No active agents")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-                .frame(maxWidth: .infinity, minHeight: DynamicIslandSpacing.rowHeight)
-            } else {
+            chromeRow
+
+            if !sessions.isEmpty {
                 ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
                     Button {
                         onSelect(session.id)
@@ -40,38 +36,55 @@ struct AgentListView: View {
                     if index < sessions.count - 1 {
                         Divider()
                             .overlay(.white.opacity(0.08))
-                            .padding(.leading, 36)
+                            .padding(.leading, 42)
                     }
                 }
             }
         }
         .padding(.top, topInset)
         .padding(.bottom, DynamicIslandSpacing.expandedBottom)
-        .overlay(alignment: .topTrailing) {
-            HStack(spacing: 0) {
-                Button(action: onOpenActivityCenter) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.58))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .help("Activity Center")
-                .accessibilityLabel("Open Activity Center")
+    }
 
-                Button(action: onOpenSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.58))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .help("Settings")
-                .accessibilityLabel("Open Settings")
+    private var chromeRow: some View {
+        HStack(spacing: DynamicIslandSpacing.related) {
+            if sessions.isEmpty {
+                Circle()
+                    .fill(.white.opacity(0.18))
+                    .frame(width: 6, height: 6)
+                Text("No active agents")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
             }
-            .buttonStyle(.plain)
-            .padding(.trailing, DynamicIslandSpacing.standard)
+
+            Spacer(minLength: 0)
+
+            Button(action: onOpenActivityCenter) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .help("Activity Center")
+            .accessibilityLabel("Open Activity Center")
+
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .help("Settings")
+            .accessibilityLabel("Open Settings")
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal, DynamicIslandSpacing.outer)
+        .frame(
+            height: sessions.isEmpty
+                ? DynamicIslandSpacing.rowHeight
+                : DynamicIslandSpacing.chromeHeight
+        )
     }
 
     static func descendantSessions(of session: AgentSession, in sessions: [AgentSession]) -> [AgentSession] {

@@ -127,6 +127,26 @@ final class CodexHookEventMapperTests: XCTestCase {
         )
     }
 
+    func testTranscriptWithoutTurnIdFailsOpenToUserAttention() throws {
+        let transcript = try temporaryTranscript("""
+        {"type":"turn_context","payload":{"turn_id":"latest","approvals_reviewer":"auto_review"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_open",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest"
+        }
+        """)
+
+        XCTAssertTrue(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+        XCTAssertNotNil(CodexHookEventMapper.map(payload))
+    }
+
     func testMissingOrMalformedReviewerContextKeepsUserAttention() throws {
         let transcript = try temporaryTranscript("not-json\n")
         defer { try? FileManager.default.removeItem(at: transcript) }
@@ -281,6 +301,76 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.state, .thinking)
     }
 
+    func testWrappedUserQueryPromptUsesInnerTextAsTask() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_wrapped",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "user_prompt_submit",
+          "prompt": "<user_query>\\nDo 4\\n</user_query>"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.task, "Do 4")
+    }
+
+    func testInlineUserQueryPromptStripsWrapperTags() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_inline",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "user_prompt_submit",
+          "prompt": "<user_query>Fix the user_query bug</user_query>"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.task, "Fix the user_query bug")
+    }
+
+    func testUserQueryTagAloneDoesNotBecomeTask() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_tag",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "user_prompt_submit",
+          "prompt": "<user_query>"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertNil(event.task)
+    }
+
+    func testImageOnlyPromptDoesNotBecomeTask() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_image",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "user_prompt_submit",
+          "prompt": "<user_query>\\n[Image #1]\\n</user_query>"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertNil(event.task)
+    }
+
+    func testImagePrefixIsStrippedFromPromptTask() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_image_text",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "user_prompt_submit",
+          "prompt": "<user_query>\\n[Image #1] fix the user_query bug\\n</user_query>"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.task, "fix the user_query bug")
+    }
+
     func testGrokSnakeCaseEventValueAndNativeToolNameMapToCommandActivity() throws {
         let payload = try decode("""
         {
@@ -422,6 +512,54 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.task, "Add Cursor support")
         XCTAssertEqual(event.workingDirectory, "/tmp/AgentsNotch")
         XCTAssertEqual(event.state, .thinking)
+    }
+
+    func testEmptyCwdFallsBackToWorkspaceRoots() throws {
+        let payload = try decode("""
+        {
+          "conversation_id": "cursor-conversation",
+          "cwd": "",
+          "workspace_roots": ["/tmp/AgentsNotch"],
+          "hook_event_name": "session_start"
+        }
+        """)
+
+        XCTAssertEqual(payload.cwd, "/tmp/AgentsNotch")
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .cursor))
+        XCTAssertEqual(event.workingDirectory, "/tmp/AgentsNotch")
+        XCTAssertEqual(event.task, "AgentsNotch")
+    }
+
+    func testObjectErrorAndNullHookEventNameAliasDoNotDropPayload() throws {
+        let payload = try decode("""
+        {
+          "session_id": "thr_err",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": null,
+          "hook_event_name": "PostToolUseFailure",
+          "error": {"message": "boom"}
+        }
+        """)
+
+        XCTAssertEqual(payload.error, "boom")
+        let event = try XCTUnwrap(CodexHookEventMapper.map(payload))
+        XCTAssertEqual(event.activity, "Tool failed: boom")
+    }
+
+    func testCursorAbortedStopIsFailure() throws {
+        let payload = try decode("""
+        {
+          "conversation_id": "cursor-conversation",
+          "workspace_roots": ["/tmp/AgentsNotch"],
+          "hook_event_name": "stop",
+          "status": "aborted"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .cursor))
+        XCTAssertEqual(event.type, .failed)
+        XCTAssertEqual(event.state, .failed)
+        XCTAssertEqual(event.activity, "Task failed")
     }
 
     func testCursorFailureUsesStatusAndErrorMessageAliases() throws {

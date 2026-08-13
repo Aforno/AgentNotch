@@ -11,6 +11,8 @@ enum DynamicIslandSpacing {
     static let expandedTop: CGFloat = 8
     static let expandedBottom: CGFloat = 12
     static let rowHeight: CGFloat = 44
+    /// Hover-list chrome for Activity Center and Settings, kept off session rows.
+    static let chromeHeight: CGFloat = 28
     static let compactInset: CGFloat = 8
     static let compactProviderMarkSize: CGFloat = 18
     static let compactProviderStackWidth: CGFloat = 28

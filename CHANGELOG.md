@@ -6,6 +6,19 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Notch hover list leads with the task and project instead of the provider name.
+  Subagent roles use a compact capsule. Activity Center and Settings sit on
+  their own chrome row so they no longer cover the first session.
+- Prompt titles unwrap Grok `<user_query>` wrappers so the tag is not shown as
+  the session task.
+- Image-only follow-ups no longer replace a real session title. Grok's
+  generated title is used when the prompt is just a wrapper or attachment.
+  Codex memory-writer sessions stay out of the notch list.
+- Codex rows use the thread title from `session_index.jsonl` instead of the
+  last user message.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added

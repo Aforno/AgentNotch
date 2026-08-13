@@ -44,17 +44,137 @@ final class AgentRowPresentationTests: XCTestCase {
         XCTAssertEqual(AgentRowPresentation.currentStep(in: steps)?.id, "current")
     }
 
+    func testHeadlineLeadsWithTaskAndProjectInsteadOfProvider() {
+        let session = session(
+            id: "root",
+            state: .running,
+            task: "Fix authentication",
+            workingDirectory: "/Users/me/AgentNotch"
+        )
+
+        XCTAssertEqual(
+            AgentRowPresentation.headline(for: session, privacyModeEnabled: false),
+            "Fix authentication · AgentNotch"
+        )
+    }
+
+    func testHeadlineHidesTaskInPrivacyMode() {
+        let session = session(
+            id: "root",
+            state: .running,
+            task: "Fix authentication",
+            workingDirectory: "/Users/me/AgentNotch"
+        )
+
+        XCTAssertEqual(
+            AgentRowPresentation.headline(for: session, privacyModeEnabled: true),
+            "AgentNotch"
+        )
+    }
+
+    func testHeadlineOmitsImageOnlyTask() {
+        let session = session(
+            id: "root",
+            state: .running,
+            task: "[Image #1]",
+            workingDirectory: "/Users/me/AgentNotch"
+        )
+
+        XCTAssertEqual(
+            AgentRowPresentation.headline(for: session, privacyModeEnabled: false),
+            "AgentNotch"
+        )
+    }
+
+    func testHeadlineOmitsUserQueryMarkupTag() {
+        let session = session(
+            id: "root",
+            state: .completed,
+            task: "<user_query>",
+            workingDirectory: "/Users/me/AgentNotch"
+        )
+
+        XCTAssertEqual(
+            AgentRowPresentation.headline(for: session, privacyModeEnabled: false),
+            "AgentNotch"
+        )
+    }
+
+    func testHeadlineOmitsPlaceholderTask() {
+        let session = session(
+            id: "root",
+            state: .running,
+            workingDirectory: "/Users/me/AgentNotch"
+        )
+
+        XCTAssertEqual(
+            AgentRowPresentation.headline(for: session, privacyModeEnabled: false),
+            "AgentNotch"
+        )
+    }
+
+    func testHeadlineUsesTaskAloneWhenProjectIsMissing() {
+        let session = session(id: "root", state: .running, task: "Fix authentication")
+
+        XCTAssertEqual(
+            AgentRowPresentation.headline(for: session, privacyModeEnabled: false),
+            "Fix authentication"
+        )
+    }
+
+    func testSubagentHeadlineIsTaskOnly() {
+        let session = session(
+            id: "child",
+            parentID: "root",
+            state: .running,
+            task: "Review auth module",
+            workingDirectory: "/Users/me/AgentNotch",
+            agentRole: "audit:core-models"
+        )
+
+        XCTAssertEqual(
+            AgentRowPresentation.headline(for: session, privacyModeEnabled: false),
+            "Review auth module"
+        )
+        XCTAssertEqual(
+            AgentRowPresentation.formattedRole(session.agentRole),
+            "Audit Core Models"
+        )
+    }
+
+    func testFormattedRoleFallsBackToSubagent() {
+        XCTAssertEqual(AgentRowPresentation.formattedRole(nil), "Subagent")
+        XCTAssertEqual(AgentRowPresentation.formattedRole("  "), "Subagent")
+    }
+
+    func testListHeightIncludesChromeRowWhenSessionsAreVisible() {
+        let first = session(id: "one", state: .running)
+        let second = session(id: "two", state: .running)
+
+        XCTAssertEqual(AgentListView.rowsHeight(for: []), DynamicIslandSpacing.rowHeight)
+        XCTAssertEqual(
+            AgentListView.rowsHeight(for: [first, second]),
+            DynamicIslandSpacing.chromeHeight + DynamicIslandSpacing.rowHeight * 2
+        )
+    }
+
     private func session(
         id: String,
         parentID: String? = nil,
-        state: AgentState
+        state: AgentState,
+        task: String? = nil,
+        workingDirectory: String? = nil,
+        agentRole: String? = nil
     ) -> AgentSession {
         AgentSession(event: AgentEvent(
             type: state == .completed ? .completed : .activity,
             sessionId: id,
             provider: .codex,
+            task: task,
             state: state,
-            parentSessionId: parentID
+            workingDirectory: workingDirectory,
+            parentSessionId: parentID,
+            agentRole: agentRole
         ))
     }
 }
