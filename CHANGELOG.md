@@ -6,6 +6,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-13
+
 ### Changed
 
 - Notch hover list leads with the task and project instead of the provider name.
