@@ -6,6 +6,15 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Claude Code observers now follow the documented hook schema: exec-form
+  `command`/`args` and asynchronous handlers that cannot block or control
+  permission, elicitation, AskUserQuestion, or ExitPlanMode behavior, plus the
+  missing `PermissionDenied`, `Elicitation`, and `ElicitationResult` events.
+  AskUserQuestion and ExitPlanMode surface as waiting. Existing installs are
+  upgraded on launch.
+
 ## [0.1.1] - 2026-08-13
 
 ### Changed

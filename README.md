@@ -76,7 +76,10 @@ inject context, or block a tool. The relay always exits successfully, even
 when Agents Notch is not running.
 
 The adapters use each provider's documented session, prompt, tool, permission,
-notification, and stop lifecycle events. The relay accepts the snake_case
+notification, and stop lifecycle events. Claude Code observers use the
+documented exec-form `args` array with asynchronous command handlers, so they
+cannot block or control permission, elicitation, AskUserQuestion, or
+ExitPlanMode behavior. The relay accepts the snake_case
 payload used by Codex, Claude Code, Gemini CLI, and Cursor as well as Grok's
 camelCase payload. The OpenCode bridge converts plugin events to that same
 observer payload. It deliberately does not parse provider transcripts. Tools

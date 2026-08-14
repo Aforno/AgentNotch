@@ -120,13 +120,16 @@ do {
         try? UnixSocketClient.send(workflowEvent, to: socketURL)
     }
     // Some providers inspect hook stdout. An empty object is always passive.
-    writePassiveResponse()
+    // Claude Code observer hooks run asynchronously, so their output cannot
+    // control behavior; keep stdout empty for legacy synchronous installs too.
+    writePassiveResponse(for: provider)
 } catch {
     // Monitoring must never interrupt the agent. All providers treat exit 0 as success.
-    writePassiveResponse()
+    writePassiveResponse(for: provider)
 }
 
-private func writePassiveResponse() {
+private func writePassiveResponse(for provider: AgentProvider = .codex) {
+    guard provider != .claudeCode else { return }
     let payload = Data("{}\n".utf8)
     payload.withUnsafeBytes { buffer in
         guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else { return }

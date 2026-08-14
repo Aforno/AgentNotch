@@ -292,6 +292,88 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testClaudeInstallWritesDocumentedAsynchronousObserverHooks() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .claudeCode)
+        manager.install()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        let settingsURL = fixture.home.appendingPathComponent(".claude/settings.json")
+        let root = try Self.readJSON(at: settingsURL)
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        let expected = [
+            "SessionStart",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "PermissionRequest",
+            "PermissionDenied",
+            "Notification",
+            "Elicitation",
+            "ElicitationResult",
+            "Stop",
+            "StopFailure",
+            "SessionEnd",
+            "SubagentStart",
+            "SubagentStop",
+        ]
+        XCTAssertEqual(Set(hooks.keys), Set(expected))
+        for eventName in expected {
+            let groups = try XCTUnwrap(hooks[eventName] as? [[String: Any]])
+            let handlers = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
+            let handler = try XCTUnwrap(handlers.first)
+            XCTAssertEqual(handler["type"] as? String, "command")
+            XCTAssertEqual(handler["command"] as? String, manager.installedRelayURL.path)
+            XCTAssertEqual(handler["args"] as? [String], ["--provider", "claude-code"])
+            XCTAssertEqual(handler["timeout"] as? Int, 5)
+            XCTAssertEqual(
+                handler["async"] as? Bool,
+                true,
+                "observer hooks must not block or control Claude Code"
+            )
+        }
+    }
+
+    @MainActor
+    func testPrepareForMonitoringUpgradesLegacyClaudeObserverHooks() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .claudeCode)
+        manager.install()
+        let settingsURL = fixture.home.appendingPathComponent(".claude/settings.json")
+        try Self.writeJSON([
+            "hooks": [
+                "PermissionRequest": [[
+                    "hooks": [[
+                        "type": "command",
+                        "command": manager.installedRelayURL.path,
+                        "args": ["--provider", "claude-code"],
+                        "timeout": 5,
+                    ]],
+                ]],
+            ],
+        ], to: settingsURL)
+
+        manager.refreshStatus()
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+
+        await manager.prepareForMonitoring()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertNil(manager.lastError)
+        let hooks = try XCTUnwrap(try Self.readJSON(at: settingsURL)["hooks"] as? [String: Any])
+        XCTAssertNotNil(hooks["PermissionDenied"])
+        XCTAssertNotNil(hooks["Elicitation"])
+        let groups = try XCTUnwrap(hooks["PermissionRequest"] as? [[String: Any]])
+        let handler = try XCTUnwrap((groups.first?["hooks"] as? [[String: Any]])?.first)
+        XCTAssertEqual(handler["async"] as? Bool, true)
+        XCTAssertEqual(handler["args"] as? [String], ["--provider", "claude-code"])
+        XCTAssertEqual(handler["command"] as? String, manager.installedRelayURL.path)
+    }
+
+    @MainActor
     func testMissingBundledRelayDoesNotModifyProviderConfiguration() throws {
         let fixture = try Fixture(createBundledRelay: false)
         defer { fixture.remove() }
