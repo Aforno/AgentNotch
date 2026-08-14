@@ -75,7 +75,7 @@ new command hooks to be trusted. The observers do not return a decision,
 inject context, or block a tool. The relay always exits successfully, even
 when Agents Notch is not running.
 
-The adapters use each provider's documented session, prompt, tool, permission,
+The observers use each provider's documented session, prompt, tool, permission,
 notification, and stop lifecycle events. Claude Code observers use the
 documented exec-form `args` array with asynchronous command handlers, so they
 cannot block or control permission, elicitation, AskUserQuestion, or
@@ -198,17 +198,16 @@ implement the few lines needed to connect and write newline-delimited JSON.
 - `AgentsNotchCore`: provider-neutral models, activity reducer, lifecycle hook
   mapping, and Unix socket transport.
 - `AgentsNotch`: SwiftUI views, the AppKit `NSPanel`, settings, persistence,
-  adapters, and integration setup. A debug-only event simulator is compiled
+  and integration setup. A debug-only event simulator is compiled
   out of release builds.
 - `AgentsNotchHook`: short-lived observer process invoked by provider lifecycle
   hooks.
 
-`AgentProviderAdapter` defines `startMonitoring`, `stopMonitoring`, and
-`discoverSessions`. Provider adapters translate native events into `AgentEvent`
-without changing the notch UI.
+`ProviderIntegrationManager` installs observer hooks and the shared relay.
+Hooks are push-only; launch-time restorers may read provider-owned files as
+cold-start evidence only and never invent live sessions from disk.
 
-Hook adapters are push-only, so `discoverSessions` returns an empty list. On
-launch, Agents Notch reconciles restored runners instead of inventing
+On launch, Agents Notch reconciles restored runners instead of inventing
 completion: dead origin process IDs complete immediately, waiting sessions stay
 waiting, and other actives enter a short `unknown` (Reconnecting) grace period
 until a live hook arrives or the grace expires.

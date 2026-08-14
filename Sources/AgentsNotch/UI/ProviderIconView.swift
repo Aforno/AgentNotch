@@ -50,6 +50,7 @@ private struct ProviderIconAsset: Hashable {
     var isTemplate = true
 }
 
+@MainActor
 private enum ProviderIconAssets {
     private static let cache = NSCache<NSString, NSImage>()
 

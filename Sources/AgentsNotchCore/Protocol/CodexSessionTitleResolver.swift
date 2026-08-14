@@ -17,10 +17,10 @@ public enum CodexSessionTitleResolver {
 
         var found: String?
         for line in data.split(separator: 0x0A) {
-            guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
-                  object["id"] as? String == trimmed
+            guard let record = try? JSONDecoder().decode(SessionIndexRecord.self, from: Data(line)),
+                  record.id == trimmed
             else { continue }
-            found = object["thread_name"] as? String ?? object["threadName"] as? String
+            found = record.threadName
         }
         return found.flatMap(AgentTaskTitle.displayable)
     }
@@ -38,5 +38,35 @@ public enum CodexSessionTitleResolver {
             && !value.contains("\0")
             && !value.contains("/")
             && !value.contains("\\")
+    }
+}
+
+private struct SessionIndexRecord: Decodable {
+    let id: String?
+    let threadName: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case threadName
+        case thread_name
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = container.lossyString(forKeys: .id)
+        // Prefer the historical snake_case spelling when both aliases exist.
+        threadName = container.lossyString(forKeys: .thread_name, .threadName)
+    }
+}
+
+private extension KeyedDecodingContainer {
+    /// Missing keys and non-string values are absent. Does not fail the record.
+    func lossyString(forKeys keys: Key...) -> String? {
+        for key in keys {
+            if let value = try? decodeIfPresent(String.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
     }
 }

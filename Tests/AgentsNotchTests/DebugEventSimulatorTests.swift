@@ -23,7 +23,7 @@ final class DebugEventSimulatorTests: XCTestCase {
 
         simulator.reset()
 
-        XCTAssertEqual(activity.sessions.map(\.id), ["real-session"])
+        XCTAssertEqual(activity.sessions.map(\.id), ["codex:real-session"])
         XCTAssertNil(activity.attentionEvent)
     }
 

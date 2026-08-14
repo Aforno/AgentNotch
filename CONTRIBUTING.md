@@ -8,7 +8,7 @@ documentation improvements, and new provider adapters are welcome.
 Requirements:
 
 - Apple Silicon Mac running macOS 14 or later
-- Swift 6 toolchain (package language mode is Swift 5)
+- Swift 6 toolchain (package language mode is Swift 6)
 - Git
 
 Repository conventions live in `AGENTS.md`.

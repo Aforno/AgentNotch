@@ -4,8 +4,8 @@ import Foundation
 
 @MainActor
 final class DebugEventSimulator {
-    private static let sessionPrefix = "debug-simulator:"
-    private static let legacySessionIDs: Set<String> = [
+    nonisolated private static let sessionPrefix = "debug-simulator:"
+    nonisolated private static let legacySessionIDs: Set<String> = [
         "simulator-primary",
         "sim-codex",
         "sim-claude",
@@ -20,9 +20,12 @@ final class DebugEventSimulator {
         self.activity = activity
     }
 
-    static func isSimulated(_ session: AgentSession) -> Bool {
-        session.id.hasPrefix(sessionPrefix)
+    nonisolated static func isSimulated(_ session: AgentSession) -> Bool {
+        let namespacedPrefix = session.provider.namespacedSessionID(sessionPrefix)
+        return session.id.hasPrefix(sessionPrefix)
+            || session.id.hasPrefix(namespacedPrefix)
             || legacySessionIDs.contains(session.id)
+            || legacySessionIDs.contains { session.provider.namespacedSessionID($0) == session.id }
             || session.recentEvents.contains { $0.metadata?["source"] == "simulator" }
     }
 

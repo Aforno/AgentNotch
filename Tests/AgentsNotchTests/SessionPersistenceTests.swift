@@ -124,7 +124,7 @@ final class SessionPersistenceTests: XCTestCase {
         ), to: fixture.socketURL)
 
         await startTask.value
-        XCTAssertEqual(runtime.activity.sessions.map(\.id), ["startup-event"])
+        XCTAssertEqual(runtime.activity.sessions.map(\.id), ["codex:startup-event"])
         runtime.activity.ingest(AgentEvent(
             type: .completed,
             sessionId: "startup-event",
@@ -134,7 +134,7 @@ final class SessionPersistenceTests: XCTestCase {
         runtime.stop()
 
         let saved = await persistence.load().sessions
-        XCTAssertEqual(saved.first?.id, "startup-event")
+        XCTAssertEqual(saved.first?.id, "codex:startup-event")
         XCTAssertEqual(saved.first?.state, .completed)
     }
 
@@ -189,7 +189,7 @@ final class SessionPersistenceTests: XCTestCase {
         ))
         let waiting = AgentSession(event: AgentEvent(
             type: .waiting,
-            sessionId: "claude:approval",
+            sessionId: "claude-code:approval",
             provider: .claudeCode,
             activity: "Needs approval",
             state: .waitingForUser,
@@ -211,7 +211,7 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(midTask.currentActivity, "Running tests")
         XCTAssertNil(midTask.completedAt)
         XCTAssertEqual(
-            runtime.activity.sessions.first { $0.id == "claude:approval" }?.state,
+            runtime.activity.sessions.first { $0.id == "claude-code:approval" }?.state,
             .waitingForUser
         )
     }

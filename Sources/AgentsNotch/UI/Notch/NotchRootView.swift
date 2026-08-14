@@ -14,6 +14,7 @@ private struct NotchLayout: Equatable {
     let radius: CGFloat
 }
 
+@MainActor
 private extension AnyTransition {
     /// Content inside the notch fades through a light blur and settles from a
     /// subtle scale, echoing the Dynamic Island's material feel.
