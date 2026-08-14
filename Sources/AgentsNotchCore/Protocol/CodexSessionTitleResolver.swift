@@ -53,8 +53,20 @@ private struct SessionIndexRecord: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(String.self, forKey: .id)
-        threadName = try container.decodeIfPresent(String.self, forKey: .threadName)
-            ?? container.decodeIfPresent(String.self, forKey: .thread_name)
+        id = container.lossyString(forKeys: .id)
+        // Prefer the historical snake_case spelling when both aliases exist.
+        threadName = container.lossyString(forKeys: .thread_name, .threadName)
+    }
+}
+
+private extension KeyedDecodingContainer {
+    /// Missing keys and non-string values are absent. Does not fail the record.
+    func lossyString(forKeys keys: Key...) -> String? {
+        for key in keys {
+            if let value = try? decodeIfPresent(String.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
     }
 }

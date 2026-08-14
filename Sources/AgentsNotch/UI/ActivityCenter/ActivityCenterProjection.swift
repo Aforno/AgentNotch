@@ -173,7 +173,7 @@ final class ActivityCenterProjection {
         if next != state { state = next }
     }
 
-    private static func orderSessions(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
+    nonisolated private static func orderSessions(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
         if lhs.needsAttention != rhs.needsAttention { return lhs.needsAttention }
         if lhs.isActive != rhs.isActive { return lhs.isActive }
         return lhs.updatedAt != rhs.updatedAt ? lhs.updatedAt > rhs.updatedAt : lhs.id < rhs.id

@@ -3,6 +3,7 @@
 import AgentsNotchCore
 import XCTest
 
+@MainActor
 final class AgentRowPresentationTests: XCTestCase {
     func testDescendantSessionsIncludesNestedSubagentsAndStopsAtCycles() {
         let root = session(id: "root", parentID: "grandchild", state: .running)

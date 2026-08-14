@@ -27,14 +27,16 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
             return true
         }
         guard let center else { return false }
-        do {
-            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
-            refreshAuthorizationStatus()
-            return granted
-        } catch {
-            refreshAuthorizationStatus()
-            return false
+        // The async `requestAuthorization` is nonisolated. Hop through the
+        // completion-based API so a MainActor-isolated center is not sent
+        // across isolation on Swift 6.1 / macOS 15.
+        let granted = await withCheckedContinuation { continuation in
+            center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+                continuation.resume(returning: granted)
+            }
         }
+        refreshAuthorizationStatus()
+        return granted
     }
 
     func deliverAttention(for session: AgentSession, waitingCount: Int) {

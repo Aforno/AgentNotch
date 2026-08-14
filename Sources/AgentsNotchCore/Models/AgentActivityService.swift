@@ -499,7 +499,9 @@ public final class AgentActivityService {
         onSessionsChanged?(sessions)
     }
 
-    private static func orderSessions(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
+    /// Pure ordering used as a `sort(by:)` predicate. Must stay `nonisolated`
+    /// so Swift 6.0 can pass it to synchronous collection APIs from `@MainActor`.
+    nonisolated private static func orderSessions(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
         if lhs.needsAttention != rhs.needsAttention { return lhs.needsAttention }
         if lhs.isActive != rhs.isActive { return lhs.isActive }
         return lhs.updatedAt > rhs.updatedAt
@@ -508,7 +510,8 @@ public final class AgentActivityService {
     /// Removes rows persisted by older builds when Grok initialized a command
     /// but never began an agent turn. Real Grok sessions have at least one
     /// prompt, tool, notification, or terminal event after SessionStart.
-    private static func isOrphanedGrokStart(_ session: AgentSession) -> Bool {
+    /// `nonisolated` so Swift 6.0 can pass it to `removeAll(where:)`.
+    nonisolated private static func isOrphanedGrokStart(_ session: AgentSession) -> Bool {
         guard session.provider == .grok,
               session.state == .starting,
               !session.recentEvents.isEmpty

@@ -127,6 +127,66 @@ final class AgentHookEventMapperTests: XCTestCase {
         )
     }
 
+    func testSnakeCaseReviewerWinsWhenBothAliasesExist() throws {
+        let transcript = try temporaryTranscript("""
+        {"type":"turn_context","payload":{"turn_id":"target","approvals_reviewer":"auto_review","approvalsReviewer":"user"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_both",
+          "turn_id": "target",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest"
+        }
+        """)
+
+        XCTAssertFalse(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+    }
+
+    func testEitherTurnIdAliasMatchesTarget() throws {
+        let transcript = try temporaryTranscript("""
+        {"type":"turn_context","payload":{"turn_id":"other","turnId":"target","approvals_reviewer":"auto_review"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_either",
+          "turn_id": "target",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest"
+        }
+        """)
+
+        XCTAssertFalse(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+    }
+
+    func testMalformedReviewerFallsThroughToAlternateAlias() throws {
+        let transcript = try temporaryTranscript("""
+        {"type":"turn_context","payload":{"turn_id":"target","approvals_reviewer":false,"approvalsReviewer":"auto_review"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_lossy",
+          "turn_id": "target",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest"
+        }
+        """)
+
+        XCTAssertFalse(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+    }
+
     func testExplicitUserReviewerOverridesAutomaticTranscriptContext() throws {
         let transcript = try temporaryTranscript("""
         {"type":"turn_context","payload":{"turn_id":"target","approvals_reviewer":"auto_review"}}

@@ -63,9 +63,7 @@ public enum CodexApprovalContextResolver {
                 continue
             }
 
-            if let matchingTurnId,
-               context.turnId != matchingTurnId
-            {
+            if let matchingTurnId, !context.matches(turnId: matchingTurnId) {
                 continue
             }
 
@@ -95,7 +93,8 @@ private struct TranscriptRecord: Decodable {
 }
 
 private struct TurnContextPayload: Decodable {
-    let turnId: String?
+    let snakeTurnId: String?
+    let camelTurnId: String?
     let approvalsReviewer: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -107,9 +106,25 @@ private struct TurnContextPayload: Decodable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        turnId = try container.decodeIfPresent(String.self, forKey: .turnId)
-            ?? container.decodeIfPresent(String.self, forKey: .turn_id)
-        approvalsReviewer = try container.decodeIfPresent(String.self, forKey: .approvalsReviewer)
-            ?? container.decodeIfPresent(String.self, forKey: .approvals_reviewer)
+        snakeTurnId = container.lossyString(forKeys: .turn_id)
+        camelTurnId = container.lossyString(forKeys: .turnId)
+        // Prefer the historical snake_case spelling when both aliases exist.
+        approvalsReviewer = container.lossyString(forKeys: .approvals_reviewer, .approvalsReviewer)
+    }
+
+    func matches(turnId: String) -> Bool {
+        snakeTurnId == turnId || camelTurnId == turnId
+    }
+}
+
+private extension KeyedDecodingContainer {
+    /// Missing keys and non-string values are absent. Does not fail the record.
+    func lossyString(forKeys keys: Key...) -> String? {
+        for key in keys {
+            if let value = try? decodeIfPresent(String.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
     }
 }
