@@ -218,6 +218,133 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.file, "/tmp/AgentsNotch/Sources/App.swift")
     }
 
+    func testClaudeElicitationBecomesWaitingAndResultClearsAttention() throws {
+        let elicitation = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "Elicitation",
+          "mcp_server_name": "github",
+          "message": "Authorize GitHub"
+        }
+        """)
+        let waiting = try XCTUnwrap(AgentHookEventMapper.map(elicitation, provider: .claudeCode))
+        XCTAssertEqual(waiting.type, .waiting)
+        XCTAssertEqual(waiting.state, .waitingForUser)
+        XCTAssertEqual(waiting.activity, "Authorize GitHub")
+
+        let result = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "ElicitationResult"
+        }
+        """)
+        let received = try XCTUnwrap(AgentHookEventMapper.map(result, provider: .claudeCode))
+        XCTAssertEqual(received.type, .activity)
+        XCTAssertEqual(received.state, .running)
+        XCTAssertEqual(received.activity, "Input received")
+    }
+
+    func testClaudePermissionDeniedKeepsSessionActive() throws {
+        let payload = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionDenied",
+          "tool_name": "Bash",
+          "reason": "Blocked by classifier"
+        }
+        """)
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .claudeCode))
+        XCTAssertEqual(event.type, .activity)
+        XCTAssertEqual(event.state, .running)
+        XCTAssertEqual(event.activity, "Blocked by classifier")
+    }
+
+    func testClaudeAskUserQuestionAndExitPlanModeSurfaceWaiting() throws {
+        let question = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "AskUserQuestion",
+          "tool_input": {
+            "questions": [
+              {
+                "question": "Which framework?",
+                "header": "Framework",
+                "options": [{"label": "React"}],
+                "multiSelect": false
+              }
+            ]
+          }
+        }
+        """)
+        let asking = try XCTUnwrap(AgentHookEventMapper.map(question, provider: .claudeCode))
+        XCTAssertEqual(asking.type, .waiting)
+        XCTAssertEqual(asking.state, .waitingForUser)
+        XCTAssertEqual(asking.activity, "Which framework?")
+
+        let plan = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "ExitPlanMode",
+          "tool_input": {
+            "plan": "## Refactor auth",
+            "planFilePath": "/tmp/plans/refactor-auth.md"
+          }
+        }
+        """)
+        let approving = try XCTUnwrap(AgentHookEventMapper.map(plan, provider: .claudeCode))
+        XCTAssertEqual(approving.type, .waiting)
+        XCTAssertEqual(approving.state, .waitingForUser)
+        XCTAssertEqual(approving.activity, "Needs plan approval")
+
+        let permission = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "AskUserQuestion"
+        }
+        """)
+        let prompt = try XCTUnwrap(AgentHookEventMapper.map(permission, provider: .claudeCode))
+        XCTAssertEqual(prompt.type, .waiting)
+        XCTAssertEqual(prompt.state, .waitingForUser)
+        XCTAssertEqual(prompt.activity, "Needs an answer")
+
+        let answered = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PostToolUse",
+          "tool_name": "AskUserQuestion"
+        }
+        """)
+        let received = try XCTUnwrap(AgentHookEventMapper.map(answered, provider: .claudeCode))
+        XCTAssertEqual(received.type, .toolCompleted)
+        XCTAssertEqual(received.state, .running)
+    }
+
+    func testClaudeElicitationUrlNotificationIsWaiting() throws {
+        let payload = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "Notification",
+          "notification_type": "elicitation_url_dialog",
+          "message": "Open the login page"
+        }
+        """)
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .claudeCode))
+        XCTAssertEqual(event.type, .waiting)
+        XCTAssertEqual(event.state, .waitingForUser)
+        XCTAssertEqual(event.activity, "Open the login page")
+    }
+
     func testGrokCamelCasePayloadAndToolFailureStayActive() throws {
         let payload = try decode("""
         {

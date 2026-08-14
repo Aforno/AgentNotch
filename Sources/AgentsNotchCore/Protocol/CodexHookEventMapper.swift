@@ -103,6 +103,13 @@ public enum AgentHookEventMapper {
             )
 
         case "PreToolUse":
+            if isInteractiveTool(payload.toolName) {
+                return context.event(
+                    type: .waiting,
+                    activity: interactiveToolActivity(for: payload),
+                    state: .waitingForUser
+                )
+            }
             return toolEvent(payload, completed: false, context: context)
 
         case "PostToolUse":
@@ -128,7 +135,24 @@ public enum AgentHookEventMapper {
         case "PermissionDenied":
             return context.event(
                 type: .activity,
-                activity: "Tool permission denied",
+                activity: payload.reason.map { concise($0, limit: 90) } ?? "Tool permission denied",
+                state: .running
+            )
+
+        case "Elicitation":
+            return context.event(
+                type: .waiting,
+                activity: waitingNotificationActivity(
+                    for: "elicitation_dialog",
+                    message: payload.notificationMessage
+                ),
+                state: .waitingForUser
+            )
+
+        case "ElicitationResult":
+            return context.event(
+                type: .activity,
+                activity: "Input received",
                 state: .running
             )
 
@@ -322,7 +346,7 @@ public enum AgentHookEventMapper {
     /// Claude Code Notification matchers that mean the agent is blocked on the user.
     private static func isWaitingNotification(_ type: String?) -> Bool {
         switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "permission_prompt", "idle_prompt", "agent_needs_input", "elicitation_dialog", "toolpermission", "tool_permission":
+        case "permission_prompt", "idle_prompt", "agent_needs_input", "elicitation_dialog", "elicitation_url_dialog", "toolpermission", "tool_permission":
             return true
         default:
             return false
@@ -334,7 +358,7 @@ public enum AgentHookEventMapper {
             return concise(message, limit: 90)
         }
         switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "permission_prompt", "elicitation_dialog", "toolpermission", "tool_permission":
+        case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "toolpermission", "tool_permission":
             return "Needs approval"
         default:
             return "Waiting for input"
@@ -421,6 +445,8 @@ public enum AgentHookEventMapper {
         case "posttoolusefailure": "PostToolUseFailure"
         case "permissionrequest": "PermissionRequest"
         case "permissiondenied": "PermissionDenied"
+        case "elicitation": "Elicitation"
+        case "elicitationresult": "ElicitationResult"
         case "notification": "Notification"
         case "stop": "Stop"
         case "afteragent": "Stop"
@@ -452,11 +478,39 @@ public enum AgentHookEventMapper {
     }
 
     private static func approvalActivity(for payload: AgentHookPayload) -> String {
-        switch payload.toolName {
-        case "Bash": "Needs command approval"
-        case "apply_patch", "Edit", "Write": "Needs edit approval"
-        case let tool?: "Needs approval for \(displayTool(tool))"
-        case nil: "Needs approval"
+        guard let toolName = payload.toolName else { return "Needs approval" }
+        switch toolIdentifier(toolName) {
+        case "bash": return "Needs command approval"
+        case "apply_patch", "edit", "write": return "Needs edit approval"
+        case "askuserquestion": return "Needs an answer"
+        case "exitplanmode": return "Needs plan approval"
+        default: return "Needs approval for \(displayTool(toolName))"
+        }
+    }
+
+    /// Claude Code's AskUserQuestion and ExitPlanMode tools pause for user input.
+    private static func isInteractiveTool(_ toolName: String?) -> Bool {
+        switch toolName.map(toolIdentifier) {
+        case "askuserquestion", "exitplanmode": true
+        default: false
+        }
+    }
+
+    private static func interactiveToolActivity(for payload: AgentHookPayload) -> String {
+        switch payload.toolName.map(toolIdentifier) {
+        case "askuserquestion":
+            if let questions = payload.toolInput?["questions"]?.arrayValue {
+                for question in questions {
+                    if let text = question.objectValue?["question"]?.stringValue?.nonEmpty {
+                        return concise(text, limit: 90)
+                    }
+                }
+            }
+            return "Needs an answer"
+        case "exitplanmode":
+            return "Needs plan approval"
+        default:
+            return "Needs approval"
         }
     }
 

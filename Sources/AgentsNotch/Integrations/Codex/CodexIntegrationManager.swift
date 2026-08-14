@@ -117,7 +117,7 @@ final class ProviderIntegrationManager {
         lastError = nil
         let isInstalled = fileSystem.withLock {
             fileSystem.manager.isExecutableFile(atPath: installedRelayURL.path)
-                && hookConfigurationContainsRelay()
+                && hookConfigurationLooksInstalled()
         }
         guard isInstalled
         else {
@@ -166,13 +166,14 @@ final class ProviderIntegrationManager {
     nonisolated private func prepareForMonitoringOnDisk() -> MonitoringPreparation {
         fileSystem.withLock {
             guard fileSystem.manager.isExecutableFile(atPath: installedRelayURL.path),
-                  hookConfigurationContainsRelay()
+                  hookConfigurationLooksInstalled()
             else {
                 return MonitoringPreparation(isInstalled: false, error: nil)
             }
             do {
                 try updateInstalledRelayIfNeeded()
                 try updateOpenCodePluginIfNeeded()
+                try updateHookConfigurationIfNeeded()
                 return MonitoringPreparation(isInstalled: true, error: nil)
             } catch {
                 return MonitoringPreparation(isInstalled: true, error: error.localizedDescription)
@@ -248,7 +249,23 @@ final class ProviderIntegrationManager {
         case .codex:
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop", "SessionEnd", "SubagentStart", "SubagentStop"]
         case .claudeCode:
-            ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "Notification", "Stop", "StopFailure", "SessionEnd", "SubagentStart", "SubagentStop"]
+            [
+                "SessionStart",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "PermissionRequest",
+                "PermissionDenied",
+                "Notification",
+                "Elicitation",
+                "ElicitationResult",
+                "Stop",
+                "StopFailure",
+                "SessionEnd",
+                "SubagentStart",
+                "SubagentStop",
+            ]
         case .grok:
             ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied", "Notification", "Stop", "StopFailure", "SessionEnd", "SubagentStart", "SubagentStop"]
         case .geminiCLI:
@@ -301,11 +318,7 @@ final class ProviderIntegrationManager {
 
         for eventName in eventNames {
             let newGroup: [String: Any] = [
-                "hooks": [[
-                    "type": "command",
-                    "command": quotedCommand,
-                    "timeout": hookTimeout(for: eventName),
-                ]],
+                "hooks": [commandHookHandler(for: eventName)],
             ]
             if hooks[eventName] == nil {
                 hooks[eventName] = [newGroup]
@@ -371,10 +384,7 @@ final class ProviderIntegrationManager {
             guard var handlers = hooks[eventName] as? [[String: Any]] ?? (hooks[eventName] == nil ? [] : nil) else {
                 throw ProviderIntegrationError.invalidHookEvent(eventName, hooksURL.path)
             }
-            handlers.removeAll { handler in
-                guard let command = handler["command"] as? String else { return false }
-                return isAgentsNotchCommand(command)
-            }
+            handlers.removeAll(where: isAgentsNotchHandler)
             handlers.append(handler)
             hooks[eventName] = handlers
         }
@@ -396,10 +406,7 @@ final class ProviderIntegrationManager {
 
         for eventName in Array(hooks.keys) {
             guard var handlers = hooks[eventName] as? [[String: Any]] else { continue }
-            handlers.removeAll { handler in
-                guard let command = handler["command"] as? String else { return false }
-                return isAgentsNotchCommand(command)
-            }
+            handlers.removeAll(where: isAgentsNotchHandler)
             if handlers.isEmpty {
                 hooks.removeValue(forKey: eventName)
             } else {
@@ -502,16 +509,64 @@ final class ProviderIntegrationManager {
         if provider == .cursor {
             return eventNames.allSatisfy { eventName in
                 let handlers = hooks[eventName] as? [[String: Any]] ?? []
-                return handlers.contains { handler in
-                    guard let command = handler["command"] as? String else { return false }
-                    return isAgentsNotchCommand(command)
-                }
+                return handlers.contains(where: isAgentsNotchHandler)
             }
         }
         return eventNames.allSatisfy { eventName in
             let groups = hooks[eventName] as? [[String: Any]] ?? []
+            return groups.contains { groupContainsCurrentAgentsNotchHandler($0) }
+        }
+    }
+
+    /// True when any installed hook still belongs to this provider, including
+    /// an older schema that is missing newly documented lifecycle events.
+    nonisolated private func hookConfigurationLooksInstalled() -> Bool {
+        if provider == .openCode {
+            return hookConfigurationContainsRelay()
+        }
+        return hookConfigurationContainsRelay() || hookConfigurationHasAnyAgentsNotchHandler()
+    }
+
+    nonisolated private func hookConfigurationHasAnyAgentsNotchHandler() -> Bool {
+        guard let configuration = try? readRootConfiguration(),
+              let hooks = try? hooksDictionary(in: configuration.root)
+        else { return false }
+        if provider == .cursor {
+            return hooks.values.contains { value in
+                let handlers = value as? [[String: Any]] ?? []
+                return handlers.contains(where: isAgentsNotchHandler)
+            }
+        }
+        return hooks.values.contains { value in
+            let groups = value as? [[String: Any]] ?? []
             return groups.contains(where: groupContainsAgentsNotchHandler)
         }
+    }
+
+    nonisolated private func updateHookConfigurationIfNeeded() throws {
+        guard provider != .openCode, !hookConfigurationContainsRelay() else { return }
+        try installHookConfiguration()
+    }
+
+    /// Claude Code documents exec-form `command` + `args`, with `timeout` in
+    /// seconds and `async` on the command handler. Agents Notch only observes
+    /// lifecycle events, so its handlers run asynchronously: Claude Code does
+    /// not wait for them and ignores any control-oriented output.
+    nonisolated private func commandHookHandler(for eventName: String) -> [String: Any] {
+        if provider == .claudeCode {
+            return [
+                "type": "command",
+                "command": installedRelayURL.path,
+                "args": ["--provider", provider.rawValue],
+                "timeout": hookTimeout(for: eventName),
+                "async": true,
+            ]
+        }
+        return [
+            "type": "command",
+            "command": quotedCommand,
+            "timeout": hookTimeout(for: eventName),
+        ]
     }
 
     nonisolated private func isOwnedOpenCodePlugin(_ data: Data) -> Bool {
@@ -526,10 +581,7 @@ final class ProviderIntegrationManager {
     /// group has no handlers left so install/uninstall can remove empty groups.
     nonisolated private func removeAgentsNotchHandlers(from group: [String: Any]) -> [String: Any]? {
         guard var handlers = group["hooks"] as? [[String: Any]] else { return group }
-        handlers.removeAll { handler in
-            guard let command = handler["command"] as? String else { return false }
-            return isAgentsNotchCommand(command)
-        }
+        handlers.removeAll(where: isAgentsNotchHandler)
         guard !handlers.isEmpty else { return nil }
         var updated = group
         updated["hooks"] = handlers
@@ -538,10 +590,38 @@ final class ProviderIntegrationManager {
 
     nonisolated private func groupContainsAgentsNotchHandler(_ group: [String: Any]) -> Bool {
         guard let handlers = group["hooks"] as? [[String: Any]] else { return false }
-        return handlers.contains { handler in
-            guard let command = handler["command"] as? String else { return false }
-            return isAgentsNotchCommand(command)
+        return handlers.contains(where: isAgentsNotchHandler)
+    }
+
+    nonisolated private func groupContainsCurrentAgentsNotchHandler(_ group: [String: Any]) -> Bool {
+        guard let handlers = group["hooks"] as? [[String: Any]] else { return false }
+        return handlers.contains(where: isCurrentAgentsNotchHandler)
+    }
+
+    nonisolated private func isCurrentAgentsNotchHandler(_ handler: [String: Any]) -> Bool {
+        guard isAgentsNotchHandler(handler) else { return false }
+        guard provider == .claudeCode else { return true }
+        let args = handler["args"] as? [String] ?? []
+        return handler["type"] as? String == "command"
+            && handler["async"] as? Bool == true
+            && handler["command"] as? String == installedRelayURL.path
+            && args == ["--provider", provider.rawValue]
+    }
+
+    /// Matches the installed relay in shell form (`'path' --provider 'x'`) or
+    /// Claude Code exec form (`command` + `args`).
+    nonisolated private func isAgentsNotchHandler(_ handler: [String: Any]) -> Bool {
+        if let command = handler["command"] as? String, isAgentsNotchCommand(command) {
+            return true
         }
+        guard let command = handler["command"] as? String else { return false }
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed == installedRelayURL.path else { return false }
+        let args = handler["args"] as? [String] ?? []
+        if let index = args.firstIndex(of: "--provider"), args.indices.contains(index + 1) {
+            return args[index + 1] == provider.rawValue
+        }
+        return provider == .codex && !args.contains("--provider")
     }
 
     /// True when `command` invokes the installed relay binary (as the executable),
