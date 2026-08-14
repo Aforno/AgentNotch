@@ -3,13 +3,14 @@ import Foundation
 /// Resolves whether a Codex permission hook is waiting on a person or on an
 /// automatic reviewer. Codex does not currently include `approvals_reviewer`
 /// in every PermissionRequest payload, so the matching turn context is used as
-/// a compatibility bridge. Any missing or unfamiliar context fails open to a
-/// visible user prompt.
+/// a compatibility bridge: a fail-open, 4 MiB tail read of the transcript
+/// JSONL. Remove this when Codex includes the reviewer on the hook. Do not
+/// add a second transcript parser.
 public enum CodexApprovalContextResolver {
     public static let maximumTranscriptTailBytes = 4 * 1_024 * 1_024
 
     public static func permissionRequestRequiresUserInput(for payload: AgentHookPayload) -> Bool {
-        guard normalizedEventName(payload.hookEventName) == "permissionrequest" else {
+        guard HookEventName(rawEventName: payload.hookEventName) == .permissionRequest else {
             return true
         }
 
@@ -87,19 +88,5 @@ public enum CodexApprovalContextResolver {
         default:
             false
         }
-    }
-
-    private static func normalizedEventName(_ name: String) -> String {
-        name
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .lowercased()
-    }
-}
-
-private extension String {
-    var nonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

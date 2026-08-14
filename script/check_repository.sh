@@ -15,6 +15,7 @@ required_files=(
   SECURITY.md
   CONTRIBUTING.md
   CHANGELOG.md
+  AGENTS.md
   THIRD_PARTY_NOTICES.md
   VERSION
   .github/workflows/ci.yml

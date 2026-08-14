@@ -47,8 +47,10 @@ It modifies only its own entries in supported provider hook configuration.
   an individual payload is bounded to 1 MiB.
 - The relay returns success and an empty passive response when the app is
   unavailable or an event is malformed.
-- The app does not parse provider transcripts, inject agent context, upload
-  source, or send analytics or telemetry.
+- The app does not invent a transcript parser, inject agent context, upload
+  source, or send analytics or telemetry. The one Codex exception is a
+  fail-open 4 MiB tail read used only to decide whether a PermissionRequest
+  is waiting on a person; missing context stays visible.
 - Integration changes are atomic and idempotent, preserve unrelated settings,
   preserve restrictive file permissions and symlinked dotfiles, and remove
   only Agents Notch entries.

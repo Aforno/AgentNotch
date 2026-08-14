@@ -404,22 +404,6 @@ private extension AgentEvent {
     var explicitlyResumesSession: Bool {
         if type == .started { return true }
         guard let hookEvent = metadata?["hookEvent"] else { return false }
-        switch hookEvent
-            .replacingOccurrences(of: "_", with: "")
-            .lowercased()
-        {
-        // Claude/Codex/Grok prompt events and Gemini's BeforeAgent alias.
-        case "userpromptsubmit", "beforeagent":
-            return true
-        default:
-            return false
-        }
-    }
-}
-
-private extension String {
-    var nonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        return HookEventName(rawEventName: hookEvent)?.resumesSession == true
     }
 }

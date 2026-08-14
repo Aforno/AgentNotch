@@ -24,10 +24,10 @@ final class HookProviderAdapter: AgentProviderAdapter {
     }
 
     func discoverSessions() async throws -> [AgentSession] {
-        // Hooks are event-driven; no transcript polling or filesystem scan is used.
-        // Cold-start recovery lives in AgentActivityService: dead origin PIDs
-        // complete immediately, remaining restored runners become `.unknown`
-        // for a reconnect grace period instead of inventing completion.
+        // Hooks are push-only. Do not invent live sessions from disk.
+        // Titles, hierarchy, and cold-start evidence are launch-time reads in
+        // CodexSessionTitleResolver, GrokSessionContextResolver, and the
+        // restorers — never a scan that creates sessions here.
         []
     }
 }

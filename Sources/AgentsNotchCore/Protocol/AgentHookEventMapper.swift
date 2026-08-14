@@ -72,7 +72,7 @@ public enum AgentHookEventMapper {
             // Store the canonical lifecycle name when the provider uses an
             // alias (e.g. Gemini BeforeAgent → UserPromptSubmit) so session
             // resume and other hookEvent gates stay provider-neutral.
-            "hookEvent": metadataHookEventName(payload.hookEventName),
+            "hookEvent": HookEventName.metadataName(for: payload.hookEventName),
         ].compactMapValues { $0 }
 
         return MappingContext(
@@ -90,11 +90,11 @@ public enum AgentHookEventMapper {
         permissionRequestRequiresUserInput: Bool,
         context: MappingContext
     ) -> AgentEvent? {
-        switch normalizedEventName(payload.hookEventName) {
-        case "SessionStart":
+        switch HookEventName(rawEventName: payload.hookEventName) {
+        case .sessionStart:
             return sessionStartEvent(payload, context: context)
 
-        case "UserPromptSubmit":
+        case .userPromptSubmit:
             return context.event(
                 type: .activity,
                 task: payload.prompt.flatMap { AgentTaskTitle.fromPrompt($0) },
@@ -102,7 +102,7 @@ public enum AgentHookEventMapper {
                 state: .thinking
             )
 
-        case "PreToolUse":
+        case .preToolUse:
             if isInteractiveTool(payload.toolName) {
                 return context.event(
                     type: .waiting,
@@ -112,34 +112,34 @@ public enum AgentHookEventMapper {
             }
             return toolEvent(payload, completed: false, context: context)
 
-        case "PostToolUse":
+        case .postToolUse:
             return toolEvent(payload, completed: true, context: context)
 
-        case "PostToolUseFailure":
+        case .postToolUseFailure:
             return context.event(
                 type: .toolCompleted,
                 activity: payload.error.map { "Tool failed: \(concise($0, limit: 76))" } ?? "Tool failed",
                 state: .running
             )
 
-        case "PermissionRequest" where permissionRequestRequiresUserInput:
+        case .permissionRequest where permissionRequestRequiresUserInput:
             return context.event(
                 type: .waiting,
                 activity: approvalActivity(for: payload),
                 state: .waitingForUser
             )
 
-        case "PermissionRequest":
+        case .permissionRequest:
             return nil
 
-        case "PermissionDenied":
+        case .permissionDenied:
             return context.event(
                 type: .activity,
                 activity: payload.reason.map { concise($0, limit: 90) } ?? "Tool permission denied",
                 state: .running
             )
 
-        case "Elicitation":
+        case .elicitation:
             return context.event(
                 type: .waiting,
                 activity: waitingNotificationActivity(
@@ -149,14 +149,14 @@ public enum AgentHookEventMapper {
                 state: .waitingForUser
             )
 
-        case "ElicitationResult":
+        case .elicitationResult:
             return context.event(
                 type: .activity,
                 activity: "Input received",
                 state: .running
             )
 
-        case "Notification" where isWaitingNotification(payload.notificationType):
+        case .notification where isWaitingNotification(payload.notificationType):
             return context.event(
                 type: .waiting,
                 activity: waitingNotificationActivity(
@@ -166,7 +166,7 @@ public enum AgentHookEventMapper {
                 state: .waitingForUser
             )
 
-        case "Stop":
+        case .stop:
             return terminalEvent(
                 payload,
                 successActivity: completionActivity(from: payload.lastAssistantMessage),
@@ -174,14 +174,14 @@ public enum AgentHookEventMapper {
                 context: context
             )
 
-        case "StopFailure":
+        case .stopFailure:
             return context.event(
                 type: .failed,
                 activity: payload.error.map { concise($0, limit: 90) } ?? "Turn failed",
                 state: .failed
             )
 
-        case "SessionEnd":
+        case .sessionEnd:
             return terminalEvent(
                 payload,
                 successActivity: "Session ended",
@@ -189,13 +189,13 @@ public enum AgentHookEventMapper {
                 context: context
             )
 
-        case "SubagentStart":
+        case .subagentStart:
             return subagentEvent(payload, started: true, context: context)
 
-        case "SubagentStop":
+        case .subagentStop:
             return subagentEvent(payload, started: false, context: context)
 
-        default:
+        case .notification, nil:
             return nil
         }
     }
@@ -432,42 +432,6 @@ public enum AgentHookEventMapper {
         tool.split(separator: "__").last.map(String.init)?.lowercased() ?? tool.lowercased()
     }
 
-    private static func normalizedEventName(_ eventName: String) -> String {
-        switch eventName.replacingOccurrences(of: "_", with: "").lowercased() {
-        case "sessionstart": "SessionStart"
-        case "userpromptsubmit": "UserPromptSubmit"
-        case "beforesubmitprompt": "UserPromptSubmit"
-        case "beforeagent": "UserPromptSubmit"
-        case "pretooluse": "PreToolUse"
-        case "beforetool": "PreToolUse"
-        case "posttooluse": "PostToolUse"
-        case "aftertool": "PostToolUse"
-        case "posttoolusefailure": "PostToolUseFailure"
-        case "permissionrequest": "PermissionRequest"
-        case "permissiondenied": "PermissionDenied"
-        case "elicitation": "Elicitation"
-        case "elicitationresult": "ElicitationResult"
-        case "notification": "Notification"
-        case "stop": "Stop"
-        case "afteragent": "Stop"
-        case "stopfailure": "StopFailure"
-        case "sessionend": "SessionEnd"
-        case "subagentstart": "SubagentStart"
-        case "subagentstop", "subagentend": "SubagentStop"
-        default: eventName
-        }
-    }
-
-    /// Prefer the canonical lifecycle name only when the provider sent an
-    /// alias that maps to a different event (BeforeAgent → UserPromptSubmit).
-    /// Unaliased names keep their original spelling for diagnostics.
-    private static func metadataHookEventName(_ eventName: String) -> String {
-        let normalized = normalizedEventName(eventName)
-        let rawKey = eventName.replacingOccurrences(of: "_", with: "").lowercased()
-        let normalizedKey = normalized.replacingOccurrences(of: "_", with: "").lowercased()
-        return rawKey == normalizedKey ? eventName : normalized
-    }
-
     private static func normalizedToolName(_ toolName: String) -> String {
         switch toolName.lowercased() {
         case "bash", "shell", "run_shell_command", "run_terminal_command": "Bash"
@@ -552,29 +516,5 @@ public enum AgentHookEventMapper {
             }
         }
         return nil
-    }
-}
-
-public typealias CodexHookPayload = AgentHookPayload
-
-public enum CodexHookEventMapper {
-    public static func map(
-        _ payload: CodexHookPayload,
-        permissionRequestRequiresUserInput: Bool = true,
-        now: Date = Date()
-    ) -> AgentEvent? {
-        AgentHookEventMapper.map(
-            payload,
-            provider: .codex,
-            permissionRequestRequiresUserInput: permissionRequestRequiresUserInput,
-            now: now
-        )
-    }
-}
-
-private extension String {
-    var nonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

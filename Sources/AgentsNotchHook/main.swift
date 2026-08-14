@@ -46,7 +46,8 @@ let isDuplicateClaudeCompatibilityHook = GrokHookRouting.shouldSkipClaudeCompati
 
 if isDuplicateClaudeCompatibilityHook {
     // Drain stdin above, then stop before decoding or walking Grok's session tree.
-    writePassiveResponse()
+    // Pass the configured provider so Claude compatibility hooks stay silent.
+    writePassiveResponse(for: configuredProvider)
     exit(EXIT_SUCCESS)
 }
 
@@ -128,7 +129,7 @@ do {
     writePassiveResponse(for: provider)
 }
 
-private func writePassiveResponse(for provider: AgentProvider = .codex) {
+private func writePassiveResponse(for provider: AgentProvider) {
     guard provider != .claudeCode else { return }
     let payload = Data("{}\n".utf8)
     payload.withUnsafeBytes { buffer in
@@ -188,13 +189,6 @@ private func bundleIdentifier(forTerminalProgram program: String) -> String? {
     }
 }
 
-private extension String {
-    var nonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-}
-
 private func configurationContainsNativeGrokRelay(at url: URL) -> Bool {
     guard let data = try? Data(contentsOf: url),
           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -225,8 +219,7 @@ private func containsNativeGrokRelay(_ value: Any) -> Bool {
 /// no workflow publish requirement skip the unbounded FS scan.
 private func shouldResolveGrokSessionContext(_ payload: AgentHookPayload) -> Bool {
     if shouldPublishWorkflowState(payload) { return true }
-    let event = payload.hookEventName.replacingOccurrences(of: "_", with: "").lowercased()
-    if ["userpromptsubmit", "beforesubmitprompt", "beforeagent"].contains(event) {
+    if HookEventName(rawEventName: payload.hookEventName) == .userPromptSubmit {
         return true
     }
     // Parent already known and no workflow publish: skip the tree walk.
@@ -237,14 +230,14 @@ private func shouldResolveGrokSessionContext(_ payload: AgentHookPayload) -> Boo
 }
 
 private func shouldPublishWorkflowState(_ payload: AgentHookPayload) -> Bool {
-    let event = payload.hookEventName.replacingOccurrences(of: "_", with: "").lowercased()
-    if ["subagentstart", "subagentstop", "sessionend", "stop"].contains(event) {
+    switch HookEventName(rawEventName: payload.hookEventName) {
+    case .subagentStart, .subagentStop, .sessionEnd, .stop:
         return true
+    default:
+        return payload.toolName?.lowercased() == "workflow"
     }
-    return payload.toolName?.lowercased() == "workflow"
 }
 
 private func isTerminalLifecycleHook(_ payload: AgentHookPayload) -> Bool {
-    let event = payload.hookEventName.replacingOccurrences(of: "_", with: "").lowercased()
-    return ["stop", "stopfailure", "sessionend", "afteragent"].contains(event)
+    HookEventName(rawEventName: payload.hookEventName)?.isTerminal == true
 }

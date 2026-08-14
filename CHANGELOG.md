@@ -6,8 +6,20 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Repository conventions now describe the allowed disk walks: hook adapters
+  stay push-only, while titles, hierarchy, and cold-start evidence may read
+  provider-owned files. The Codex approval bridge is documented as a
+  fail-open 4 MiB transcript-tail read, not a general parser.
+
 ### Fixed
 
+- Activity Center no longer draws a system focus ring around the session
+  list after a row is selected. Keyboard navigation is unchanged.
+- Duplicate Claude-compatibility hooks under Grok no longer write `{}` to
+  stdout. The relay stays silent for Claude, matching observer-only rules.
+- Activity Center timeline titles ignore whitespace-only tool metadata.
 - Claude Code observers now follow the documented hook schema: exec-form
   `command`/`args` and asynchronous handlers that cannot block or control
   permission, elicitation, AskUserQuestion, or ExitPlanMode behavior, plus the

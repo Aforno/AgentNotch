@@ -57,6 +57,56 @@ final class AgentActivityServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testAttentionQueueIsSortedAndExcludesFailures() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "older",
+            provider: .codex,
+            state: .waitingForUser,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .failed,
+            sessionId: "failure",
+            provider: .grok,
+            state: .failed,
+            timestamp: base.addingTimeInterval(1)
+        ))
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "newer",
+            provider: .claudeCode,
+            state: .waitingForUser,
+            timestamp: base.addingTimeInterval(2)
+        ))
+
+        XCTAssertEqual(service.attentionSessions.map(\.id), ["newer", "older"])
+        XCTAssertEqual(service.attentionCount, 2)
+        XCTAssertEqual(service.attentionSession?.id, "newer")
+    }
+
+    @MainActor
+    func testDayBasedHistoryRetentionHasNoHiddenSessionCountCap() {
+        let service = AgentActivityService()
+        let base = Date().addingTimeInterval(-60)
+        for index in 0..<25 {
+            service.ingest(AgentEvent(
+                type: .completed,
+                sessionId: "completed-\(index)",
+                provider: .codex,
+                state: .completed,
+                timestamp: base.addingTimeInterval(TimeInterval(index))
+            ))
+        }
+
+        service.pruneCompleted(olderThan: 7 * 24 * 60 * 60)
+
+        XCTAssertEqual(service.recentSessions.count, 25)
+    }
+
+    @MainActor
     func testActiveProvidersAreUniqueAndOrderedByLatestActivity() {
         let service = AgentActivityService()
         let base = Date(timeIntervalSince1970: 100)

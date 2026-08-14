@@ -521,6 +521,30 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertTrue(manager.lastError?.contains("will not replace") == true)
     }
 
+    @MainActor
+    func testGeminiIntegrationWritesOfficialHookNamesAndMillisecondTimeouts() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        let manager = fixture.manager(provider: .geminiCLI)
+        manager.install()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        let settingsURL = fixture.home.appendingPathComponent(".gemini/settings.json")
+        let rootObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any]
+        )
+        let hooks = try XCTUnwrap(rootObject["hooks"] as? [String: Any])
+        let expected = ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"]
+        XCTAssertEqual(Set(hooks.keys), Set(expected))
+        for eventName in expected {
+            let groups = try XCTUnwrap(hooks[eventName] as? [[String: Any]])
+            let handlers = try XCTUnwrap(groups.first?["hooks"] as? [[String: Any]])
+            XCTAssertEqual(handlers.first?["timeout"] as? Int, 5_000)
+            XCTAssertTrue((handlers.first?["command"] as? String)?.contains("--provider 'gemini-cli'") == true)
+        }
+    }
+
     private static func readJSON(at url: URL) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
         return try XCTUnwrap(object as? [String: Any])

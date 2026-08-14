@@ -1,5 +1,8 @@
 import Foundation
 
+/// Walks Grok's on-disk session tree for parent, role, title, and workflow
+/// evidence. This is hierarchy and cold-start enrichment, not a source of
+/// invented live sessions.
 public struct GrokSessionContext: Sendable {
     public let parentSessionId: String?
     public let agentRole: String?
