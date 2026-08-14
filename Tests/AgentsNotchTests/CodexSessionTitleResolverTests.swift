@@ -17,6 +17,17 @@ final class CodexSessionTitleResolverTests: XCTestCase {
         )
     }
 
+    func testCamelCaseThreadNameIsAccepted() throws {
+        let home = try temporaryCodexHome(index: """
+        {"id":"thr_123","threadName":"Review recent changes"}
+        """)
+
+        XCTAssertEqual(
+            CodexSessionTitleResolver.title(forNativeSessionId: "thr_123", codexHome: home),
+            "Review recent changes"
+        )
+    }
+
     func testUnknownSessionReturnsNil() throws {
         let home = try temporaryCodexHome(index: """
         {"id":"thr_123","thread_name":"Review recent changes"}

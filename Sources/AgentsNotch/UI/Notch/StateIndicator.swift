@@ -43,7 +43,7 @@ private struct StateSpinner: NSViewRepresentable {
 
 private final class CompositorSpinnerView: NSView {
     private let spinnerLayer = CAShapeLayer()
-    private var occlusionObserver: NSObjectProtocol?
+    private nonisolated(unsafe) var occlusionObserver: NSObjectProtocol?
     private var spinnerSize: CGFloat = 12
 
     override init(frame frameRect: NSRect) {

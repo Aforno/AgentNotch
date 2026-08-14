@@ -37,8 +37,8 @@ enum GlobalActivityShortcut: String, CaseIterable, Identifiable {
 /// forwards presses to the app's Activity Center action.
 @MainActor
 final class GlobalActivityShortcutController {
-    private var hotKey: EventHotKeyRef?
-    private var eventHandler: EventHandlerRef?
+    private nonisolated(unsafe) var hotKey: EventHotKeyRef?
+    private nonisolated(unsafe) var eventHandler: EventHandlerRef?
     private let action: () -> Void
 
     init(action: @escaping () -> Void) {

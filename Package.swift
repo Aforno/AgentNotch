@@ -15,23 +15,23 @@ let package = Package(
     targets: [
         .target(
             name: "AgentsNotchCore",
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
             name: "AgentsNotch",
             dependencies: ["AgentsNotchCore"],
             resources: [.process("Resources")],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
             name: "AgentsNotchHook",
             dependencies: ["AgentsNotchCore"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(
             name: "AgentsNotchTests",
             dependencies: ["AgentsNotchCore", "AgentsNotch"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
 )

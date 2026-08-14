@@ -8,10 +8,16 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Repository conventions now describe the allowed disk walks: hook adapters
-  stay push-only, while titles, hierarchy, and cold-start evidence may read
+- Repository conventions now describe the allowed disk walks: hooks stay
+  push-only, while titles, hierarchy, and cold-start evidence may read
   provider-owned files. The Codex approval bridge is documented as a
   fail-open 4 MiB transcript-tail read, not a general parser.
+- Dropped the unused `AgentProviderAdapter` / `HookProviderAdapter` layer.
+  `AppRuntime` now talks to `ProviderIntegrationManager` directly.
+- Restored session history is rewritten to always-prefixed
+  `provider:nativeId` identities on load, then persisted. Live ingest no
+  longer remaps bare IDs.
+- The package now uses Swift 6 language mode on every target.
 
 ### Fixed
 

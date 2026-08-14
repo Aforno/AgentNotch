@@ -5,11 +5,11 @@ import XCTest
 
 final class AppRuntimeTests: XCTestCase {
     @MainActor
-    func testRuntimeConstructsEveryBuiltInProviderAdapter() {
+    func testRuntimeConstructsEveryBuiltInProviderIntegration() {
         let runtime = AppRuntime(monitorProviders: false)
 
         XCTAssertEqual(
-            runtime.providerAdapters.map(\.provider),
+            runtime.integrations.map(\.provider),
             [.codex, .claudeCode, .grok, .geminiCLI, .openCode, .cursor]
         )
     }
@@ -58,7 +58,7 @@ final class AppRuntimeTests: XCTestCase {
             codexIntegration.hasReceivedEvent,
             "genuine events must mark the Codex integration as verified"
         )
-        XCTAssertFalse(runtime.activity.sessions.contains { $0.id == "expired-live-event" })
+        XCTAssertFalse(runtime.activity.sessions.contains { $0.id == "codex:expired-live-event" })
     }
 
     @MainActor
@@ -88,7 +88,7 @@ final class AppRuntimeTests: XCTestCase {
         for _ in 0..<30 where runtime.activity.sessions.isEmpty {
             try await Task.sleep(for: .milliseconds(20))
         }
-        XCTAssertTrue(runtime.activity.sessions.contains { $0.id == "self-test:codex:fixture" })
+        XCTAssertTrue(runtime.activity.sessions.contains { $0.id == "codex:self-test:codex:fixture" })
         XCTAssertNil(runtime.lastEventReceivedAt[.codex])
         XCTAssertFalse(
             codexIntegration.hasReceivedEvent,

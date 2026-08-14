@@ -21,8 +21,11 @@ final class DebugEventSimulator {
     }
 
     static func isSimulated(_ session: AgentSession) -> Bool {
-        session.id.hasPrefix(sessionPrefix)
+        let namespacedPrefix = session.provider.namespacedSessionID(sessionPrefix)
+        return session.id.hasPrefix(sessionPrefix)
+            || session.id.hasPrefix(namespacedPrefix)
             || legacySessionIDs.contains(session.id)
+            || legacySessionIDs.contains { session.provider.namespacedSessionID($0) == session.id }
             || session.recentEvents.contains { $0.metadata?["source"] == "simulator" }
     }
 

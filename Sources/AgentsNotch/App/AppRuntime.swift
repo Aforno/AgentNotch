@@ -8,7 +8,6 @@ import Observation
 final class AppRuntime {
     let activity: AgentActivityService
     let integrations: [ProviderIntegrationManager]
-    let providerAdapters: [HookProviderAdapter]
     let notifications: AgentNotificationService
     let updates: UpdateService
     #if DEBUG
@@ -29,6 +28,7 @@ final class AppRuntime {
     weak var panelController: NotchPanelController?
 
     private let persistence: SessionPersistence
+    private let persistScheduler: SessionPersistScheduler
     private let socketURL: URL
     private let monitorProviders: Bool
     private let grokHome: URL
@@ -36,20 +36,12 @@ final class AppRuntime {
     private let historyRetentionDays: () -> Int?
     private let originActivation = OriginActivationService()
     private var socketServer: UnixSocketServer?
-    /// Coalesces rapid session writes so an older snapshot cannot overwrite a newer one.
-    private var persistTask: Task<Void, Never>?
-    /// Bounds persistence latency during a continuous stream of hook events.
-    private var persistDeadlineTask: Task<Void, Never>?
     /// Completes sessions still in `.unknown` when no live hook confirms them.
     private var unknownGraceTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
     private var acceptsEvents = false
     private var isRestoring = false
-    /// Protects an unreadable history file when it could not be quarantined.
-    private var persistenceWritesAllowed = false
     private var startupEvents: [AgentEvent] = []
-    private let persistDebounceDuration: Duration
-    private let persistMaximumDelay: Duration
 
     /// How long restored unverified runners stay in `.unknown` before the app
     /// assumes they ended without a hook. Live events cancel this per session.
@@ -78,12 +70,15 @@ final class AppRuntime {
         }
     ) {
         self.persistence = persistence
+        persistScheduler = SessionPersistScheduler(
+            persistence: persistence,
+            debounceDuration: persistDebounceDuration,
+            maximumDelay: persistMaximumDelay
+        )
         self.socketURL = socketURL
         self.monitorProviders = monitorProviders
         self.grokHome = grokHome
         self.codexHome = codexHome
-        self.persistDebounceDuration = persistDebounceDuration
-        self.persistMaximumDelay = persistMaximumDelay
         self.historyRetentionDays = historyRetentionDays
         activity = AgentActivityService()
         let integrations = Self.integratedProviders.map { provider in
@@ -94,7 +89,6 @@ final class AppRuntime {
             )
         }
         self.integrations = integrations
-        providerAdapters = integrations.map(HookProviderAdapter.init)
         notifications = AgentNotificationService()
         updates = UpdateService()
         #if DEBUG
@@ -121,7 +115,7 @@ final class AppRuntime {
         isRestoring = true
         // Loading decides whether replacing the current history is safe. Keep
         // writes disabled while restoration is still in flight.
-        persistenceWritesAllowed = false
+        persistScheduler.setWritesAllowed(false)
         startupEvents.removeAll(keepingCapacity: true)
         return lifecycleGeneration
     }
@@ -146,51 +140,33 @@ final class AppRuntime {
     }
 
     private func restorePersistedState(generation: Int) async -> Bool {
-        let loadResult = await persistence.load()
-        guard isCurrentLifecycle(generation) else { return false }
-        persistenceWritesAllowed = loadResult.canSafelyWrite
-        if loadResult.canSafelyWrite {
-            persistenceError = nil
-            persistenceRecoveryNotice = loadResult.recoveryMessage
-        } else {
-            persistenceError = loadResult.recoveryMessage
-            persistenceRecoveryNotice = nil
-        }
-        activity.replaceSessions(loadResult.sessions)
-        // Do not invent completion for restored runners. Dead origin PIDs are
-        // completed; everything else becomes `.unknown` until a live hook or
-        // the reconnect grace period resolves them. Waiting rows stay waiting.
-        activity.reconcileUnverifiedActiveSessions()
-        let restoredSessions = activity.sessions
-        let grokHome = self.grokHome
-        let grokEvidence = await Task.detached(priority: .utility) {
-            GrokSessionRestorer.discover(in: restoredSessions, grokHome: grokHome)
-        }.value
-        guard isCurrentLifecycle(generation) else { return false }
-        applyGrokSessionContext(grokEvidence)
-        let restoredAfterGrok = activity.sessions
-        let codexHome = self.codexHome
-        let codexTitleEvents = await Task.detached(priority: .utility) {
-            CodexSessionRestorer.titleEvents(in: restoredAfterGrok, codexHome: codexHome)
-        }.value
-        guard isCurrentLifecycle(generation) else { return false }
-        for event in codexTitleEvents {
-            activity.ingest(event)
-        }
-        pruneHistory()
-        #if DEBUG
-        // Simulator state is intentionally ephemeral. This also removes rows
-        // written by older debug builds before simulator persistence was split.
-        simulator.reset()
-        #endif
-        if persistenceWritesAllowed {
-            // Persist restored Grok relationships and recreate a clean file after
-            // successful corruption quarantine. Failed quarantine stays read-only.
-            let saveError = await persistence.save(persistableSessions)
-            guard isCurrentLifecycle(generation) else { return false }
-            if let error = saveError {
-                persistenceError = error
+        let result = await SessionRestorePipeline.restore(
+            generation: generation,
+            activity: activity,
+            persistence: persistence,
+            grokHome: grokHome,
+            codexHome: codexHome,
+            persistableSessions: { [weak self] in self?.persistableSessions ?? [] },
+            historyRetentionDays: historyRetentionDays,
+            isCurrentLifecycle: { [weak self] generation in
+                self?.isCurrentLifecycle(generation) ?? false
+            },
+            resetSimulator: { [weak self] in
+                #if DEBUG
+                // Simulator state is intentionally ephemeral. This also removes
+                // rows written by older debug builds.
+                self?.simulator.reset()
+                #endif
             }
+        )
+        guard let result else { return false }
+        persistScheduler.setWritesAllowed(result.writesAllowed)
+        if result.writesAllowed {
+            persistenceError = result.persistenceError
+            persistenceRecoveryNotice = result.persistenceRecoveryNotice
+        } else {
+            persistenceError = result.persistenceError
+            persistenceRecoveryNotice = nil
         }
         return true
     }
@@ -211,9 +187,9 @@ final class AppRuntime {
 
     private func startProviderMonitoring(generation: Int) async -> Bool {
         guard monitorProviders else { return isCurrentLifecycle(generation) }
-        for adapter in providerAdapters {
+        for integration in integrations {
             guard isCurrentLifecycle(generation) else { return false }
-            try? await adapter.startMonitoring()
+            await integration.prepareForMonitoring()
         }
         return isCurrentLifecycle(generation)
     }
@@ -230,13 +206,10 @@ final class AppRuntime {
         activity.onSessionsChanged = nil
         unknownGraceTask?.cancel()
         unknownGraceTask = nil
-        persistTask?.cancel()
-        persistTask = nil
-        persistDeadlineTask?.cancel()
-        persistDeadlineTask = nil
-        if persistenceWritesAllowed {
+        persistScheduler.cancelPending()
+        if persistScheduler.writesAllowed {
             do {
-                try persistence.saveSynchronously(persistableSessions)
+                try persistScheduler.flushSynchronously(snapshot: persistableSessions)
                 persistenceError = nil
             } catch {
                 persistenceError = "Could not save session history: \(error.localizedDescription)"
@@ -247,38 +220,12 @@ final class AppRuntime {
     }
 
     private func schedulePersist() {
-        guard persistenceWritesAllowed else { return }
-        if persistDeadlineTask == nil {
-            persistDeadlineTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                do {
-                    try await Task.sleep(for: persistMaximumDelay)
-                } catch {
-                    return
-                }
-                await flushScheduledPersistence()
+        persistScheduler.schedule(
+            snapshot: { [weak self] in self?.persistableSessions ?? [] },
+            onResult: { [weak self] error in
+                self?.persistenceError = error
             }
-        }
-        persistTask?.cancel()
-        persistTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await Task.sleep(for: persistDebounceDuration)
-            } catch {
-                return
-            }
-            await flushScheduledPersistence()
-        }
-    }
-
-    private func flushScheduledPersistence() async {
-        persistTask?.cancel()
-        persistTask = nil
-        persistDeadlineTask?.cancel()
-        persistDeadlineTask = nil
-        guard persistenceWritesAllowed else { return }
-        let snapshot = persistableSessions
-        persistenceError = await persistence.save(snapshot)
+        )
     }
 
     private func receive(_ event: AgentEvent, generation: Int) {
@@ -291,7 +238,8 @@ final class AppRuntime {
     }
 
     private func process(_ event: AgentEvent, notify: Bool) {
-        let previousState = activity.sessions.first { $0.id == event.sessionId }?.state
+        let sessionID = event.provider.namespacedSessionID(event.sessionId)
+        let previousState = activity.session(id: sessionID)?.state
         guard activity.ingest(event) else { return }
         if event.resolvedState == .completed || event.resolvedState == .failed {
             pruneHistory()
@@ -300,7 +248,7 @@ final class AppRuntime {
             lastEventReceivedAt[event.provider] = Date()
             integration(for: event.provider)?.noteEventReceived()
         }
-        guard let session = activity.sessions.first(where: { $0.id == event.sessionId }) else { return }
+        guard let session = activity.session(id: sessionID) else { return }
 
         if session.state == .waitingForUser, previousState != .waitingForUser, notify {
             notifications.deliverAttention(for: session, waitingCount: activity.attentionCount)
@@ -325,35 +273,6 @@ final class AppRuntime {
                   generation == self.lifecycleGeneration
             else { return }
             self.activity.completeUnknownSessions()
-        }
-    }
-
-    private func applyGrokSessionContext(_ evidence: GrokRestoreEvidence) {
-        for event in evidence.relationshipEvents {
-            activity.ingest(event)
-        }
-
-        for discoveredEvent in evidence.workflowEvents {
-            var event = discoveredEvent
-            if let session = activity.session(id: event.sessionId) {
-                if session.state == .unknown {
-                    // On-disk Grok workflow status is stronger evidence than
-                    // cold-start uncertainty: complete finished runs and restore
-                    // active ones instead of inventing a generic completion.
-                    activity.applyRestoredLifecycle(
-                        sessionId: session.id,
-                        state: event.resolvedState,
-                        activity: event.activity,
-                        at: event.timestamp
-                    )
-                } else if !session.isActive, event.resolvedState.isActive {
-                    // Leftover on-disk workflow status (e.g. active/running) must
-                    // not reopen terminal sessions as phantoms across relaunch.
-                    event.state = session.state
-                    event.type = session.state == .failed ? .failed : .completed
-                }
-            }
-            activity.reconcileRestoredWorkflow(event)
         }
     }
 

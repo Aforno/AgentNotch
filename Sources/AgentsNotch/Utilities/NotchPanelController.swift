@@ -5,9 +5,9 @@ import SwiftUI
 final class NotchPanelController: NSWindowController {
     private let runtime: AppRuntime
     private var geometry: DisplayGeometry
-    private var screenObserver: NSObjectProtocol?
-    private var globalPointerObserver: Any?
-    private var localPointerObserver: Any?
+    private nonisolated(unsafe) var screenObserver: NSObjectProtocol?
+    private nonisolated(unsafe) var globalPointerObserver: Any?
+    private nonisolated(unsafe) var localPointerObserver: Any?
     private lazy var frameScheduler = NotchPanelFrameScheduler { [weak self] size, animated in
         self?.reposition(width: size.width, height: size.height, animated: animated)
     }

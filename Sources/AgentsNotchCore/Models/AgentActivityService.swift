@@ -38,16 +38,15 @@ public final class AgentActivityService {
     public private(set) var notchSnapshot: NotchActivitySnapshot
     public private(set) var historyRevision: UInt64
     public var onSessionsChanged: (([AgentSession]) -> Void)?
-    @ObservationIgnored private var index: SessionIndex
+    private var index: SessionIndex
 
     public init(sessions: [AgentSession] = []) {
         self.sessions = sessions
-            .filter { !Self.isOrphanedGrokStart($0) }
         attentionEvent = nil
         notchSnapshot = .empty
         historyRevision = 0
         index = .empty
-        normalizeRestoredIdentities()
+        migrateRestoredHistory()
         self.sessions.sort(by: Self.orderSessions)
         rebuildIndex()
         // Match replaceSessions: seed the temporary attention surface when the
@@ -86,8 +85,7 @@ public final class AgentActivityService {
     /// Parent sessions followed by their descendants. A child that needs
     /// attention promotes its whole agent group without losing the hierarchy.
     public var hierarchicalSessions: [AgentSession] {
-        _ = sessions
-        return index.hierarchicalSessions
+        index.hierarchicalSessions
     }
 
     /// Sessions for the expanded notch list: the three most recently updated
@@ -98,19 +96,16 @@ public final class AgentActivityService {
     }
 
     public func children(of sessionID: String) -> [AgentSession] {
-        _ = sessions
-        return index.childrenByParentID[sessionID] ?? []
+        index.childrenByParentID[sessionID] ?? []
     }
 
     public func parent(of session: AgentSession) -> AgentSession? {
         guard let parentID = session.parentSessionId else { return nil }
-        _ = sessions
         return index.sessionsByID[parentID]
     }
 
     public func session(id: String) -> AgentSession? {
-        _ = sessions
-        return index.sessionsByID[id]
+        index.sessionsByID[id]
     }
 
     public var attentionCount: Int {
@@ -132,7 +127,7 @@ public final class AgentActivityService {
             }
         }
 
-        event = canonicalizedIdentity(for: event)
+        event = namespacedIdentity(for: event)
 
         let advancesCurrentState: Bool
         if let index = sessions.firstIndex(where: { $0.id == event.sessionId }) {
@@ -187,8 +182,7 @@ public final class AgentActivityService {
 
     public func replaceSessions(_ sessions: [AgentSession]) {
         self.sessions = sessions
-            .filter { !Self.isOrphanedGrokStart($0) }
-        normalizeRestoredIdentities()
+        migrateRestoredHistory()
         // Restoring from disk has no live event stream; rebuild the temporary
         // attention surface from any session that is still waiting for input.
         commitSessionChanges(orderSessions: true, attentionRefresh: .always)
@@ -381,107 +375,21 @@ public final class AgentActivityService {
         return true
     }
 
-    private func canonicalizedIdentity(for incomingEvent: AgentEvent) -> AgentEvent {
-        let prefix = "\(incomingEvent.provider.rawValue):"
-        // After a prior cross-provider collision, rows are stored as provider:id.
-        // Later events still carrying the bare id must resolve to that row
-        // instead of creating a duplicate unprefixed session.
-        if let resolved = eventTargetingExistingCanonicalSession(
-            incomingEvent,
-            providerPrefix: prefix
-        ) {
-            return remappedParentIfNeeded(resolved, providerPrefix: prefix)
+    /// Prefixes session and parent IDs. The only remaining identity rule is a
+    /// collision guard if two providers somehow share one already-namespaced id.
+    private func namespacedIdentity(for incomingEvent: AgentEvent) -> AgentEvent {
+        var event = incomingEvent
+        event.sessionId = event.provider.namespacedSessionID(event.sessionId)
+        if let parentID = event.parentSessionId {
+            event.parentSessionId = event.provider.namespacedSessionID(parentID)
         }
 
         let collidingIndices = sessions.indices.filter {
-            sessions[$0].id == incomingEvent.sessionId
-                && sessions[$0].provider != incomingEvent.provider
+            sessions[$0].id == event.sessionId && sessions[$0].provider != event.provider
         }
-        guard !collidingIndices.isEmpty else {
-            return remappedParentIfNeeded(incomingEvent, providerPrefix: prefix)
-        }
-
-        renameCollidingSessions(at: collidingIndices, originalID: incomingEvent.sessionId)
-        return remappedParentIfNeeded(
-            eventCanonicalizedAfterCollision(incomingEvent, providerPrefix: prefix),
-            providerPrefix: prefix
-        )
-    }
-
-    private func eventTargetingExistingCanonicalSession(
-        _ event: AgentEvent,
-        providerPrefix: String
-    ) -> AgentEvent? {
-        if event.sessionId.hasPrefix(providerPrefix) {
-            // Prefer the exact canonical row when both it and a legacy bare
-            // duplicate were persisted by an older build. Redirecting this
-            // event to the bare row could leave canonical waiting state stuck.
-            if sessions.contains(where: {
-                $0.id == event.sessionId && $0.provider == event.provider
-            }) {
-                return event
-            }
-            // Reverse of the bare→prefixed path: a later provider-prefixed
-            // hook must update the existing unprefixed same-provider row.
-            let bareID = String(event.sessionId.dropFirst(providerPrefix.count))
-            guard !bareID.isEmpty,
-                  sessions.contains(where: {
-                      $0.id == bareID && $0.provider == event.provider
-                  })
-            else { return nil }
-            var resolved = event
-            resolved.sessionId = bareID
-            return resolved
-        }
-
-        let canonicalID = providerPrefix + event.sessionId
-        guard sessions.contains(where: {
-            $0.id == canonicalID && $0.provider == event.provider
-        }) else { return nil }
-
-        var resolved = event
-        resolved.sessionId = canonicalID
-        return resolved
-    }
-
-    private func remappedParentIfNeeded(
-        _ event: AgentEvent,
-        providerPrefix: String
-    ) -> AgentEvent {
-        guard let parentID = event.parentSessionId else { return event }
-        let resolvedParent = resolvedExistingSessionID(
-            parentID,
-            provider: event.provider,
-            providerPrefix: providerPrefix
-        )
-        guard resolvedParent != parentID else { return event }
-        var event = event
-        event.parentSessionId = resolvedParent
+        guard !collidingIndices.isEmpty else { return event }
+        renameCollidingSessions(at: collidingIndices, originalID: event.sessionId)
         return event
-    }
-
-    private func resolvedExistingSessionID(
-        _ sessionID: String,
-        provider: AgentProvider,
-        providerPrefix: String
-    ) -> String {
-        if sessions.contains(where: { $0.id == sessionID && $0.provider == provider }) {
-            return sessionID
-        }
-        if sessionID.hasPrefix(providerPrefix) {
-            let bareID = String(sessionID.dropFirst(providerPrefix.count))
-            if !bareID.isEmpty,
-               sessions.contains(where: { $0.id == bareID && $0.provider == provider })
-            {
-                return bareID
-            }
-        } else {
-            let prefixedID = providerPrefix + sessionID
-            if sessions.contains(where: { $0.id == prefixedID && $0.provider == provider }) {
-                return prefixedID
-            }
-        }
-        return sessionID
     }
 
     private func renameCollidingSessions(
@@ -490,13 +398,9 @@ public final class AgentActivityService {
     ) {
         for index in indices {
             let existingProvider = sessions[index].provider
-            let existingPrefix = "\(existingProvider.rawValue):"
-            let canonicalID = sessions[index].id.hasPrefix(existingPrefix)
-                ? sessions[index].id
-                : existingPrefix + sessions[index].id
+            let canonicalID = existingProvider.namespacedSessionID(sessions[index].id)
+            guard sessions[index].id != canonicalID else { continue }
             sessions[index].id = canonicalID
-            // Keep recentEvents (and attentionEvent(for:)) on the renamed id so
-            // waiting attention cannot surface a stale bare sessionId.
             for eventIndex in sessions[index].recentEvents.indices
                 where sessions[index].recentEvents[eventIndex].sessionId == originalID
             {
@@ -516,45 +420,14 @@ public final class AgentActivityService {
         }
     }
 
-    private func eventCanonicalizedAfterCollision(
-        _ event: AgentEvent,
-        providerPrefix: String
-    ) -> AgentEvent {
-        var event = event
-        if !event.sessionId.hasPrefix(providerPrefix) {
-            event.sessionId = providerPrefix + event.sessionId
-        }
-        if let parentID = event.parentSessionId,
-           sessions.contains(where: { $0.id == parentID && $0.provider != event.provider }),
-           !parentID.hasPrefix(providerPrefix)
-        {
-            event.parentSessionId = providerPrefix + parentID
-        }
-        return event
-    }
-
-    private func normalizeRestoredIdentities() {
-        let providerCounts = Dictionary(grouping: sessions, by: \.id)
-            .mapValues { Set($0.map(\.provider)).count }
-        let originalIDs = sessions.map(\.id)
-        for index in sessions.indices where providerCounts[originalIDs[index], default: 0] > 1 {
-            let prefix = "\(sessions[index].provider.rawValue):"
-            if !sessions[index].id.hasPrefix(prefix) {
-                sessions[index].id = prefix + sessions[index].id
-            }
-        }
+    /// One-shot history rewrite: drop orphaned Grok SessionStart rows, prefix
+    /// every session and parent, then keep the newest row per identity.
+    private func migrateRestoredHistory() {
+        sessions.removeAll(where: Self.isOrphanedGrokStart)
         for index in sessions.indices {
-            guard let parentID = sessions[index].parentSessionId,
-                  providerCounts[parentID, default: 0] > 1
-            else { continue }
-            let prefix = "\(sessions[index].provider.rawValue):"
-            if !parentID.hasPrefix(prefix) {
-                sessions[index].parentSessionId = prefix + parentID
-            }
+            namespaceSessionIdentity(&sessions[index])
         }
 
-        // Corrupt/legacy history may contain duplicate rows for the same
-        // provider identity. Keep the newest snapshot deterministically.
         var newestByIdentity: [String: AgentSession] = [:]
         for session in sessions {
             let key = session.provider.rawValue + "\0" + session.id
@@ -564,6 +437,28 @@ public final class AgentActivityService {
             newestByIdentity[key] = session
         }
         sessions = Array(newestByIdentity.values)
+    }
+
+    private func namespaceSessionIdentity(_ session: inout AgentSession) {
+        let originalID = session.id
+        let canonicalID = session.provider.namespacedSessionID(originalID)
+        if session.id != canonicalID {
+            session.id = canonicalID
+        }
+        if let parentID = session.parentSessionId {
+            session.parentSessionId = session.provider.namespacedSessionID(parentID)
+        }
+        for eventIndex in session.recentEvents.indices {
+            var event = session.recentEvents[eventIndex]
+            event.sessionId = session.provider.namespacedSessionID(event.sessionId)
+            if let parentID = event.parentSessionId {
+                event.parentSessionId = session.provider.namespacedSessionID(parentID)
+            }
+            session.recentEvents[eventIndex] = event
+        }
+        if attentionEvent?.sessionId == originalID, attentionEvent?.provider == session.provider {
+            attentionEvent?.sessionId = canonicalID
+        }
     }
 
     private func rebuildIndex() {
@@ -623,9 +518,7 @@ public final class AgentActivityService {
             guard event.type == .started,
                   let hookEvent = event.metadata?["hookEvent"]
             else { return false }
-            return hookEvent
-                .replacingOccurrences(of: "_", with: "")
-                .lowercased() == "sessionstart"
+            return HookEventName(rawEventName: hookEvent) == .sessionStart
         }
     }
 }

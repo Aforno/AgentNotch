@@ -107,6 +107,26 @@ final class AgentHookEventMapperTests: XCTestCase {
         )
     }
 
+    func testCamelCaseTranscriptTurnContextIsAccepted() throws {
+        let transcript = try temporaryTranscript("""
+        {"type":"turn_context","payload":{"turnId":"target","approvalsReviewer":"auto_review"}}
+        """)
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let payload = try decode("""
+        {
+          "session_id": "thr_auto_camel",
+          "turn_id": "target",
+          "transcript_path": "\(transcript.path)",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PermissionRequest"
+        }
+        """)
+
+        XCTAssertFalse(
+            CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
+        )
+    }
+
     func testExplicitUserReviewerOverridesAutomaticTranscriptContext() throws {
         let transcript = try temporaryTranscript("""
         {"type":"turn_context","payload":{"turn_id":"target","approvals_reviewer":"auto_review"}}

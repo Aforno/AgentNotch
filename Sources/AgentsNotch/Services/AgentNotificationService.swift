@@ -88,8 +88,9 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     func refreshAuthorizationStatus() {
         guard let center else { return }
         center.getNotificationSettings { [weak self] settings in
+            let status = settings.authorizationStatus
             Task { @MainActor in
-                self?.authorizationStatus = settings.authorizationStatus
+                self?.authorizationStatus = status
             }
         }
     }
@@ -112,8 +113,8 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
             if let sessionID {
                 self?.onOpenSession?(sessionID)
             }
-            completionHandler()
         }
+        completionHandler()
     }
 
     private func registerCategories() {

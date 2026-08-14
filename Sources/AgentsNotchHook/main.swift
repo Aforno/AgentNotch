@@ -15,6 +15,9 @@ let explicitProvider: AgentProvider? = {
     }
     return nil
 }()
+// Legacy Codex hook commands omit --provider and must keep working. New
+// installs always write `--provider '<name>'`. Do not treat missing as a
+// general default for a six-provider relay.
 let configuredProvider = explicitProvider ?? .codex
 let grokHookEvent = ProcessInfo.processInfo.environment["GROK_HOOK_EVENT"]
 // Grok can execute Claude settings hooks and Cursor hooks.json

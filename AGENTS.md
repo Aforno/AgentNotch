@@ -26,7 +26,7 @@ details and provider lifecycle mappings may still change.
 ## Requirements
 
 - Apple Silicon Mac, macOS 14 or later
-- Swift 6 toolchain, language mode 5
+- Swift 6 toolchain, language mode 6
 - `rg` for `./script/check_repository.sh`
 
 ## Commands
@@ -64,7 +64,7 @@ swift test --filter AgentHookEventMapperTests
 | Path | Role |
 | --- | --- |
 | `Sources/AgentsNotchCore` | Provider-neutral models, activity reducer, hook mapping, Unix socket |
-| `Sources/AgentsNotch` | SwiftUI/AppKit app, settings, persistence, adapters, setup |
+| `Sources/AgentsNotch` | SwiftUI/AppKit app, settings, persistence, integrations, setup |
 | `Sources/AgentsNotchHook` | Short-lived observer process invoked by provider hooks |
 | `Tests/AgentsNotchTests` | Unit tests for Core and app-adjacent behavior |
 | `script/` | Build, stage, package, and repository hygiene |
@@ -93,14 +93,13 @@ UnixSocketServer ──► AppRuntime ──► AgentActivityService
 
 - `AgentActivityService` is the `@MainActor` reducer. All session list,
   attention queue, hierarchy, and notch snapshot logic lives there.
-- `AppRuntime` owns the socket server, persistence debounce, unknown-session
-  grace period (90s), origin activation, and provider integration managers.
-- `AgentProviderAdapter` (`startMonitoring`, `stopMonitoring`,
-  `discoverSessions`) is the integration surface. Built-in adapters are
-  `HookProviderAdapter`: push-only, so `discoverSessions` returns `[]`.
-- `ProviderIntegrationManager` installs the shared relay at
-  `~/.agentsnotch/bin/agentsnotch-hook` and provider-specific observer entries.
-  One manager type covers every built-in provider.
+- `AppRuntime` owns the socket server, unknown-session grace period (90s),
+  origin activation, and provider integration managers. Restore and
+  persistence debounce live in `SessionRestorePipeline` and
+  `SessionPersistScheduler`.
+- `ProviderIntegrationManager` is the observable integration status object.
+  Disk install/uninstall lives in `ProviderHookStore`. Hooks are push-only;
+  there is no session-discovery adapter.
 - UI never talks to a provider API. Every integration ends as the same
   `AgentEvent` values.
 
@@ -113,9 +112,9 @@ On launch, restored runners are reconciled rather than force-completed:
 - other actives enter `.unknown` ("Reconnecting") until a live hook arrives
   or the grace period expires
 
-Hook adapters stay push-only: `discoverSessions` returns `[]` and must not
-invent live sessions from disk. Launch-time restorers and title/hierarchy
-resolvers may read provider-owned files as cold-start evidence only.
+Hooks stay push-only. Launch-time restorers and title/hierarchy resolvers
+may read provider-owned files as cold-start evidence only. They must not
+invent live sessions from disk.
 
 ## Local protocol
 
@@ -246,7 +245,7 @@ and, when the layout changed, screenshots in the pull request.
 
 ## Code style
 
-- Swift 6 tools, `.swiftLanguageMode(.v5)`, four-space indent
+- Swift 6 tools, `.swiftLanguageMode(.v6)`, four-space indent
 - No trailing whitespace (`./script/check_repository.sh` fails on it)
 - `Sendable` value types; `@MainActor` for app and activity state
 - Prefer small `enum` namespaces (`AgentHookEventMapper`,
@@ -261,7 +260,8 @@ and, when the layout changed, screenshots in the pull request.
    app's entries and stays idempotent.
 3. Map native lifecycle events in `AgentHookEventMapper` (or convert to
    `AgentHookPayload` first, as OpenCode does).
-4. Wire the provider into `AppRuntime.integratedProviders`.
+4. Wire the provider into `AppRuntime.integratedProviders`. Do not add a
+   scanning adapter that invents live sessions from disk.
 5. Add a provider icon under `Sources/AgentsNotch/Resources/ProviderIcons.xcassets`
    and record licensing in `THIRD_PARTY_NOTICES.md` plus
    `Resources/ProviderIcons/ATTRIBUTION.md`.
