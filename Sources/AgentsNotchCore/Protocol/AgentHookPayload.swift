@@ -17,6 +17,8 @@ public enum AgentHookInput {
     }
 }
 
+/// Compatibility decoder for vendor hook JSON. Protocol v1 on the socket is
+/// `AgentEvent` only — do not add another field alias without a mapper test.
 public struct AgentHookPayload: Decodable, Sendable {
     public var sessionId: String
     public var transcriptPath: String?
@@ -198,12 +200,5 @@ private extension KeyedDecodingContainer {
             }
         }
         return nil
-    }
-}
-
-private extension String {
-    var nonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

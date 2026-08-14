@@ -6,8 +6,9 @@ struct GrokRestoreEvidence: Sendable {
     let workflowEvents: [AgentEvent]
 }
 
-/// Reads provider-owned Grok state without turning startup restoration into
-/// live activity. Applying the evidence remains AppRuntime's responsibility.
+/// Reads provider-owned Grok state on launch for hierarchy and workflow
+/// evidence. Does not invent live sessions; applying the evidence remains
+/// AppRuntime's responsibility.
 enum GrokSessionRestorer {
     static func discover(
         in sessions: [AgentSession],

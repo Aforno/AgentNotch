@@ -316,6 +316,28 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(secondRuntime.activity.listSessions.map(\.id), ["codex:newer", "grok:parent"])
         secondRuntime.stop()
     }
+
+    func testOriginMetadataRoundTripsThroughSessionPersistenceModel() throws {
+        let origin = AgentOrigin(
+            bundleIdentifier: "com.apple.Terminal",
+            processIdentifier: 42,
+            terminalProgram: "Apple_Terminal",
+            terminalSessionIdentifier: "session-1",
+            tty: "/dev/ttys001"
+        )
+        let session = AgentSession(event: AgentEvent(
+            type: .waiting,
+            sessionId: "origin",
+            provider: .codex,
+            state: .waitingForUser,
+            origin: origin
+        ))
+
+        let data = try JSONEncoder.agentsNotch.encode(session)
+        let decoded = try JSONDecoder.agentsNotch.decode(AgentSession.self, from: data)
+
+        XCTAssertEqual(decoded.origin, origin)
+    }
 }
 
 private enum PersistenceTestError: LocalizedError {

@@ -1,8 +1,8 @@
 import Foundation
 
 /// Codex keeps a generated conversation title in `session_index.jsonl`.
-/// Prompt hooks only carry the latest user message, so the index is the
-/// source of the title shown in the notch.
+/// Prompt hooks only carry the latest user message, so this bounded index
+/// read is the allowed disk walk for titles. It does not invent sessions.
 public enum CodexSessionTitleResolver {
     public static func title(
         forNativeSessionId sessionId: String,

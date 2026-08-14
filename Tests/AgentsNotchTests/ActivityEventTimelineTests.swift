@@ -32,6 +32,25 @@ final class ActivityEventTimelineTests: XCTestCase {
         XCTAssertEqual(summaries[1].title, "Needs approval")
     }
 
+    func testWhitespaceOnlyToolMetadataIsIgnored() {
+        let events = [
+            AgentEvent(
+                type: .toolStarted,
+                sessionId: "codex:test",
+                provider: .codex,
+                activity: "   ",
+                timestamp: Date(timeIntervalSince1970: 100),
+                metadata: ["tool": "   "]
+            ),
+        ]
+
+        let summaries = ActivityEventSummary.make(from: events)
+
+        XCTAssertEqual(summaries.count, 1)
+        XCTAssertEqual(summaries[0].kind, .event)
+        XCTAssertEqual(summaries[0].title, AgentState.executingTool.displayName)
+    }
+
     private func event(
         _ type: AgentEventType,
         at timestamp: Date,

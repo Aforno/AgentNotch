@@ -1,6 +1,8 @@
 import AgentsNotchCore
 import Foundation
 
+/// Launch-time Codex title evidence from `session_index.jsonl`. Applies titles
+/// to already-restored sessions; does not invent live sessions from disk.
 enum CodexSessionRestorer {
     static func titleEvents(
         in sessions: [AgentSession],

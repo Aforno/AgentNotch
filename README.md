@@ -82,7 +82,8 @@ cannot block or control permission, elicitation, AskUserQuestion, or
 ExitPlanMode behavior. The relay accepts the snake_case
 payload used by Codex, Claude Code, Gemini CLI, and Cursor as well as Grok's
 camelCase payload. The OpenCode bridge converts plugin events to that same
-observer payload. It deliberately does not parse provider transcripts. Tools
+observer payload. The only transcript read is a fail-open, size-capped Codex
+approval bridge; do not add another parser. Tools
 that do not pass through a provider's local hook path cannot currently be
 shown as fine-grained activity.
 

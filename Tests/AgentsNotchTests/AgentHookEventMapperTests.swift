@@ -1,7 +1,7 @@
 import AgentsNotchCore
 import XCTest
 
-final class CodexHookEventMapperTests: XCTestCase {
+final class AgentHookEventMapperTests: XCTestCase {
     func testHookInputRejectsPayloadsLargerThanOneMiB() {
         let oversized = Data(repeating: 0x20, count: AgentHookInput.maximumBytes + 1)
 
@@ -21,7 +21,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         """)
         let receipt = Date(timeIntervalSince1970: 2_000_000_000)
 
-        let event = try XCTUnwrap(CodexHookEventMapper.map(payload, now: receipt))
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex, now: receipt))
 
         XCTAssertEqual(
             event.timestamp,
@@ -55,7 +55,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         }
         """)
 
-        let event = try XCTUnwrap(CodexHookEventMapper.map(payload))
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
         XCTAssertEqual(event.type, .waiting)
         XCTAssertEqual(event.state, .waitingForUser)
         XCTAssertEqual(event.activity, "Needs command approval")
@@ -78,8 +78,9 @@ final class CodexHookEventMapperTests: XCTestCase {
 
         XCTAssertFalse(requiresUserInput)
         XCTAssertNil(
-            CodexHookEventMapper.map(
+            AgentHookEventMapper.map(
                 payload,
+                provider: .codex,
                 permissionRequestRequiresUserInput: requiresUserInput
             )
         )
@@ -144,7 +145,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertTrue(
             CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
         )
-        XCTAssertNotNil(CodexHookEventMapper.map(payload))
+        XCTAssertNotNil(AgentHookEventMapper.map(payload, provider: .codex))
     }
 
     func testMissingOrMalformedReviewerContextKeepsUserAttention() throws {
@@ -163,7 +164,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertTrue(
             CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload)
         )
-        XCTAssertNotNil(CodexHookEventMapper.map(payload))
+        XCTAssertNotNil(AgentHookEventMapper.map(payload, provider: .codex))
     }
 
     func testApplyPatchExtractsChangedFile() throws {
@@ -177,7 +178,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         }
         """)
 
-        let event = try XCTUnwrap(CodexHookEventMapper.map(payload))
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
         XCTAssertEqual(event.type, .fileChanged)
         XCTAssertEqual(event.state, .editing)
         XCTAssertEqual(event.file, "Sources/App.swift")
@@ -195,7 +196,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         }
         """)
 
-        let event = try XCTUnwrap(CodexHookEventMapper.map(payload))
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
         XCTAssertEqual(event.task, "Build the native notch surface")
         XCTAssertEqual(event.state, .thinking)
     }
@@ -569,7 +570,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         }
         """)
 
-        let event = try XCTUnwrap(CodexHookEventMapper.map(payload))
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
         let plan = try XCTUnwrap(event.plan)
         XCTAssertEqual(event.activity, "Updating plan")
         XCTAssertEqual(plan.explanation, "Keep the model provider-neutral.")
@@ -597,8 +598,8 @@ final class CodexHookEventMapperTests: XCTestCase {
         }
         """)
 
-        let startEvent = try XCTUnwrap(CodexHookEventMapper.map(started))
-        let completionEvent = try XCTUnwrap(CodexHookEventMapper.map(completed))
+        let startEvent = try XCTUnwrap(AgentHookEventMapper.map(started, provider: .codex))
+        let completionEvent = try XCTUnwrap(AgentHookEventMapper.map(completed, provider: .codex))
         XCTAssertEqual(startEvent.workflowUpdate?.title, "Ship structured execution")
         XCTAssertEqual(startEvent.workflowUpdate?.status, .running)
         XCTAssertEqual(completionEvent.workflowUpdate?.id, startEvent.workflowUpdate?.id)
@@ -616,7 +617,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         }
         """)
 
-        let event = try XCTUnwrap(CodexHookEventMapper.map(payload))
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
         XCTAssertEqual(event.sessionId, "codex:thr_parent:agent_child")
         XCTAssertEqual(event.parentSessionId, "codex:thr_parent")
         XCTAssertEqual(event.agentRole, "reviewer")
@@ -669,7 +670,7 @@ final class CodexHookEventMapperTests: XCTestCase {
         """)
 
         XCTAssertEqual(payload.error, "boom")
-        let event = try XCTUnwrap(CodexHookEventMapper.map(payload))
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
         XCTAssertEqual(event.activity, "Tool failed: boom")
     }
 
@@ -726,8 +727,78 @@ final class CodexHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.activity, "Editing App.swift")
     }
 
-    private func decode(_ json: String) throws -> CodexHookPayload {
-        try JSONDecoder().decode(CodexHookPayload.self, from: Data(json.utf8))
+    func testGeminiLifecycleAliasesMapToProviderNeutralEvents() throws {
+        let beforeAgent = try decode("""
+        {
+          "session_id": "gemini-1",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "BeforeAgent",
+          "prompt": "Add a Gemini integration"
+        }
+        """)
+        let promptEvent = try XCTUnwrap(AgentHookEventMapper.map(beforeAgent, provider: .geminiCLI))
+        XCTAssertEqual(promptEvent.type, .activity)
+        XCTAssertEqual(promptEvent.task, "Add a Gemini integration")
+        XCTAssertEqual(promptEvent.state, .thinking)
+        XCTAssertEqual(promptEvent.metadata?["hookEvent"], "UserPromptSubmit")
+
+        let beforeTool = try decode("""
+        {
+          "session_id": "gemini-1",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "BeforeTool",
+          "tool_name": "run_shell_command",
+          "tool_input": {"command": "swift test"}
+        }
+        """)
+        let toolEvent = try XCTUnwrap(AgentHookEventMapper.map(beforeTool, provider: .geminiCLI))
+        XCTAssertEqual(toolEvent.type, .toolStarted)
+        XCTAssertEqual(toolEvent.provider, .geminiCLI)
+
+        let notification = try decode("""
+        {
+          "session_id": "gemini-1",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "Notification",
+          "notification_type": "ToolPermission",
+          "message": "Approve run_shell_command"
+        }
+        """)
+        let waiting = try XCTUnwrap(AgentHookEventMapper.map(notification, provider: .geminiCLI))
+        XCTAssertEqual(waiting.type, .waiting)
+        XCTAssertEqual(waiting.activity, "Approve run_shell_command")
+
+        let afterAgent = try decode("""
+        {
+          "session_id": "gemini-1",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "AfterAgent",
+          "prompt_response": "Gemini integration complete"
+        }
+        """)
+        let completed = try XCTUnwrap(AgentHookEventMapper.map(afterAgent, provider: .geminiCLI))
+        XCTAssertEqual(completed.type, .completed)
+        XCTAssertEqual(completed.activity, "Gemini integration complete")
+    }
+
+    func testHookEventNameCanonicalizesAliasesAndClassifiesLifecycle() {
+        XCTAssertEqual(HookEventName(rawEventName: "BeforeAgent"), .userPromptSubmit)
+        XCTAssertEqual(HookEventName(rawEventName: "before_submit_prompt"), .userPromptSubmit)
+        XCTAssertEqual(HookEventName(rawEventName: "AfterAgent"), .stop)
+        XCTAssertEqual(HookEventName(rawEventName: "subagent_end"), .subagentStop)
+        XCTAssertEqual(HookEventName.metadataName(for: "BeforeAgent"), "UserPromptSubmit")
+        XCTAssertEqual(HookEventName.metadataName(for: "UserPromptSubmit"), "UserPromptSubmit")
+        XCTAssertEqual(HookEventName.metadataName(for: "user_prompt_submit"), "user_prompt_submit")
+        XCTAssertTrue(HookEventName.stop.isTerminal)
+        XCTAssertTrue(HookEventName.sessionEnd.isTerminal)
+        XCTAssertFalse(HookEventName.userPromptSubmit.isTerminal)
+        XCTAssertTrue(HookEventName.userPromptSubmit.resumesSession)
+        XCTAssertFalse(HookEventName.sessionStart.resumesSession)
+        XCTAssertNil(HookEventName(rawEventName: "UnknownVendorEvent"))
+    }
+
+    private func decode(_ json: String) throws -> AgentHookPayload {
+        try JSONDecoder().decode(AgentHookPayload.self, from: Data(json.utf8))
     }
 
     private func temporaryTranscript(_ contents: String) throws -> URL {

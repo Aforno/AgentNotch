@@ -8,8 +8,10 @@ documentation improvements, and new provider adapters are welcome.
 Requirements:
 
 - Apple Silicon Mac running macOS 14 or later
-- Swift 6
+- Swift 6 toolchain (package language mode is Swift 5)
 - Git
+
+Repository conventions live in `AGENTS.md`.
 
 Clone the repository and run the full local checks:
 

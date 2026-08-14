@@ -13,3 +13,4 @@ DerivedData/
 !.env.example
 .firecrawl/
 .grok/
+.codex/

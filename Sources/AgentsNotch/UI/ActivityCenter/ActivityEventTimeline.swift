@@ -33,7 +33,7 @@ struct ActivityEventSummary: Identifiable, Equatable {
                 summaries.append(ActivityEventSummary(
                     id: event.id,
                     kind: .event,
-                    title: event.activity ?? event.resolvedState.displayName,
+                    title: event.activity?.nonEmpty ?? event.resolvedState.displayName,
                     startedAt: event.timestamp,
                     endedAt: event.timestamp,
                     operationCount: 1,
@@ -177,8 +177,4 @@ struct ActivityEventTimeline: View {
         if seconds >= 60 { return "\(seconds / 60)m \(seconds % 60)s" }
         return "\(seconds)s"
     }
-}
-
-private extension String {
-    var nonEmpty: String? { isEmpty ? nil : self }
 }

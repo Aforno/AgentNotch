@@ -35,8 +35,11 @@ struct ActivityCenterView: View {
             HStack(spacing: 0) {
                 sidebar
                     .frame(minWidth: 270, idealWidth: 300, maxWidth: 340)
+                    // Arrow / return / delete need the column to take focus.
+                    // The default ring is a blue rectangle around the sidebar.
                     .focusable()
                     .focused($isSessionListFocused)
+                    .focusEffectDisabled()
 
                 Rectangle()
                     .fill(NotchWindowPalette.hairline)
