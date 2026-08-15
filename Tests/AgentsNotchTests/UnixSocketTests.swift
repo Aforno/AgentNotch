@@ -127,6 +127,9 @@ final class UnixSocketTests: XCTestCase {
         guard bytes.count <= MemoryLayout.size(ofValue: path.sun_path) else {
             throw AgentSocketError.pathTooLong
         }
+        let pathOffset = MemoryLayout<sockaddr_un>.offset(of: \.sun_path) ?? 2
+        let addressLength = socklen_t(pathOffset + socketURL.path.utf8.count + 1)
+        path.sun_len = UInt8(addressLength)
         withUnsafeMutablePointer(to: &path.sun_path) { pointer in
             pointer.withMemoryRebound(to: CChar.self, capacity: bytes.count) { destination in
                 for index in bytes.indices {
@@ -136,7 +139,7 @@ final class UnixSocketTests: XCTestCase {
         }
         let connected = withUnsafePointer(to: &path) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                Darwin.connect(fd, $0, addressLength)
             }
         }
         guard connected == 0 else { throw AgentSocketError.systemCall("connect", errno) }
@@ -145,12 +148,18 @@ final class UnixSocketTests: XCTestCase {
             var offset = 0
             while offset < bytes.count {
                 let written = Darwin.write(fd, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
-                if written < 0, errno == EPIPE { return }
+                // Server closes as soon as the connection exceeds the cap; Darwin
+                // may report that as EPIPE, ENOTCONN, or ECONNRESET.
+                if written < 0, isPeerClosed(errno) { return }
                 guard written > 0 else { throw AgentSocketError.systemCall("write", errno) }
                 offset += written
             }
         }
         _ = Darwin.shutdown(fd, SHUT_WR)
+    }
+
+    private func isPeerClosed(_ code: Int32) -> Bool {
+        code == EPIPE || code == ENOTCONN || code == ECONNRESET
     }
 }
 
