@@ -8,18 +8,18 @@ extension AgentActivityServiceTests {
         let completedAt = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .completed,
-            sessionId: "parent",
+            sessionId: "codex:parent",
             provider: .codex,
             state: .completed,
             timestamp: completedAt
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "late-child",
+            sessionId: "codex:late-child",
             provider: .codex,
             state: .running,
             timestamp: completedAt.addingTimeInterval(1),
-            parentSessionId: "parent"
+            parentSessionId: "codex:parent"
         ))
 
         let child = service.sessions.first { $0.id == "codex:late-child" }
@@ -33,25 +33,25 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "other",
+            sessionId: "claude-code:other",
             provider: .claudeCode,
             state: .running,
             timestamp: base.addingTimeInterval(3)
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "parent",
+            sessionId: "codex:parent",
             provider: .codex,
             state: .running,
             timestamp: base
         ))
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "child",
+            sessionId: "codex:child",
             provider: .codex,
             state: .waitingForUser,
             timestamp: base.addingTimeInterval(1),
-            parentSessionId: "parent",
+            parentSessionId: "codex:parent",
             agentRole: "reviewer"
         ))
 
@@ -66,19 +66,19 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "a",
+            sessionId: "codex:a",
             provider: .codex,
             state: .running,
             timestamp: base,
-            parentSessionId: "b"
+            parentSessionId: "codex:b"
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "b",
+            sessionId: "codex:b",
             provider: .codex,
             state: .running,
             timestamp: base.addingTimeInterval(1),
-            parentSessionId: "a"
+            parentSessionId: "codex:a"
         ))
 
         XCTAssertEqual(service.activeGroupCount, 1)

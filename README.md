@@ -2,8 +2,8 @@
 
 Agents Notch is a native macOS status surface for autonomous coding agents. It
 attaches to the physical MacBook notch, expands on hover or when an agent needs
-input, keeps attention states visible, and stays out of the Dock. Routine tool
-calls, file edits, and completions stay collapsed.
+input, keeps attention states visible, and stays out of the Dock and menu bar.
+Routine tool calls, file edits, and completions stay collapsed.
 
 > **Project status:** pre-1.0 public beta. The local protocol is versioned, but
 > UI details and provider lifecycle mappings may still evolve before 1.0.
@@ -44,7 +44,7 @@ and verifies that both its process and private event socket stay available. The
 Codex desktop Run action is wired to the same script.
 
 On first launch, the setup window can install and test each provider observer.
-Afterward, use the menu-bar item or press Command-1 to open Activity Center.
+Afterward, press Command-1 or use the notch chrome to open Activity Center.
 Hover the notch until it fully expands to see the last three updated sessions.
 
 In **debug builds only**, open **Settings → Debug → Enable debug simulator** to
@@ -108,8 +108,8 @@ which the app intentionally ignores because no agent task has begun.
 The notch remains quiet for routine activity and expands automatically only
 when an agent is waiting for a permission or answer. Multiple waiting sessions
 form an attention queue. Optional macOS notifications provide an **Open
-Session** action, while the menu-bar item remains available on displays without
-a hardware notch.
+Session** action. Displays without a hardware notch can use the virtual notch
+or Activity Center.
 
 Activity Center keeps local session history with provider and status filters,
 search, plans, workflows, parent/child agents, recent files, and event details.

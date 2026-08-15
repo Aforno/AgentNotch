@@ -6,6 +6,8 @@ struct ActivityCenterView: View {
 
     @State private var selection: String?
     @State private var searchText = ""
+    // Filter dimensions are the supported set. Do not add another filter
+    // axis here; Activity Center is a second surface on a notch product.
     @AppStorage("activityProviderFilter") private var providerFilter = "all"
     @AppStorage("activityStatusFilter") private var statusFilterRaw = ActivityStatusFilter.all.rawValue
     @AppStorage("activityProjectFilter") private var projectFilter = "all"

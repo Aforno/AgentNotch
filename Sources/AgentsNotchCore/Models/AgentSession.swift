@@ -70,47 +70,96 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         return advancesCurrentState
     }
 
-    /// Named session-time policy. The four clauses are independently discovered
+    /// Named session-time policy. The hold reasons are independently discovered
     /// bugs; keep them together and do not change behavior without the reducer
     /// tests that lock each case.
     private enum AdvanceDecision {
         case advance
-        case hold
+        case hold(HoldReason)
+
+        enum HoldReason {
+            case staleTimestamp
+            case terminalResurrection
+            case sameTimeAttention
+            case startRegression
+        }
 
         init(currentState: AgentState, updatedAt: Date, event: AgentEvent) {
             let isTerminal = currentState == .completed || currentState == .failed
             let eventIsTerminal = event.resolvedState == .completed || event.resolvedState == .failed
-            // A terminal session may begin another turn, but only an explicit lifecycle
-            // event proves that. Delayed tool, workflow, notification, or file events
-            // are history and must never resurrect a completed row.
-            let terminalTransitionIsAllowed = !isTerminal || eventIsTerminal || event.explicitlyResumesSession
-            // Symmetric reorder case: concurrent ingest can apply a later-timestamp
-            // activity/tool event before an earlier completed/failed. Terminal still
-            // wins over any active non-terminal so the session cannot stick running
-            // (or waiting) forever while the terminal only appears in history.
-            let isReorderedTerminalVsActive = !isTerminal && eventIsTerminal
-            let sameTimeKeepsAttention = event.timestamp == updatedAt
-                && currentState == .waitingForUser
-                && !eventIsTerminal
-                && !event.explicitlyResumesSession
-            // Delayed SessionStart is often stamped with Date() when the hook
-            // omits a timestamp. Do not rewind an already-progressed active
-            // session back to .starting or clear waiting attention.
-            let startMustNotRegressProgressedState = event.type == .started
+            if Self.startRegression(currentState: currentState, event: event, eventIsTerminal: eventIsTerminal) {
+                self = .hold(.startRegression)
+                return
+            }
+            if Self.sameTimeAttention(currentState: currentState, updatedAt: updatedAt, event: event, eventIsTerminal: eventIsTerminal) {
+                self = .hold(.sameTimeAttention)
+                return
+            }
+            if Self.terminalResurrection(
+                isTerminal: isTerminal,
+                eventIsTerminal: eventIsTerminal,
+                event: event
+            ) {
+                self = .hold(.terminalResurrection)
+                return
+            }
+            if event.timestamp >= updatedAt || Self.reorderedTerminal(isTerminal: isTerminal, eventIsTerminal: eventIsTerminal) {
+                self = .advance
+                return
+            }
+            self = .hold(.staleTimestamp)
+        }
+
+        var advancesCurrentState: Bool {
+            if case .advance = self { return true }
+            return false
+        }
+
+        /// Delayed SessionStart is often stamped with Date() when the hook
+        /// omits a timestamp. Do not rewind an already-progressed active
+        /// session back to .starting or clear waiting attention.
+        private static func startRegression(
+            currentState: AgentState,
+            event: AgentEvent,
+            eventIsTerminal: Bool
+        ) -> Bool {
+            event.type == .started
                 && !eventIsTerminal
                 && (currentState == .thinking
                     || currentState == .running
                     || currentState == .executingTool
                     || currentState == .editing
                     || currentState == .waitingForUser)
-            let shouldAdvance = (event.timestamp >= updatedAt || isReorderedTerminalVsActive)
-                && terminalTransitionIsAllowed
-                && !sameTimeKeepsAttention
-                && !startMustNotRegressProgressedState
-            self = shouldAdvance ? .advance : .hold
         }
 
-        var advancesCurrentState: Bool { self == .advance }
+        private static func sameTimeAttention(
+            currentState: AgentState,
+            updatedAt: Date,
+            event: AgentEvent,
+            eventIsTerminal: Bool
+        ) -> Bool {
+            event.timestamp == updatedAt
+                && currentState == .waitingForUser
+                && !eventIsTerminal
+                && !event.explicitlyResumesSession
+        }
+
+        /// A terminal session may begin another turn, but only an explicit
+        /// lifecycle event proves that. Delayed tool, workflow, notification,
+        /// or file events are history and must never resurrect a completed row.
+        private static func terminalResurrection(
+            isTerminal: Bool,
+            eventIsTerminal: Bool,
+            event: AgentEvent
+        ) -> Bool {
+            isTerminal && !eventIsTerminal && !event.explicitlyResumesSession
+        }
+
+        /// Concurrent ingest can apply a later-timestamp activity/tool event
+        /// before an earlier completed/failed. Terminal still wins.
+        private static func reorderedTerminal(isTerminal: Bool, eventIsTerminal: Bool) -> Bool {
+            !isTerminal && eventIsTerminal
+        }
     }
 
     private mutating func applyAdvancingEvent(_ event: AgentEvent) {

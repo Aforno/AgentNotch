@@ -117,7 +117,7 @@ final class SessionPersistenceTests: XCTestCase {
         }
         try UnixSocketClient.send(AgentEvent(
             type: .activity,
-            sessionId: "startup-event",
+            sessionId: "codex:startup-event",
             provider: .codex,
             task: "Arrived during restore",
             state: .running
@@ -127,7 +127,7 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(runtime.activity.sessions.map(\.id), ["codex:startup-event"])
         runtime.activity.ingest(AgentEvent(
             type: .completed,
-            sessionId: "startup-event",
+            sessionId: "codex:startup-event",
             provider: .codex,
             state: .completed
         ))

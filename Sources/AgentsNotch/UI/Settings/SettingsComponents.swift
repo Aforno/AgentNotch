@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ApplicationSettingsSection: View {
@@ -57,6 +58,15 @@ struct ApplicationSettingsSection: View {
                     SettingsUpdateControl(updates: updates)
                 }
             }
+            SettingsControlRow(
+                title: "Quit",
+                detail: "Stop the notch and stop listening for local agent events."
+            ) {
+                Button("Quit Agents Notch") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .buttonStyle(NotchPillButtonStyle())
+            }
         }
     }
 }
@@ -98,7 +108,7 @@ struct PrivacySettingsSection: View {
         SettingsSection(title: "Privacy") {
             SettingsToggleRow(
                 title: "Hide activity details",
-                detail: "Show only provider, project, and state in the notch, menu bar, and notifications.",
+                detail: "Show only provider, project, and state in the notch and notifications.",
                 isOn: privacyModeEnabled
             )
         }

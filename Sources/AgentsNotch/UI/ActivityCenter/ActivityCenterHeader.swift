@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ActivityCenterHeader: View {
@@ -30,6 +31,10 @@ struct ActivityCenterHeader: View {
                 Divider()
                 Button("Clear Completed History", role: .destructive, action: requestClearHistory)
                     .disabled(!canClearHistory)
+                Divider()
+                Button("Quit Agents Notch") {
+                    NSApplication.shared.terminate(nil)
+                }
             } label: {
                 NotchIconControlLabel(systemName: "ellipsis").contentShape(Rectangle())
             }

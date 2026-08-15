@@ -9,7 +9,7 @@ final class DebugEventSimulatorTests: XCTestCase {
         let activity = AgentActivityService()
         activity.ingest(AgentEvent(
             type: .activity,
-            sessionId: "real-session",
+            sessionId: "codex:real-session",
             provider: .codex,
             state: .running
         ))

@@ -8,15 +8,25 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Removed the menu-bar extra. Open Activity Center from the notch, Command-1,
+  or the global activity shortcut, and quit from Settings or Activity Center.
+- Hook install is split by config shape (grouped, Cursor, OpenCode). Handler
+  identity is one `{none, legacy, current}` matcher, and timeouts are named
+  seconds or milliseconds (`IntegratedHookProvider` requires a unit per
+  provider).
+- Mapper stays a `HookEventName` switch. Skip, tool copy, and plan/goal
+  snapshots live in `ProviderEventPolicy`. The hook process decodes, enriches,
+  maps, and exits; Grok/Codex disk walks sit behind `ProviderHookEnricher`.
+- Live events keep the session ID the mapper already namespaced. Restore still
+  prefixes leftover bare history IDs, then persists. Ingest rebuilds
+  `SessionIndex` once.
+- `AGENTS.md` is the single constitution. `Agents.md` is not a second copy.
 - Repository conventions now describe the allowed disk walks: hooks stay
   push-only, while titles, hierarchy, and cold-start evidence may read
   provider-owned files. The Codex approval bridge is documented as a
   fail-open 4 MiB transcript-tail read, not a general parser.
 - Dropped the unused `AgentProviderAdapter` / `HookProviderAdapter` layer.
   `AppRuntime` now talks to `ProviderIntegrationManager` directly.
-- Restored session history is rewritten to always-prefixed
-  `provider:nativeId` identities on load, then persisted. Live ingest no
-  longer remaps bare IDs.
 - The package now uses Swift 6 language mode on every target.
 
 ### Fixed

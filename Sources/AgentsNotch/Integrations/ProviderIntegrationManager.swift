@@ -83,9 +83,7 @@ final class ProviderIntegrationManager {
             hasReceivedEvent = true
         }
         lastError = nil
-        let isInstalled = store.fileSystem.withLock {
-            store.looksInstalled()
-        }
+        let isInstalled = store.looksInstalled()
         guard isInstalled
         else {
             // Hooks/relay gone (manual removal or uninstall). Drop sticky

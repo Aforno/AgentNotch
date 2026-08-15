@@ -365,14 +365,14 @@ final class AgentActivityServiceTests: XCTestCase {
         let timestamp = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "attention",
+            sessionId: "codex:attention",
             provider: .codex,
             state: .waitingForUser,
             timestamp: timestamp
         ))
         service.ingest(AgentEvent(
             type: .toolCompleted,
-            sessionId: "attention",
+            sessionId: "codex:attention",
             provider: .codex,
             state: .running,
             timestamp: timestamp
@@ -388,14 +388,14 @@ final class AgentActivityServiceTests: XCTestCase {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .toolStarted,
-            sessionId: "S",
+            sessionId: "codex:S",
             provider: .codex,
             state: .executingTool,
             timestamp: base
         ))
         service.ingest(AgentEvent(
             type: .started,
-            sessionId: "S",
+            sessionId: "codex:S",
             provider: .codex,
             activity: "Session started",
             state: .starting,
@@ -412,7 +412,7 @@ final class AgentActivityServiceTests: XCTestCase {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "S",
+            sessionId: "codex:S",
             provider: .codex,
             activity: "Needs approval",
             state: .waitingForUser,
@@ -420,7 +420,7 @@ final class AgentActivityServiceTests: XCTestCase {
         ))
         service.ingest(AgentEvent(
             type: .started,
-            sessionId: "S",
+            sessionId: "codex:S",
             provider: .codex,
             activity: "Session started",
             state: .starting,
