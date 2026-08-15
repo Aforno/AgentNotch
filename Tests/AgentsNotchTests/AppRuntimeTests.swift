@@ -88,7 +88,7 @@ final class AppRuntimeTests: XCTestCase {
         for _ in 0..<30 where runtime.activity.sessions.isEmpty {
             try await Task.sleep(for: .milliseconds(20))
         }
-        XCTAssertTrue(runtime.activity.sessions.contains { $0.id == "codex:self-test:codex:fixture" })
+        XCTAssertTrue(runtime.activity.sessions.contains { $0.id == "self-test:codex:fixture" })
         XCTAssertNil(runtime.lastEventReceivedAt[.codex])
         XCTAssertFalse(
             codexIntegration.hasReceivedEvent,

@@ -132,7 +132,7 @@ extension AgentActivityServiceTests {
 
         service.ingest(AgentEvent(
             type: .toolStarted,
-            sessionId: "still-live",
+            sessionId: "claude-code:still-live",
             provider: .claudeCode,
             activity: "Running tests",
             state: .executingTool,
@@ -177,13 +177,13 @@ extension AgentActivityServiceTests {
         let service = AgentActivityService()
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "shared-native-id",
+            sessionId: "codex:shared-native-id",
             provider: .codex,
             state: .running
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "shared-native-id",
+            sessionId: "grok:shared-native-id",
             provider: .grok,
             state: .running
         ))
@@ -232,22 +232,22 @@ extension AgentActivityServiceTests {
         let service = AgentActivityService()
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "shared",
+            sessionId: "codex:shared",
             provider: .codex,
             state: .running
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "shared",
+            sessionId: "grok:shared",
             provider: .grok,
             state: .running
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "child",
+            sessionId: "grok:child",
             provider: .grok,
             state: .running,
-            parentSessionId: "shared"
+            parentSessionId: "grok:shared"
         ))
 
         XCTAssertEqual(service.sessions.first { $0.id == "grok:child" }?.parentSessionId, "grok:shared")
@@ -264,13 +264,14 @@ extension AgentActivityServiceTests {
 
     @MainActor
     func testPrefixedSameProviderEventMergesIntoExistingBareSession() {
-        let service = AgentActivityService()
-        service.ingest(AgentEvent(
-            type: .activity,
-            sessionId: "abc",
-            provider: .codex,
-            state: .running
-        ))
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: "abc",
+                provider: .codex,
+                state: .running
+            )),
+        ])
         service.ingest(AgentEvent(
             type: .fileChanged,
             sessionId: "codex:abc",

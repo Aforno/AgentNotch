@@ -94,18 +94,13 @@ struct AgentsNotchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            AgentMenuBarView(runtime: appDelegate.runtime)
-        } label: {
-            MenuBarNotchIcon(
-                activeCount: appDelegate.runtime.activity.notchSnapshot.activeSessions.count,
-                attentionCount: appDelegate.runtime.activity.notchSnapshot.attentionCount
-            )
+        // Host for app commands only. The visible Settings window is
+        // SettingsWindowController so the title bar stays the same chrome
+        // as Activity Center.
+        Settings {
+            EmptyView()
         }
         .commands {
-            // Settings is a dedicated NSWindowController (same chrome as Activity
-            // Center) rather than a SwiftUI Settings scene, so minimize/zoom/resize
-            // traffic lights stay enabled and the title bar stays pure black.
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {
                     appDelegate.runtime.openSettings()

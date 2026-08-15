@@ -7,14 +7,14 @@ extension AgentActivityServiceTests {
         let service = AgentActivityService()
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "running",
+            sessionId: "codex:running",
             provider: .codex,
             activity: "Running tests",
             state: .running
         ))
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "waiting",
+            sessionId: "claude-code:waiting",
             provider: .claudeCode,
             activity: "Waiting for input",
             state: .waitingForUser
@@ -30,7 +30,7 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "older",
+            sessionId: "codex:older",
             provider: .codex,
             state: .waitingForUser,
             timestamp: base
@@ -44,7 +44,7 @@ extension AgentActivityServiceTests {
         ))
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "newer",
+            sessionId: "claude-code:newer",
             provider: .claudeCode,
             state: .waitingForUser,
             timestamp: base.addingTimeInterval(2)
@@ -84,7 +84,7 @@ extension AgentActivityServiceTests {
         let service = AgentActivityService()
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "permission",
+            sessionId: "claude-code:permission",
             provider: .claudeCode,
             activity: "Needs command approval",
             state: .waitingForUser
@@ -102,7 +102,7 @@ extension AgentActivityServiceTests {
 
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "permission",
+            sessionId: "claude-code:permission",
             provider: .claudeCode,
             state: .thinking
         ))
@@ -115,7 +115,7 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "first",
+            sessionId: "claude-code:first",
             provider: .claudeCode,
             activity: "Needs command approval",
             state: .waitingForUser,
@@ -123,7 +123,7 @@ extension AgentActivityServiceTests {
         ))
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "second",
+            sessionId: "grok:second",
             provider: .grok,
             activity: "Waiting for input",
             state: .waitingForUser,
@@ -134,7 +134,7 @@ extension AgentActivityServiceTests {
 
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "second",
+            sessionId: "grok:second",
             provider: .grok,
             activity: "Thinking",
             state: .thinking,
@@ -178,7 +178,7 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "keep",
+            sessionId: "codex:keep",
             provider: .codex,
             activity: "Waiting for input",
             state: .waitingForUser,
@@ -186,7 +186,7 @@ extension AgentActivityServiceTests {
         ))
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "drop",
+            sessionId: "claude-code:drop",
             provider: .claudeCode,
             activity: "Needs approval",
             state: .waitingForUser,
@@ -203,22 +203,22 @@ extension AgentActivityServiceTests {
         let service = AgentActivityService()
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "real",
+            sessionId: "codex:real",
             provider: .codex,
             state: .running
         ))
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "debug-plan",
+            sessionId: "codex:debug-plan",
             provider: .codex,
             state: .waitingForUser
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "debug-child",
+            sessionId: "codex:debug-child",
             provider: .codex,
             state: .running,
-            parentSessionId: "debug-plan"
+            parentSessionId: "codex:debug-plan"
         ))
 
         var notifications = 0
@@ -236,7 +236,7 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "workflow",
+            sessionId: "grok:workflow",
             provider: .grok,
             task: "Audit and fix",
             state: .running,
@@ -245,11 +245,11 @@ extension AgentActivityServiceTests {
         for index in 0..<4 {
             service.ingest(AgentEvent(
                 type: .activity,
-                sessionId: "worker-\(index)",
+                sessionId: "grok:worker-\(index)",
                 provider: .grok,
                 state: .running,
                 timestamp: base.addingTimeInterval(TimeInterval(index + 1)),
-                parentSessionId: "workflow",
+                parentSessionId: "grok:workflow",
                 agentRole: "audit-\(index)"
             ))
         }
@@ -266,7 +266,7 @@ extension AgentActivityServiceTests {
         for index in 0..<5 {
             service.ingest(AgentEvent(
                 type: .completed,
-                sessionId: "done-\(index)",
+                sessionId: "codex:done-\(index)",
                 provider: .codex,
                 state: .completed,
                 timestamp: base.addingTimeInterval(TimeInterval(index))
@@ -274,7 +274,7 @@ extension AgentActivityServiceTests {
         }
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "active",
+            sessionId: "codex:active",
             provider: .codex,
             state: .running,
             timestamp: base.addingTimeInterval(10)
@@ -291,7 +291,7 @@ extension AgentActivityServiceTests {
         for index in 0..<4 {
             service.ingest(AgentEvent(
                 type: .activity,
-                sessionId: "active-\(index)",
+                sessionId: "codex:active-\(index)",
                 provider: .codex,
                 state: .running,
                 timestamp: base.addingTimeInterval(TimeInterval(index))
@@ -299,7 +299,7 @@ extension AgentActivityServiceTests {
         }
         service.ingest(AgentEvent(
             type: .completed,
-            sessionId: "done",
+            sessionId: "claude-code:done",
             provider: .claudeCode,
             state: .completed,
             timestamp: base.addingTimeInterval(20)
@@ -314,23 +314,23 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "waiting-parent",
+            sessionId: "codex:waiting-parent",
             provider: .codex,
             state: .waitingForUser,
             timestamp: base
         ))
         service.ingest(AgentEvent(
             type: .activity,
-            sessionId: "waiting-child",
+            sessionId: "codex:waiting-child",
             provider: .codex,
             state: .running,
             timestamp: base,
-            parentSessionId: "waiting-parent"
+            parentSessionId: "codex:waiting-parent"
         ))
         for index in 0..<4 {
             service.ingest(AgentEvent(
                 type: .completed,
-                sessionId: "newer-\(index)",
+                sessionId: "claude-code:newer-\(index)",
                 provider: .claudeCode,
                 state: .completed,
                 timestamp: base.addingTimeInterval(TimeInterval(index + 1))
@@ -350,7 +350,7 @@ extension AgentActivityServiceTests {
         for index in 0..<4 {
             service.ingest(AgentEvent(
                 type: .completed,
-                sessionId: "done-\(index)",
+                sessionId: "codex:done-\(index)",
                 provider: .codex,
                 state: .completed,
                 timestamp: base.addingTimeInterval(TimeInterval(index))
@@ -360,7 +360,7 @@ extension AgentActivityServiceTests {
 
         service.ingest(AgentEvent(
             type: .completed,
-            sessionId: "done-0",
+            sessionId: "codex:done-0",
             provider: .codex,
             activity: "Delayed terminal detail",
             state: .completed,
@@ -377,7 +377,7 @@ extension AgentActivityServiceTests {
         let base = Date(timeIntervalSince1970: 100)
         service.ingest(AgentEvent(
             type: .completed,
-            sessionId: "memory",
+            sessionId: "codex:memory",
             provider: .codex,
             task: "## Memory Writing Agent: Phase 2 (Consolidation)",
             activity: "Consolidation complete.",
@@ -386,7 +386,7 @@ extension AgentActivityServiceTests {
         ))
         service.ingest(AgentEvent(
             type: .completed,
-            sessionId: "real",
+            sessionId: "codex:real",
             provider: .codex,
             task: "Review the changes made",
             activity: "Task completed",

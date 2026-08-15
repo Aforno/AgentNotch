@@ -39,6 +39,7 @@ public final class AgentActivityService {
     public private(set) var historyRevision: UInt64
     public var onSessionsChanged: (([AgentSession]) -> Void)?
     private var index: SessionIndex
+    private var sessionsByID: [String: Int]
 
     public init(sessions: [AgentSession] = []) {
         self.sessions = sessions
@@ -46,9 +47,10 @@ public final class AgentActivityService {
         notchSnapshot = .empty
         historyRevision = 0
         index = .empty
+        sessionsByID = [:]
         migrateRestoredHistory()
         self.sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
+        rebuildLookups()
         // Match replaceSessions: seed the temporary attention surface when the
         // caller restores waiting sessions through the initializer.
         attentionEvent = latestWaitingAttentionEvent()
@@ -127,25 +129,20 @@ public final class AgentActivityService {
             }
         }
 
-        event = namespacedIdentity(for: event)
-
         let advancesCurrentState: Bool
-        if let index = sessions.firstIndex(where: { $0.id == event.sessionId }) {
-            advancesCurrentState = sessions[index].apply(event)
+        if let existingIndex = sessionsByID[event.sessionId] {
+            advancesCurrentState = sessions[existingIndex].apply(event)
         } else {
             sessions.append(AgentSession(event: event))
+            sessionsByID[event.sessionId] = sessions.count - 1
             advancesCurrentState = true
         }
 
-        // Build the session graph after ordering so ordinary activity only
-        // pays for one complete projection. A second projection is needed
-        // only when parent/descendant reconciliation mutates another row.
-        sessions.sort(by: Self.orderSessions)
-        rebuildIndex()
-
         // A parent may finish before a concurrently delivered child event. Do
         // not create a permanently active child underneath a terminal parent.
-        var reconciledRelatedSession = completeSessionIfParentIsTerminal(
+        // Tree edges are unchanged here, so the current SessionIndex is valid
+        // for descendant lookup; rebuild once after every mutation.
+        _ = completeSessionIfParentIsTerminal(
             event.sessionId,
             at: event.timestamp
         )
@@ -156,17 +153,15 @@ public final class AgentActivityService {
         let cascadedTerminal = advancesCurrentState
             && (event.resolvedState == .completed || event.resolvedState == .failed)
         if cascadedTerminal {
-            reconciledRelatedSession = completeActiveDescendants(
+            _ = completeActiveDescendants(
                 of: event.sessionId,
                 as: event.resolvedState,
                 at: event.timestamp
-            ) || reconciledRelatedSession
+            )
         }
 
-        if reconciledRelatedSession {
-            sessions.sort(by: Self.orderSessions)
-            rebuildIndex()
-        }
+        sessions.sort(by: Self.orderSessions)
+        rebuildLookups()
         if advancesCurrentState {
             if cascadedTerminal {
                 // Rebuild attention: a waiting child may have been cascade-completed.
@@ -195,7 +190,7 @@ public final class AgentActivityService {
         // Missing rows are leftover on-disk evidence, not a new live agent.
         // Creating AgentSession(event:) here would adopt the restore event's
         // running state and skip cold-start unknown/cascade rules.
-        guard let index = sessions.firstIndex(where: { $0.id == event.sessionId }) else { return }
+        guard let index = sessionsByID[event.sessionId] else { return }
         guard sessions[index].reconcileRestoredWorkflow(event) else { return }
         commitSessionChanges(orderSessions: true)
     }
@@ -295,7 +290,7 @@ public final class AgentActivityService {
         activity: String?,
         at timestamp: Date
     ) {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        guard let index = sessionsByID[sessionId] else { return }
         guard sessions[index].applyRestoredLifecycle(
             state: state,
             activity: activity,
@@ -365,59 +360,15 @@ public final class AgentActivityService {
     }
 
     private func completeSessionIfParentIsTerminal(_ sessionID: String, at timestamp: Date) -> Bool {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
-              sessions[index].isActive,
-              let parentID = sessions[index].parentSessionId,
-              let parent = sessions.first(where: { $0.id == parentID }),
-              parent.state == .completed || parent.state == .failed
+        guard let sessionIndex = sessionsByID[sessionID],
+              sessions[sessionIndex].isActive,
+              let parentID = sessions[sessionIndex].parentSessionId,
+              let parentIndex = sessionsByID[parentID]
         else { return false }
-        sessions[index].complete(as: parent.state, at: max(parent.updatedAt, timestamp))
+        let parent = sessions[parentIndex]
+        guard parent.state == .completed || parent.state == .failed else { return false }
+        sessions[sessionIndex].complete(as: parent.state, at: max(parent.updatedAt, timestamp))
         return true
-    }
-
-    /// Prefixes session and parent IDs. The only remaining identity rule is a
-    /// collision guard if two providers somehow share one already-namespaced id.
-    private func namespacedIdentity(for incomingEvent: AgentEvent) -> AgentEvent {
-        var event = incomingEvent
-        event.sessionId = event.provider.namespacedSessionID(event.sessionId)
-        if let parentID = event.parentSessionId {
-            event.parentSessionId = event.provider.namespacedSessionID(parentID)
-        }
-
-        let collidingIndices = sessions.indices.filter {
-            sessions[$0].id == event.sessionId && sessions[$0].provider != event.provider
-        }
-        guard !collidingIndices.isEmpty else { return event }
-        renameCollidingSessions(at: collidingIndices, originalID: event.sessionId)
-        return event
-    }
-
-    private func renameCollidingSessions(
-        at indices: [Int],
-        originalID: String
-    ) {
-        for index in indices {
-            let existingProvider = sessions[index].provider
-            let canonicalID = existingProvider.namespacedSessionID(sessions[index].id)
-            guard sessions[index].id != canonicalID else { continue }
-            sessions[index].id = canonicalID
-            for eventIndex in sessions[index].recentEvents.indices
-                where sessions[index].recentEvents[eventIndex].sessionId == originalID
-            {
-                sessions[index].recentEvents[eventIndex].sessionId = canonicalID
-            }
-            for childIndex in sessions.indices
-                where sessions[childIndex].provider == existingProvider
-                    && sessions[childIndex].parentSessionId == originalID
-            {
-                sessions[childIndex].parentSessionId = canonicalID
-            }
-            if attentionEvent?.provider == existingProvider,
-               attentionEvent?.sessionId == originalID
-            {
-                attentionEvent?.sessionId = canonicalID
-            }
-        }
     }
 
     /// One-shot history rewrite: drop orphaned Grok SessionStart rows, prefix
@@ -461,7 +412,11 @@ public final class AgentActivityService {
         }
     }
 
-    private func rebuildIndex() {
+    private func rebuildLookups() {
+        sessionsByID.removeAll(keepingCapacity: true)
+        for (offset, session) in sessions.enumerated() {
+            sessionsByID[session.id] = offset
+        }
         index = SessionIndex(sessions: sessions)
     }
 
@@ -474,7 +429,7 @@ public final class AgentActivityService {
         if orderSessions {
             sessions.sort(by: Self.orderSessions)
         }
-        rebuildIndex()
+        rebuildLookups()
         switch attentionRefresh {
         case .keep:
             break

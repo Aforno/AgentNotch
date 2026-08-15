@@ -238,7 +238,7 @@ final class AppRuntime {
     }
 
     private func process(_ event: AgentEvent, notify: Bool) {
-        let sessionID = event.provider.namespacedSessionID(event.sessionId)
+        let sessionID = event.sessionId
         let previousState = activity.session(id: sessionID)?.state
         guard activity.ingest(event) else { return }
         if event.resolvedState == .completed || event.resolvedState == .failed {

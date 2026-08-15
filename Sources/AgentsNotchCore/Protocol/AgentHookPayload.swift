@@ -44,27 +44,40 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var timestamp: Date?
 
     private enum CodingKeys: String, CodingKey {
-        case sessionId, sessionIdSnake = "session_id"
-        case conversationIdSnake = "conversation_id"
-        case transcriptPath, transcriptPathSnake = "transcript_path"
-        case cwd, workspaceRoot, workspaceRootSnake = "workspace_root", workspaceRootsSnake = "workspace_roots"
-        case hookEventName, hookEventNameSnake = "hook_event_name"
-        case model
-        case turnId, turnIdSnake = "turn_id"
-        case approvalsReviewer, approvalsReviewerSnake = "approvals_reviewer"
-        case prompt, source, reason, status
-        case toolName, toolNameSnake = "tool_name"
-        case toolInput, toolInputSnake = "tool_input"
-        case agentId, agentIdSnake = "agent_id", subagentIdSnake = "subagent_id"
-        case agentType, agentTypeSnake = "agent_type", subagentTypeSnake = "subagent_type"
-        case parentSessionId, parentSessionIdSnake = "parent_session_id", parentConversationIdSnake = "parent_conversation_id"
-        case description
-        case lastAssistantMessage, lastAssistantMessageSnake = "last_assistant_message"
-        case notificationType, notificationTypeSnake = "notification_type"
+        // Grok camelCase
+        case sessionId, transcriptPath, cwd, workspaceRoot, hookEventName
+        case model, turnId, approvalsReviewer, prompt, source, reason, status
+        case toolName, toolInput, agentId, agentType, parentSessionId
+        case description, lastAssistantMessage, notificationType
         case notificationMessage = "message"
-        case promptResponse, promptResponseSnake = "prompt_response"
-        case error, errorMessageSnake = "error_message"
-        case timestamp, createdAt, createdAtSnake = "created_at"
+        case promptResponse, error, timestamp, createdAt
+
+        // Codex / Claude Code / Gemini CLI snake_case
+        case sessionIdSnake = "session_id"
+        case transcriptPathSnake = "transcript_path"
+        case workspaceRootSnake = "workspace_root"
+        case workspaceRootsSnake = "workspace_roots"
+        case hookEventNameSnake = "hook_event_name"
+        case turnIdSnake = "turn_id"
+        case approvalsReviewerSnake = "approvals_reviewer"
+        case toolNameSnake = "tool_name"
+        case toolInputSnake = "tool_input"
+        case agentIdSnake = "agent_id"
+        case agentTypeSnake = "agent_type"
+        case parentSessionIdSnake = "parent_session_id"
+        case lastAssistantMessageSnake = "last_assistant_message"
+        case notificationTypeSnake = "notification_type"
+        case promptResponseSnake = "prompt_response"
+        case errorMessageSnake = "error_message"
+        case createdAtSnake = "created_at"
+
+        // Cursor
+        case conversationIdSnake = "conversation_id"
+        case parentConversationIdSnake = "parent_conversation_id"
+
+        // OpenCode / Claude aliases
+        case subagentIdSnake = "subagent_id"
+        case subagentTypeSnake = "subagent_type"
     }
 
     public init(from decoder: Decoder) throws {
@@ -145,60 +158,5 @@ public struct AgentHookPayload: Decodable, Sendable {
         error = values.decodeFlexibleStringIfPresent(forKey: .error)
             ?? values.decodeFlexibleStringIfPresent(forKey: .errorMessageSnake)
         timestamp = values.decodeFlexibleDateIfPresent(forKeys: [.timestamp, .createdAt, .createdAtSnake])
-    }
-}
-
-private extension KeyedDecodingContainer {
-    func decodeEither<T: Decodable>(
-        _ type: T.Type,
-        forKey first: Key,
-        or second: Key
-    ) throws -> T {
-        // contains() is true for JSON null. decode() then throws valueNotFound
-        // and never tries the snake_case alias (e.g. hookEventName:null with
-        // a valid hook_event_name).
-        if let value = try? decodeIfPresent(type, forKey: first) { return value }
-        return try decode(type, forKey: second)
-    }
-
-    func decodeEitherIfPresent<T: Decodable>(
-        _ type: T.Type,
-        forKey first: Key,
-        or second: Key
-    ) throws -> T? {
-        if let value = try? decodeIfPresent(type, forKey: first) { return value }
-        return try decodeIfPresent(type, forKey: second)
-    }
-
-    func decodeFlexibleStringIfPresent(forKey key: Key) -> String? {
-        guard contains(key) else { return nil }
-        if let value = try? decodeIfPresent(String.self, forKey: key) {
-            return value
-        }
-        guard let value = try? decode(JSONValue.self, forKey: key) else { return nil }
-        if let string = value.stringValue { return string }
-        if let message = value.objectValue?["message"]?.stringValue { return message }
-        return value.objectValue?["error"]?.stringValue
-    }
-
-    func decodeFlexibleDateIfPresent(forKeys keys: [Key]) -> Date? {
-        for key in keys where contains(key) {
-            if let value = try? decode(String.self, forKey: key) {
-                if let date = try? Date(
-                    value,
-                    strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)
-                ) {
-                    return date
-                }
-                if let date = try? Date(value, strategy: Date.ISO8601FormatStyle()) {
-                    return date
-                }
-            }
-            if let value = try? decode(Double.self, forKey: key) {
-                let seconds = value > 10_000_000_000 ? value / 1_000 : value
-                return Date(timeIntervalSince1970: seconds)
-            }
-        }
-        return nil
     }
 }

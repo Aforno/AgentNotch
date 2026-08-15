@@ -522,6 +522,36 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testIntegratedProvidersDeclareAnExplicitTimeoutUnit() {
+        for provider in IntegratedHookProvider.allCases {
+            let timeout = provider.timeout(for: "SessionStart")
+            XCTAssertEqual(timeout.unit, provider.timeoutUnit)
+        }
+        XCTAssertEqual(IntegratedHookProvider.geminiCLI.timeout(for: "BeforeAgent"), .milliseconds(5_000))
+        XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "SessionEnd"), .seconds(3))
+        XCTAssertEqual(IntegratedHookProvider.claudeCode.timeout(for: "PermissionRequest"), .seconds(5))
+    }
+
+    func testHandlerIdentityCollapsesOwnedLegacyAndCurrent() {
+        let relay = HookRelayIdentity(
+            provider: .claudeCode,
+            relayURL: URL(fileURLWithPath: "/tmp/agentsnotch-hook")
+        )
+        let current = relay.commandHandler(timeout: .seconds(5), claudeExecForm: true)
+        let legacy: [String: Any] = [
+            "type": "command",
+            "command": relay.relayURL.path,
+            "args": ["--provider", "claude-code"],
+            "timeout": 5,
+        ]
+        let foreign: [String: Any] = ["command": "echo existing"]
+
+        XCTAssertEqual(relay.identity(of: current), .current)
+        XCTAssertEqual(relay.identity(of: legacy), .legacy)
+        XCTAssertEqual(relay.identity(of: foreign), .none)
+    }
+
+    @MainActor
     func testGeminiIntegrationWritesOfficialHookNamesAndMillisecondTimeouts() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
