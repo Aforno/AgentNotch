@@ -31,6 +31,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Activity Center and Settings controls in the expanded notch now align with
+  the macOS menu bar without reserving an empty row above the first agent.
 - Activity Center no longer draws a system focus ring around the session
   list after a row is selected. Keyboard navigation is unchanged.
 - Duplicate Claude-compatibility hooks under Grok no longer write `{}` to

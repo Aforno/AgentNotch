@@ -148,15 +148,28 @@ final class AgentRowPresentationTests: XCTestCase {
         XCTAssertEqual(AgentRowPresentation.formattedRole("  "), "Subagent")
     }
 
-    func testListHeightIncludesChromeRowWhenSessionsAreVisible() {
+    func testListHeightDoesNotReserveChromeRowWhenSessionsAreVisible() {
         let first = session(id: "one", state: .running)
         let second = session(id: "two", state: .running)
 
         XCTAssertEqual(AgentListView.rowsHeight(for: []), DynamicIslandSpacing.rowHeight)
         XCTAssertEqual(
             AgentListView.rowsHeight(for: [first, second]),
-            DynamicIslandSpacing.chromeHeight + DynamicIslandSpacing.rowHeight * 2
+            DynamicIslandSpacing.rowHeight * 2
         )
+    }
+
+    func testListControlsAlignWithMenuBarCenter() {
+        let menuBarHeight: CGFloat = 32
+        let topInset = menuBarHeight + DynamicIslandSpacing.expandedTop
+        let originalCenter = topInset + DynamicIslandSpacing.chromeHeight / 2
+
+        let offset = AgentListView.controlsVerticalOffset(
+            topInset: topInset,
+            menuBarHeight: menuBarHeight
+        )
+
+        XCTAssertEqual(originalCenter + offset, menuBarHeight / 2)
     }
 
     private func session(

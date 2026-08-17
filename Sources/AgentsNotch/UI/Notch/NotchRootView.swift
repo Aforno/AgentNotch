@@ -280,6 +280,7 @@ struct NotchRootView: View {
                 sessions: visibleSessions,
                 relatedSessions: snapshot.relatedSessions,
                 topInset: geometry.notchHeight + DynamicIslandSpacing.expandedTop,
+                menuBarHeight: geometry.notchHeight,
                 onOpenSettings: { runtime.openSettings() },
                 onOpenActivityCenter: { runtime.openActivityCenter() },
                 onSelect: { id in

@@ -5,6 +5,7 @@ struct AgentListView: View {
     let sessions: [AgentSession]
     let relatedSessions: [AgentSession]
     let topInset: CGFloat
+    let menuBarHeight: CGFloat
     let onOpenSettings: () -> Void
     let onOpenActivityCenter: () -> Void
     let onSelect: (String) -> Void
@@ -13,15 +14,29 @@ struct AgentListView: View {
         if sessions.isEmpty {
             return DynamicIslandSpacing.rowHeight
         }
-        return DynamicIslandSpacing.chromeHeight
-            + CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
+        return CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
+    }
+
+    static func controlsVerticalOffset(topInset: CGFloat, menuBarHeight: CGFloat) -> CGFloat {
+        menuBarHeight / 2 - topInset - DynamicIslandSpacing.chromeHeight / 2
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack(alignment: .top) {
+            sessionRows
             chromeRow
+        }
+        .padding(.top, topInset)
+        .padding(.bottom, DynamicIslandSpacing.expandedBottom)
+    }
 
-            if !sessions.isEmpty {
+    @ViewBuilder
+    private var sessionRows: some View {
+        if sessions.isEmpty {
+            Color.clear
+                .frame(height: DynamicIslandSpacing.rowHeight)
+        } else {
+            VStack(spacing: 0) {
                 ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
                     Button {
                         onSelect(session.id)
@@ -41,8 +56,6 @@ struct AgentListView: View {
                 }
             }
         }
-        .padding(.top, topInset)
-        .padding(.bottom, DynamicIslandSpacing.expandedBottom)
     }
 
     private var chromeRow: some View {
@@ -58,25 +71,31 @@ struct AgentListView: View {
 
             Spacer(minLength: 0)
 
-            Button(action: onOpenActivityCenter) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.58))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .help("Activity Center")
-            .accessibilityLabel("Open Activity Center")
+            HStack(spacing: DynamicIslandSpacing.related) {
+                Button(action: onOpenActivityCenter) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.58))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .help("Activity Center")
+                .accessibilityLabel("Open Activity Center")
 
-            Button(action: onOpenSettings) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.58))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.58))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .help("Settings")
+                .accessibilityLabel("Open Settings")
             }
-            .help("Settings")
-            .accessibilityLabel("Open Settings")
+            .offset(y: Self.controlsVerticalOffset(
+                topInset: topInset,
+                menuBarHeight: menuBarHeight
+            ))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, DynamicIslandSpacing.outer)
