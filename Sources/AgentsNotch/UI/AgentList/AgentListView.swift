@@ -51,7 +51,7 @@ struct AgentListView: View {
                     if index < sessions.count - 1 {
                         Divider()
                             .overlay(.white.opacity(0.08))
-                            .padding(.leading, 42)
+                            .padding(.horizontal, 42)
                     }
                 }
             }

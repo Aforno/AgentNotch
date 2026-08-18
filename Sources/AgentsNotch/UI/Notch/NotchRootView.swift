@@ -58,6 +58,7 @@ struct NotchRootView: View {
     @State private var drawnRadius: CGFloat = 0
     @State private var hasDrawnLayout = false
     @State private var sizeGeneration = 0
+    @State private var detailContentHeight = NotchLayoutMetrics.minimumDetailContentHeight
     @AppStorage("animationsEnabled") private var animationsEnabled = true
 
     private var activity: AgentActivityService { runtime.activity }
@@ -98,15 +99,39 @@ struct NotchRootView: View {
                 radius: min(10, (geometry.notchHeight + 2) * 0.32)
             )
         case .temporary:
-            return NotchLayout(width: 392, height: geometry.notchHeight + 56, radius: 18)
+            return NotchLayout(
+                width: expandedWidth(preferred: NotchLayoutMetrics.temporaryPreferredWidth),
+                height: geometry.notchHeight + 56,
+                radius: 18
+            )
         case .list:
             let contentHeight = DynamicIslandSpacing.expandedTop
                 + AgentListView.rowsHeight(for: visibleSessions)
                 + DynamicIslandSpacing.expandedBottom
-            return NotchLayout(width: 424, height: geometry.notchHeight + contentHeight, radius: 20)
+            return NotchLayout(
+                width: expandedWidth(preferred: NotchLayoutMetrics.listPreferredWidth),
+                height: geometry.notchHeight + contentHeight,
+                radius: 20
+            )
         case .detail:
-            return NotchLayout(width: 440, height: geometry.notchHeight + 322, radius: 21)
+            return NotchLayout(
+                width: expandedWidth(preferred: NotchLayoutMetrics.detailPreferredWidth),
+                height: geometry.notchHeight + NotchLayoutMetrics.detailContentHeight(
+                    measured: detailContentHeight,
+                    screenHeight: geometry.screenFrame.height,
+                    notchHeight: geometry.notchHeight
+                ),
+                radius: 21
+            )
         }
+    }
+
+    private func expandedWidth(preferred: CGFloat) -> CGFloat {
+        NotchLayoutMetrics.expandedWidth(
+            preferred: preferred,
+            screenWidth: geometry.screenFrame.width,
+            notchWidth: geometry.notchWidth
+        )
     }
 
     private var shownWidth: CGFloat { hasDrawnLayout ? drawnWidth : layout.width }
@@ -305,7 +330,12 @@ struct NotchRootView: View {
                         .sorted { $0.updatedAt > $1.updatedAt },
                     onBack: { withPresentationAnimation { selectedSessionID = nil } },
                     onSelectSession: { id in withPresentationAnimation { selectedSessionID = id } },
-                    onOpen: { runtime.open(session) }
+                    onOpen: { runtime.open(session) },
+                    outerCornerRadius: layout.radius,
+                    onIdealHeightChange: { height in
+                        guard abs(detailContentHeight - height) >= 0.5 else { return }
+                        detailContentHeight = height
+                    }
                 )
             }
         }

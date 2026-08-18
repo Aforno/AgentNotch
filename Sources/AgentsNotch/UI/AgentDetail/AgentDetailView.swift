@@ -8,6 +8,8 @@ struct AgentDetailView: View {
     let onBack: () -> Void
     let onSelectSession: (String) -> Void
     let onOpen: () -> Void
+    let outerCornerRadius: CGFloat
+    let onIdealHeightChange: (CGFloat) -> Void
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
 
     var body: some View {
@@ -122,6 +124,14 @@ struct AgentDetailView: View {
                 }
                 .padding(.horizontal, DynamicIslandSpacing.outer)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    GeometryReader { contentGeometry in
+                        Color.clear.preference(
+                            key: AgentDetailContentHeightKey.self,
+                            value: contentGeometry.size.height
+                        )
+                    }
+                }
             }
             .scrollIndicators(.never)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -136,7 +146,15 @@ struct AgentDetailView: View {
                     .foregroundStyle(.white.opacity(0.78))
                     .frame(maxWidth: .infinity)
                     .frame(height: 30)
-                    .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
+                    .background(
+                        .white.opacity(0.09),
+                        in: RoundedRectangle(
+                            cornerRadius: DynamicIslandSpacing.insetCornerRadius(
+                                outerRadius: outerCornerRadius
+                            ),
+                            style: .continuous
+                        )
+                    )
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, DynamicIslandSpacing.outer)
@@ -144,5 +162,19 @@ struct AgentDetailView: View {
             }
         }
         .padding(.bottom, DynamicIslandSpacing.outer)
+        .onPreferenceChange(AgentDetailContentHeightKey.self) { contentHeight in
+            guard contentHeight > 0 else { return }
+            let fixedChromeHeight: CGFloat = session.applicationURL != nil
+                || session.workingDirectory != nil ? 98 : 56
+            onIdealHeightChange(contentHeight + fixedChromeHeight)
+        }
+    }
+}
+
+private struct AgentDetailContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

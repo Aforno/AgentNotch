@@ -8,6 +8,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Adapt expanded notch widths to the active display, size thread details to
+  their content within screen bounds, and keep inset controls and separators
+  concentric with the outer notch surface.
 - Removed the menu-bar extra. Open Activity Center from the notch, Command-1,
   or the global activity shortcut, and quit from Settings or Activity Center.
 - Hook install is split by config shape (grouped, Cursor, OpenCode). Handler
