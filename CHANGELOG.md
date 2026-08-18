@@ -8,6 +8,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Collapsed notch provider icons no longer sit inside a circular badge.
 - Adapt expanded notch widths to the active display, size thread details to
   their content within screen bounds, and keep inset controls and separators
   concentric with the outer notch surface.
