@@ -15,11 +15,13 @@ struct AgentDetailView: View {
             HStack(spacing: DynamicIslandSpacing.related) {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 24, height: 24)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.62))
+                .help("Back")
                 .accessibilityLabel("Back")
 
                 StateIndicator(state: session.state, size: 8)

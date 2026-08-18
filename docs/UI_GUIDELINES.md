@@ -15,6 +15,7 @@ are title plus detail, switch toggles, and compact dark pills.
   their parent row.
 - Command-1, the notch chrome, or the global activity shortcut opens Activity
   Center.
+- A clicked thread stays pinned until Back or a click outside the notch.
 
 UI behavior and layout changes require `./script/build_and_run.sh --verify` plus
 visual inspection of the packaged app at native scale. Socket and process health

@@ -31,6 +31,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Clicking outside a selected notch thread now collapses the notch instead of
+  leaving detail pinned until Back.
+- The notch thread Back control uses the same 28-point hit target as the hover
+  list chrome, so the chevron is no longer the only clickable pixels.
 - Activity Center and Settings controls in the expanded notch now align with
   the macOS menu bar without reserving an empty row above the first agent.
 - Activity Center no longer draws a system focus ring around the session

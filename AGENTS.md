@@ -208,6 +208,7 @@ Notch presentation rules:
 - multiple waiting sessions form an attention queue
 - parent rows surface waiting or failed descendant state
 - Command-1 or the menu-bar item opens Activity Center
+- a clicked thread stays pinned until Back or a click outside the notch
 
 Debug simulator (`DebugEventSimulator`, Settings → Debug) is `#if DEBUG`
 only. Simulated sessions use the `debug-simulator:` prefix, are never

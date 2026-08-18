@@ -50,6 +50,7 @@ struct NotchRootView: View {
     @State private var isPointerInside = false
     @State private var selectedSessionID: String?
     @State private var hoverIntentTask: Task<Void, Never>?
+    @State private var outsideClickMonitor = NotchOutsideClickMonitor()
     /// Separate scalars so SwiftUI interpolates width *and* height. A single
     /// optional struct update is easier for the renderer to treat as discrete.
     @State private var drawnWidth: CGFloat = 0
@@ -141,6 +142,10 @@ struct NotchRootView: View {
         }
         .onDisappear {
             hoverIntentTask?.cancel()
+            outsideClickMonitor.stop()
+        }
+        .onChange(of: selectedSessionID, initial: true) { _, sessionID in
+            syncOutsideClickMonitor(isPinned: sessionID != nil)
         }
         .onChange(of: layout) { _, newValue in
             applyLayoutChange(to: newValue)
@@ -310,8 +315,9 @@ struct NotchRootView: View {
         isPointerInside = hovering
         hoverIntentTask?.cancel()
         guard selectedSessionID == nil else {
-            // Detail presentation masks hover presentation. Still track the
-            // pointer so Back returns to list only while the pointer is inside.
+            // Detail stays pinned after a click so the thread remains readable
+            // once the pointer leaves. Back returns to the list only while the
+            // pointer is still inside; a click elsewhere collapses the notch.
             isHovering = hovering
             return
         }
@@ -347,5 +353,23 @@ struct NotchRootView: View {
 
     private func isVisibleDetailSession(_ sessionID: String) -> Bool {
         snapshot.relatedSessions.contains { $0.id == sessionID }
+    }
+
+    private func syncOutsideClickMonitor(isPinned: Bool) {
+        if isPinned {
+            outsideClickMonitor.start { dismissPinnedDetail() }
+        } else {
+            outsideClickMonitor.stop()
+        }
+    }
+
+    private func dismissPinnedDetail() {
+        guard selectedSessionID != nil else { return }
+        hoverIntentTask?.cancel()
+        withPresentationAnimation {
+            selectedSessionID = nil
+            isHovering = false
+            isPointerInside = false
+        }
     }
 }
