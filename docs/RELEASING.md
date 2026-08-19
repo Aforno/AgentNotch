@@ -1,10 +1,9 @@
 # Releasing Agents Notch
 
-Production Agents Notch releases are Apple Silicon ZIP archives signed with a
-Developer ID Application certificate, notarized by Apple, stapled, and
-accompanied by a SHA-256 checksum. Explicitly opted-in unsigned prereleases are
-ad-hoc signed, clearly labeled as previews, and are never presented as
-notarized builds.
+Production releases are Apple Silicon ZIP archives. They are signed with a
+Developer ID Application certificate, notarized by Apple, stapled, and shipped
+with a SHA-256 checksum. Unsigned prereleases are ad-hoc signed and labeled as
+previews. Never present them as notarized builds.
 
 ## Prepare the release
 
@@ -56,12 +55,13 @@ The `Release` workflow requires these repository Actions secrets:
 - `APPLE_API_ISSUER_ID`: App Store Connect issuer ID
 - `APPLE_API_PRIVATE_KEY`: complete `.p8` private-key contents
 
-Push a signed `vX.Y.Z` tag only after CI passes. The workflow validates that the
-tag matches `VERSION`, imports the temporary certificate, builds and notarizes
-the app, creates the checksum, and publishes both files to the GitHub release.
+Push a signed `vX.Y.Z` tag only after CI passes. The workflow validates that
+the tag matches `VERSION`, imports the temporary certificate, builds and
+notarizes the app, creates the checksum, and publishes both files to the GitHub
+release.
 
-Signing credentials are an external release gate. They must never be committed
-to this repository or printed in workflow logs.
+Signing credentials are an external release gate. Never commit them to this
+repository or print them in workflow logs.
 
 ## Unsigned prerelease
 

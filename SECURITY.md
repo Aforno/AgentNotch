@@ -1,4 +1,4 @@
-# Security Policy
+# Security policy
 
 ## Reporting a vulnerability
 
@@ -19,8 +19,8 @@ may be asked to upgrade before a report is investigated.
 
 ## System and scope
 
-Agents Notch is a local macOS app. Covered surfaces are the SwiftUI/AppKit app,
-the `AgentsNotchCore` protocol and reducer, the bundled hook relay, provider
+Agents Notch is a local macOS app. In scope are the SwiftUI/AppKit app, the
+`AgentsNotchCore` protocol and reducer, the bundled hook relay, provider
 configuration installation and removal, local persistence, release scripts,
 and GitHub Actions workflows.
 

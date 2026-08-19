@@ -1,6 +1,6 @@
-# Local Protocol
+# Local protocol
 
-Agents Notch receives provider-neutral events over an `AF_UNIX` stream socket at
+Agents Notch receives events over an `AF_UNIX` stream socket at
 `~/.agentsnotch/agent.sock`. Send one UTF-8 JSON object per line, then close the
 connection. The directory mode is `0700`, the socket mode is `0600`, and the
 maximum payload is 1 MiB.

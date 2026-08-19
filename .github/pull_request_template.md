@@ -16,4 +16,4 @@ Describe provider-hook, persistence, protocol, signing, or migration implication
 
 ## Screenshots
 
-Include before/after screenshots for meaningful UI changes, or write “Not applicable.”
+Include before/after screenshots for meaningful UI changes, or write "Not applicable."
