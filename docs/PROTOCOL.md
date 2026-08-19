@@ -11,6 +11,9 @@ Protocol version 1 carries `AgentEvent` values. Required fields are
 fields include `parentSessionId`, `agentRole`, `plan`, `workflowUpdate`, and
 `origin`.
 
+`applicationURL` is untrusted. The Open session action accepts it only when it
+uses HTTPS and its host belongs to the event's built-in provider.
+
 | Type | Default state |
 | --- | --- |
 | `agent.started` | `starting` |

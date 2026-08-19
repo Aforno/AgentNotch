@@ -8,7 +8,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Collapsed notch provider icons no longer sit inside a circular badge.
+- Collapsed notch provider icons drop the hairline ring. Stacked marks still
+  sit on a black circle.
 - Adapt expanded notch widths to the active display, size thread details to
   their content within screen bounds, and keep inset controls and separators
   concentric with the outer notch surface.
@@ -24,7 +25,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Live events keep the session ID the mapper already namespaced. Restore still
   prefixes leftover bare history IDs, then persists. Ingest rebuilds
   `SessionIndex` once.
-- `AGENTS.md` is the single constitution. `Agents.md` is not a second copy.
+- Dropped `AGENTS.md`. Contributor conventions live in `CONTRIBUTING.md`.
 - Repository conventions now describe the allowed disk walks: hooks stay
   push-only, while titles, hierarchy, and cold-start evidence may read
   provider-owned files. The Codex approval bridge is documented as a
@@ -35,6 +36,18 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Provider icons with uneven SVG padding (Codex versus Grok) now share a
+  vertical center in the collapsed notch.
+- Final session-history writes on quit now supersede older saves already in
+  flight, preserving the latest agent events.
+- Restored approval rows complete when their recorded provider process is gone
+  or its PID was recycled, so stale attention cannot keep the notch expanded
+  after relaunch.
+- Codex title enrichment now reads at most the last 4 MiB of
+  `session_index.jsonl`, keeping short-lived hooks responsive as history grows.
+- Session links accept only provider-owned HTTPS destinations, origin Open
+  ignores a recycled PID, and update downloads always open the fixed official
+  GitHub release page instead of a response-provided URL.
 - Clicking outside a selected notch thread now collapses the notch instead of
   leaving detail pinned until Back.
 - The notch thread Back control uses the same 28-point hit target as the hover

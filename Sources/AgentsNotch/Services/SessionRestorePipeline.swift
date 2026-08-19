@@ -32,9 +32,6 @@ enum SessionRestorePipeline {
             persistenceError = loadResult.recoveryMessage
         }
         activity.replaceSessions(loadResult.sessions)
-        // Do not invent completion for restored runners. Dead origin PIDs are
-        // completed; everything else becomes `.unknown` until a live hook or
-        // the reconnect grace period resolves them. Waiting rows stay waiting.
         activity.reconcileUnverifiedActiveSessions()
         let restoredSessions = activity.sessions
         let grokEvidence = await Task.detached(priority: .utility) {

@@ -11,8 +11,6 @@ Requirements:
 - Swift 6 toolchain (package language mode is Swift 6)
 - Git
 
-Repository conventions live in `AGENTS.md`.
-
 Clone the repository and run the full local checks:
 
 ```sh

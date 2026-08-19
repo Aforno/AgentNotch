@@ -10,7 +10,7 @@ final class UpdateService {
         case checking
         case upToDate
         case noRelease
-        case available(version: String, url: URL)
+        case available(version: String)
         case failed(String)
     }
 
@@ -18,6 +18,11 @@ final class UpdateService {
 
     private let latestReleaseURL = URL(string: "https://api.github.com/repos/Aforno/AgentNotch/releases/latest")!
     private let releasePageURL = URL(string: "https://github.com/Aforno/AgentNotch/releases/latest")!
+    private let openURL: (URL) -> Void
+
+    init(openURL: @escaping (URL) -> Void = { _ = NSWorkspace.shared.open($0) }) {
+        self.openURL = openURL
+    }
 
     func checkAutomaticallyIfNeeded() {
         guard UserDefaults.standard.bool(forKey: "automaticallyCheckForUpdates") else { return }
@@ -51,7 +56,7 @@ final class UpdateService {
             let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
             let version = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
             if version.compare(currentVersion, options: .numeric) == .orderedDescending {
-                state = .available(version: version, url: release.htmlURL ?? releasePageURL)
+                state = .available(version: version)
             } else {
                 state = .upToDate
             }
@@ -62,13 +67,7 @@ final class UpdateService {
     }
 
     func openAvailableRelease() {
-        let url: URL
-        if case let .available(_, availableURL) = state {
-            url = availableURL
-        } else {
-            url = releasePageURL
-        }
-        NSWorkspace.shared.open(url)
+        openURL(releasePageURL)
     }
 
     var currentVersion: String {
@@ -77,11 +76,9 @@ final class UpdateService {
 
     private struct GitHubRelease: Decodable {
         let tagName: String
-        let htmlURL: URL?
 
         private enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
-            case htmlURL = "html_url"
         }
     }
 

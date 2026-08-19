@@ -15,7 +15,6 @@ required_files=(
   SECURITY.md
   CONTRIBUTING.md
   CHANGELOG.md
-  AGENTS.md
   THIRD_PARTY_NOTICES.md
   VERSION
   .github/workflows/ci.yml
@@ -28,12 +27,6 @@ for required_file in "${required_files[@]}"; do
     exit 1
   fi
 done
-
-if git ls-files -- 'Agents.md' | grep -qx 'Agents.md' \
-  && git ls-files -- 'AGENTS.md' | grep -qx 'AGENTS.md'; then
-  echo "AGENTS.md is the single constitution; do not also track Agents.md" >&2
-  exit 1
-fi
 
 for script in script/*.sh; do
   bash -n "$script"

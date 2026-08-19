@@ -15,15 +15,15 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   aliases such as `conversation_id`, and the tested date formats.
 - `HookEventName` is the only event alias table. `AgentHookEventMapper` is the
   single event mapper; `ProviderEventPolicy` owns skip rules.
-- Codex maps plan and workflow tools, resolves titles from `session_index.jsonl`,
-  and uses a fail-open, bounded 4 MiB transcript-tail read only when a permission
-  payload omits `approvals_reviewer`. Remove that bridge when Codex supplies the
-  reviewer directly.
+- Codex maps plan and workflow tools, resolves titles from the last 4 MiB of
+  `session_index.jsonl`, and uses a fail-open, bounded 4 MiB transcript-tail read
+  only when a permission payload omits `approvals_reviewer`. Remove that bridge
+  when Codex supplies the reviewer directly.
 - Grok becomes visible on its first agent turn, strips `<user_query>` wrappers,
   resolves missing title/hierarchy from its session tree, and skips duplicate
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
-- Claude Code uses exec-form `command`/`args` and synchronous empty-stdout
-  no-decision behavior for permission and elicitation events.
+- Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
+  no-decision handlers for permission and elicitation events.
 - Cursor exposes session, prompt, tool, failure, and completion hooks. It has no
   passive native approval hook, so it cannot raise notch attention for approval.
 - Gemini CLI Before/After lifecycle aliases map to the same protocol event types.

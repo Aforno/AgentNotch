@@ -208,9 +208,9 @@ Hooks are push-only; launch-time restorers may read provider-owned files as
 cold-start evidence only and never invent live sessions from disk.
 
 On launch, Agents Notch reconciles restored runners instead of inventing
-completion: dead origin process IDs complete immediately, waiting sessions stay
-waiting, and other actives enter a short `unknown` (Reconnecting) grace period
-until a live hook arrives or the grace expires.
+completion: dead or recycled origin process IDs complete immediately, verified
+waiting sessions stay waiting, and other actives enter a short `unknown`
+(Reconnecting) grace period until a live hook arrives or the grace expires.
 
 All activity state and recent-session persistence stays local. There is no
 analytics, source upload, or remote telemetry. If update checking is enabled,

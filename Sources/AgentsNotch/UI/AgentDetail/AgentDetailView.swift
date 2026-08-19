@@ -136,11 +136,11 @@ struct AgentDetailView: View {
             .scrollIndicators(.never)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if session.applicationURL != nil || session.workingDirectory != nil {
+            if showsOriginControl {
                 Button(action: onOpen) {
                     HStack(spacing: DynamicIslandSpacing.related) {
                         Image(systemName: "arrow.up.forward.app")
-                        Text(session.applicationURL == nil ? "Reveal repository" : "Open session")
+                        Text(canOpenApplication ? "Open session" : "Reveal repository")
                     }
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.78))
@@ -158,16 +158,23 @@ struct AgentDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, DynamicIslandSpacing.outer)
-                .accessibilityLabel(session.applicationURL == nil ? "Reveal repository" : "Open session")
+                .accessibilityLabel(canOpenApplication ? "Open session" : "Reveal repository")
             }
         }
         .padding(.bottom, DynamicIslandSpacing.outer)
         .onPreferenceChange(AgentDetailContentHeightKey.self) { contentHeight in
             guard contentHeight > 0 else { return }
-            let fixedChromeHeight: CGFloat = session.applicationURL != nil
-                || session.workingDirectory != nil ? 98 : 56
+            let fixedChromeHeight: CGFloat = showsOriginControl ? 98 : 56
             onIdealHeightChange(contentHeight + fixedChromeHeight)
         }
+    }
+
+    private var canOpenApplication: Bool {
+        OriginActivationService.canOpenApplication(for: session)
+    }
+
+    private var showsOriginControl: Bool {
+        canOpenApplication || session.workingDirectory != nil
     }
 }
 

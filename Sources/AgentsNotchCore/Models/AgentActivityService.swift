@@ -229,26 +229,37 @@ public final class AgentActivityService {
 
     /// Reconciles hook-driven sessions after a cold start.
     ///
-    /// Waiting sessions are preserved: the provider may still be blocked on an
-    /// approval that will not emit another hook until the user answers.
-    /// When `origin.processIdentifier` is present and the process is gone, the
-    /// session is completed immediately. Remaining unverified actives become
-    /// `.unknown` (reconnecting) instead of inventing a completion; a later
-    /// live event or grace-period expiry resolves them.
+    /// Waiting sessions with a live or unknown origin are preserved: the
+    /// provider may still be blocked on an approval that will not emit another
+    /// hook until the user answers. When `origin.processIdentifier` is present
+    /// and the process is gone or its start identity changed, every active state
+    /// completes immediately. A waiter with a live PID and no recorded start
+    /// time stays waiting.
+    /// Remaining non-waiting actives become `.unknown` (reconnecting) instead
+    /// of inventing a completion; a later live event or grace-period expiry
+    /// resolves them.
     public func reconcileUnverifiedActiveSessions(
         processAlive: (Int32) -> Bool = { pid in
             guard pid > 0 else { return false }
             return kill(pid, 0) == 0
-        }
+        },
+        processStartedAt: ((Int32) -> Date?)? = nil
     ) {
+        let resolveProcessStart = processStartedAt ?? { pid in
+            AgentProcessIdentity.startedAt(for: pid)
+        }
         var changed = false
-        for index in sessions.indices
-            where sessions[index].isActive && sessions[index].state != .waitingForUser
-        {
+        for index in sessions.indices where sessions[index].isActive {
             if sessions[index].state == .unknown {
                 continue
             }
-            if let pid = sessions[index].origin?.processIdentifier, !processAlive(pid) {
+            if let origin = sessions[index].origin,
+               origin.processIdentifier != nil,
+               !origin.matchesRunningProcess(
+                   processAlive: processAlive,
+                   currentStartedAt: resolveProcessStart
+               )
+            {
                 let completedAt = sessions[index].updatedAt
                 let parentID = sessions[index].id
                 sessions[index].complete(as: .completed, at: completedAt)
@@ -256,6 +267,9 @@ public final class AgentActivityService {
                 // must not linger as attention pins after the origin dies.
                 completeActiveDescendants(of: parentID, as: .completed, at: completedAt)
                 changed = true
+                continue
+            }
+            if sessions[index].state == .waitingForUser {
                 continue
             }
             sessions[index].markUnknown()

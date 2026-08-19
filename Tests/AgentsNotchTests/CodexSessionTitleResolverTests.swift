@@ -58,6 +58,17 @@ final class CodexSessionTitleResolverTests: XCTestCase {
         XCTAssertNil(CodexSessionTitleResolver.title(forNativeSessionId: "missing", codexHome: home))
     }
 
+    func testTitleLookupDoesNotReadPastTheTailLimit() throws {
+        let oldRecord = Data("{\"id\":\"thr_old\",\"thread_name\":\"Stale title\"}\n".utf8)
+        let fillerLine = "{\"id\":\"other\",\"padding\":\"\(String(repeating: "x", count: 1_024))\"}\n"
+        let fillerCount = CodexSessionTitleResolver.maximumIndexTailBytes / fillerLine.utf8.count + 2
+        var index = oldRecord
+        index.append(Data(String(repeating: fillerLine, count: fillerCount).utf8))
+        let home = try temporaryCodexHome(index: index)
+
+        XCTAssertNil(CodexSessionTitleResolver.title(forNativeSessionId: "thr_old", codexHome: home))
+    }
+
     func testThreadIDUsesRootSessionIdentity() {
         XCTAssertEqual(
             CodexSessionTitleResolver.threadID(fromCanonicalSessionID: "codex:thr_123"),
@@ -115,10 +126,14 @@ final class CodexSessionTitleResolverTests: XCTestCase {
     }
 
     private func temporaryCodexHome(index: String) throws -> URL {
+        try temporaryCodexHome(index: Data(index.utf8))
+    }
+
+    private func temporaryCodexHome(index: Data) throws -> URL {
         let home = FileManager.default.temporaryDirectory
             .appendingPathComponent("AgentsNotch-CodexTitle-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-        try Data(index.utf8).write(to: home.appendingPathComponent("session_index.jsonl"))
+        try index.write(to: home.appendingPathComponent("session_index.jsonl"))
         addTeardownBlock {
             try? FileManager.default.removeItem(at: home)
         }

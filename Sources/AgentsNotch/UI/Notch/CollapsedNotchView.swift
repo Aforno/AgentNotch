@@ -26,13 +26,18 @@ struct CollapsedNotchView: View {
 
         return ZStack(alignment: .trailing) {
             ForEach(Array(providers.enumerated()), id: \.element) { index, provider in
-                ProviderIconView(provider: provider, size: 13)
-                    .foregroundStyle(.white.opacity(0.94))
-                    .frame(
-                        width: DynamicIslandSpacing.compactProviderMarkSize,
-                        height: DynamicIslandSpacing.compactProviderMarkSize
-                    )
-                    .offset(x: -CGFloat(providers.count - index - 1) * reveal)
+                ZStack {
+                    Circle()
+                        .fill(.black)
+
+                    ProviderIconView(provider: provider, size: 13)
+                        .foregroundStyle(.white.opacity(0.94))
+                }
+                .frame(
+                    width: DynamicIslandSpacing.compactProviderMarkSize,
+                    height: DynamicIslandSpacing.compactProviderMarkSize
+                )
+                .offset(x: -CGFloat(providers.count - index - 1) * reveal)
             }
         }
         .frame(

@@ -4,6 +4,8 @@ import Foundation
 /// Prompt hooks only carry the latest user message, so this bounded index
 /// read is the allowed disk walk for titles. It does not invent sessions.
 public enum CodexSessionTitleResolver {
+    public static let maximumIndexTailBytes = 4 * 1_024 * 1_024
+
     public static func title(
         forNativeSessionId sessionId: String,
         codexHome: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -13,7 +15,7 @@ public enum CodexSessionTitleResolver {
         guard isSafeSessionID(trimmed) else { return nil }
 
         let indexURL = codexHome.appendingPathComponent("session_index.jsonl")
-        guard let data = try? Data(contentsOf: indexURL), !data.isEmpty else { return nil }
+        guard let data = indexTail(at: indexURL), !data.isEmpty else { return nil }
 
         var found: String?
         for line in data.split(separator: 0x0A) {
@@ -23,6 +25,34 @@ public enum CodexSessionTitleResolver {
             found = record.threadName
         }
         return found.flatMap(AgentTaskTitle.displayable)
+    }
+
+    private static func indexTail(at url: URL) -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+
+        guard let endOffset = try? handle.seekToEnd() else { return nil }
+        let maximumBytes = UInt64(maximumIndexTailBytes)
+        let startOffset = endOffset > maximumBytes ? endOffset - maximumBytes : 0
+        let readOffset = startOffset > 0 ? startOffset - 1 : 0
+        let readCount = Int(endOffset - readOffset)
+        guard (try? handle.seek(toOffset: readOffset)) != nil,
+              var data = try? handle.read(upToCount: readCount),
+              !data.isEmpty
+        else {
+            return nil
+        }
+
+        if startOffset > 0 {
+            if data.first == 0x0A {
+                data.removeFirst()
+            } else if let newline = data.firstIndex(of: 0x0A) {
+                data.removeSubrange(data.startIndex...newline)
+            } else {
+                return nil
+            }
+        }
+        return data
     }
 
     public static func threadID(fromCanonicalSessionID sessionID: String) -> String? {

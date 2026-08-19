@@ -36,6 +36,7 @@ enum HookProcessIO {
 
     static func origin() -> AgentOrigin? {
         let environment = ProcessInfo.processInfo.environment
+        let processIdentifier = getppid()
         let terminalProgram = environment["TERM_PROGRAM"]
         let bundleIdentifier = environment["AGENTS_NOTCH_BUNDLE_IDENTIFIER"]
             ?? environment["__CFBundleIdentifier"]
@@ -46,7 +47,8 @@ enum HookProcessIO {
             ?? environment["KITTY_WINDOW_ID"]
         let origin = AgentOrigin(
             bundleIdentifier: bundleIdentifier?.nonEmpty,
-            processIdentifier: getppid(),
+            processIdentifier: processIdentifier,
+            processStartedAt: AgentProcessIdentity.startedAt(for: processIdentifier),
             terminalProgram: terminalProgram?.nonEmpty,
             terminalSessionIdentifier: sessionIdentifier?.nonEmpty,
             tty: environment["TTY"]?.nonEmpty

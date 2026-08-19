@@ -98,6 +98,15 @@ extension AgentActivityServiceTests {
                 state: .thinking,
                 timestamp: base
             )),
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "dead-waiter",
+                provider: .cursor,
+                activity: "Needs approval",
+                state: .waitingForUser,
+                timestamp: base,
+                origin: AgentOrigin(processIdentifier: 42_425)
+            )),
         ])
 
         service.reconcileUnverifiedActiveSessions(processAlive: { $0 == 99_999 })
@@ -105,6 +114,77 @@ extension AgentActivityServiceTests {
         XCTAssertEqual(service.sessions.first { $0.id == "codex:dead-process" }?.state, .completed)
         XCTAssertEqual(service.sessions.first { $0.id == "claude-code:live-process" }?.state, .unknown)
         XCTAssertEqual(service.sessions.first { $0.id == "gemini-cli:no-origin" }?.state, .unknown)
+        XCTAssertEqual(service.sessions.first { $0.id == "cursor:dead-waiter" }?.state, .completed)
+        XCTAssertNil(service.attentionEvent)
+    }
+
+    @MainActor
+    func testColdStartCompletesWaiterWhenOriginPIDWasReused() {
+        let recordedStart = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "recycled-pid",
+                provider: .codex,
+                state: .waitingForUser,
+                timestamp: recordedStart,
+                origin: AgentOrigin(
+                    processIdentifier: 42_424,
+                    processStartedAt: recordedStart
+                )
+            )),
+        ])
+
+        service.reconcileUnverifiedActiveSessions(
+            processAlive: { _ in true },
+            processStartedAt: { _ in recordedStart.addingTimeInterval(10) }
+        )
+
+        XCTAssertEqual(service.sessions.first?.state, .completed)
+        XCTAssertNil(service.attentionEvent)
+    }
+
+    @MainActor
+    func testColdStartPreservesLegacyWaiterWhenProcessIsAlive() {
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "legacy-waiter",
+                provider: .codex,
+                state: .waitingForUser,
+                origin: AgentOrigin(processIdentifier: 42_424)
+            )),
+        ])
+
+        service.reconcileUnverifiedActiveSessions(processAlive: { _ in true })
+
+        XCTAssertEqual(service.sessions.first?.state, .waitingForUser)
+        XCTAssertEqual(service.attentionEvent?.sessionId, "codex:legacy-waiter")
+    }
+
+    @MainActor
+    func testColdStartPreservesWaiterWhenProcessIdentityMatches() {
+        let recordedStart = Date(timeIntervalSince1970: 100)
+        let service = AgentActivityService(sessions: [
+            AgentSession(event: AgentEvent(
+                type: .waiting,
+                sessionId: "live-waiter",
+                provider: .codex,
+                state: .waitingForUser,
+                origin: AgentOrigin(
+                    processIdentifier: 42_424,
+                    processStartedAt: recordedStart
+                )
+            )),
+        ])
+
+        service.reconcileUnverifiedActiveSessions(
+            processAlive: { _ in true },
+            processStartedAt: { _ in recordedStart }
+        )
+
+        XCTAssertEqual(service.sessions.first?.state, .waitingForUser)
+        XCTAssertEqual(service.attentionEvent?.sessionId, "codex:live-waiter")
     }
 
     @MainActor

@@ -172,7 +172,7 @@ struct SettingsUpdateControl: View {
             Label("No releases yet", systemImage: "shippingbox")
                 .font(NotchWindowFont.caption)
                 .foregroundStyle(NotchWindowPalette.secondaryText)
-        case let .available(version, _):
+        case let .available(version):
             Button("Download \(version)") { updates.openAvailableRelease() }
                 .buttonStyle(NotchPillButtonStyle())
         case let .failed(message):

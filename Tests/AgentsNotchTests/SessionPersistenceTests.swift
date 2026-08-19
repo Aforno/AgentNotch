@@ -139,6 +139,47 @@ final class SessionPersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testStopSupersedesAnOlderSaveAlreadyInFlight() async throws {
+        let fixture = try PersistenceFixture()
+        defer { fixture.remove() }
+        let blocker = OrderedSaveBlocker()
+        defer { blocker.resume() }
+        let persistence = SessionPersistence(
+            fileURL: fixture.fileURL,
+            beforeOrderedSave: { blocker.block() }
+        )
+        let runtime = AppRuntime(
+            persistence: persistence,
+            socketURL: fixture.socketURL,
+            monitorProviders: false,
+            persistDebounceDuration: .milliseconds(10),
+            persistMaximumDelay: .seconds(1)
+        )
+        await runtime.start()
+
+        runtime.activity.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:in-flight",
+            provider: .codex,
+            state: .running
+        ))
+        await blocker.waitUntilBlocked()
+
+        runtime.activity.ingest(AgentEvent(
+            type: .completed,
+            sessionId: "codex:in-flight",
+            provider: .codex,
+            state: .completed
+        ))
+        runtime.stop()
+        blocker.resume()
+
+        let saved = await persistence.load().sessions
+        XCTAssertEqual(saved.first?.id, "codex:in-flight")
+        XCTAssertEqual(saved.first?.state, .completed)
+    }
+
+    @MainActor
     func testRuntimeDebouncesBurstPersistenceWrites() async throws {
         let fixture = try PersistenceFixture()
         defer { fixture.remove() }
@@ -321,6 +362,7 @@ final class SessionPersistenceTests: XCTestCase {
         let origin = AgentOrigin(
             bundleIdentifier: "com.apple.Terminal",
             processIdentifier: 42,
+            processStartedAt: Date(timeIntervalSince1970: 100),
             terminalProgram: "Apple_Terminal",
             terminalSessionIdentifier: "session-1",
             tty: "/dev/ttys001"
@@ -344,6 +386,29 @@ private enum PersistenceTestError: LocalizedError {
     case quarantineFailed
 
     var errorDescription: String? { "Simulated quarantine failure." }
+}
+
+private final class OrderedSaveBlocker: @unchecked Sendable {
+    private let started = DispatchSemaphore(value: 0)
+    private let continuation = DispatchSemaphore(value: 0)
+
+    func block() {
+        started.signal()
+        continuation.wait()
+    }
+
+    func waitUntilBlocked() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async { [started] in
+                started.wait()
+                continuation.resume()
+            }
+        }
+    }
+
+    func resume() {
+        continuation.signal()
+    }
 }
 
 private final class PersistenceFixture: @unchecked Sendable {

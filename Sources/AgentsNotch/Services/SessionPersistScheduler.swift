@@ -10,6 +10,7 @@ final class SessionPersistScheduler {
     private let maximumDelay: Duration
     private var persistTask: Task<Void, Never>?
     private var persistDeadlineTask: Task<Void, Never>?
+    private var writeGeneration: UInt64 = 0
     /// Protects an unreadable history file when it could not be quarantined.
     private(set) var writesAllowed = false
 
@@ -68,10 +69,16 @@ final class SessionPersistScheduler {
     ) async {
         cancelPending()
         guard writesAllowed else { return }
-        onResult(await persistence.save(snapshot()))
+        let generation = nextWriteGeneration()
+        onResult(await persistence.save(snapshot(), generation: generation))
     }
 
     func flushSynchronously(snapshot: [AgentSession]) throws {
-        try persistence.saveSynchronously(snapshot)
+        try persistence.saveSynchronously(snapshot, generation: nextWriteGeneration())
+    }
+
+    private func nextWriteGeneration() -> UInt64 {
+        writeGeneration += 1
+        return writeGeneration
     }
 }
