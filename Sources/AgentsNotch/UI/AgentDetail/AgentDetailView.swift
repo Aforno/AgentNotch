@@ -126,10 +126,18 @@ struct AgentDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background {
                     GeometryReader { contentGeometry in
-                        Color.clear.preference(
-                            key: AgentDetailContentHeightKey.self,
-                            value: contentGeometry.size.height
-                        )
+                        let contentHeight = contentGeometry.size.height
+                        Color.clear
+                            .onAppear {
+                                reportIdealHeight(contentHeight)
+                            }
+                            // Recreate the probe when measured height or chrome
+                            // changes so `onAppear` re-runs on MainActor. Swift 6.0
+                            // treats `onPreferenceChange` as `@Sendable`.
+                            .id(AgentDetailHeightSignal(
+                                contentHeight: contentHeight,
+                                showsOriginControl: showsOriginControl
+                            ))
                     }
                 }
             }
@@ -162,11 +170,6 @@ struct AgentDetailView: View {
             }
         }
         .padding(.bottom, DynamicIslandSpacing.outer)
-        .onPreferenceChange(AgentDetailContentHeightKey.self) { contentHeight in
-            guard contentHeight > 0 else { return }
-            let fixedChromeHeight: CGFloat = showsOriginControl ? 98 : 56
-            onIdealHeightChange(contentHeight + fixedChromeHeight)
-        }
     }
 
     private var canOpenApplication: Bool {
@@ -176,12 +179,15 @@ struct AgentDetailView: View {
     private var showsOriginControl: Bool {
         canOpenApplication || session.workingDirectory != nil
     }
+
+    private func reportIdealHeight(_ contentHeight: CGFloat) {
+        guard contentHeight > 0 else { return }
+        let fixedChromeHeight: CGFloat = showsOriginControl ? 98 : 56
+        onIdealHeightChange(contentHeight + fixedChromeHeight)
+    }
 }
 
-private struct AgentDetailContentHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
+private struct AgentDetailHeightSignal: Hashable {
+    var contentHeight: CGFloat
+    var showsOriginControl: Bool
 }
