@@ -18,9 +18,9 @@ public final class UnixReplyServer: @unchecked Sendable {
 
     private let socketURL: URL
     private let pendingChanged: @Sendable (Set<UUID>) -> Void
-    /// Guards `descriptor`, `ownedInode`, `listener`, `pending`, and `clients`.
-    /// `descriptor` is also read by the accept thread, so every access must
-    /// go through this lock to stay data-race free.
+    /// Guards `descriptor`, `ownedInode`, `listener`, `wakeup*`, `acceptStopped`,
+    /// `pending`, and `clients`. `descriptor` is also read by the accept thread,
+    /// so every access must go through this lock to stay data-race free.
     private let lock = NSLock()
     private let clientsQueue = DispatchQueue(
         label: "com.agentsnotch.reply.clients",
@@ -29,6 +29,9 @@ public final class UnixReplyServer: @unchecked Sendable {
     )
     private var descriptor: Int32 = -1
     private var listener: Thread?
+    private var wakeupRead: Int32 = -1
+    private var wakeupWrite: Int32 = -1
+    private var acceptStopped: DispatchSemaphore?
     private var ownedInode: ino_t?
     private var pending: [UUID: Int32] = [:]
     private var clients: Set<Int32> = []
@@ -100,15 +103,23 @@ public final class UnixReplyServer: @unchecked Sendable {
             guard let inode = replyInode(of: socketURL.path) else {
                 throw AgentSocketError.systemCall("stat", errno)
             }
+            var pipeFDs = [Int32](repeating: -1, count: 2)
+            let piped = pipeFDs.withUnsafeMutableBufferPointer { Darwin.pipe($0.baseAddress) }
+            guard piped == 0 else {
+                throw AgentSocketError.systemCall("pipe", errno)
+            }
             lock.withLock {
                 descriptor = fd
                 ownedInode = inode
+                wakeupRead = pipeFDs[0]
+                wakeupWrite = pipeFDs[1]
             }
         } catch {
             Darwin.close(fd)
             lock.withLock {
                 descriptor = -1
                 ownedInode = nil
+                closeWakeupPipeLocked()
             }
             if !isReplySocketAccepting(at: socketURL.path) {
                 unlink(socketURL.path)
@@ -116,29 +127,42 @@ public final class UnixReplyServer: @unchecked Sendable {
             throw error
         }
 
+        let stopped = DispatchSemaphore(value: 0)
         let thread = Thread { [weak self] in
             self?.acceptLoop()
+            stopped.signal()
         }
         thread.name = "com.agentsnotch.reply.listener"
         thread.qualityOfService = .userInitiated
-        lock.withLock { listener = thread }
+        lock.withLock {
+            listener = thread
+            acceptStopped = stopped
+        }
         thread.start()
     }
 
     public func stop() {
-        let state = lock.withLock { () -> (fd: Int32, inode: ino_t?) in
+        let state = lock.withLock { () -> (fd: Int32, inode: ino_t?, wakeupWrite: Int32, stopped: DispatchSemaphore?) in
             let current = descriptor
             let inode = ownedInode
+            let writeFD = wakeupWrite
+            let stopped = acceptStopped
             descriptor = -1
             ownedInode = nil
             listener = nil
-            return (current, inode)
+            acceptStopped = nil
+            return (current, inode, writeFD, stopped)
         }
+        if state.wakeupWrite >= 0 {
+            var byte: UInt8 = 1
+            _ = Darwin.write(state.wakeupWrite, &byte, 1)
+        }
+        state.stopped?.wait()
         if state.fd >= 0 {
-            _ = Darwin.shutdown(state.fd, SHUT_RDWR)
             Darwin.close(state.fd)
         }
         lock.lock()
+        closeWakeupPipeLocked()
         let openClients = clients
         let hadPendingReplies = !pending.isEmpty
         pending.removeAll()
@@ -194,10 +218,30 @@ public final class UnixReplyServer: @unchecked Sendable {
         return delivered
     }
 
+    private func closeWakeupPipeLocked() {
+        if wakeupRead >= 0 { Darwin.close(wakeupRead) }
+        if wakeupWrite >= 0 { Darwin.close(wakeupWrite) }
+        wakeupRead = -1
+        wakeupWrite = -1
+    }
+
     private func acceptLoop() {
         while true {
-            let listenFD = lock.withLock { descriptor }
-            guard listenFD >= 0 else { return }
+            let (listenFD, wakeFD) = lock.withLock { (descriptor, wakeupRead) }
+            guard listenFD >= 0, wakeFD >= 0 else { return }
+            var pollFDs = [
+                pollfd(fd: listenFD, events: Int16(POLLIN), revents: 0),
+                pollfd(fd: wakeFD, events: Int16(POLLIN), revents: 0),
+            ]
+            let ready = pollFDs.withUnsafeMutableBufferPointer { buffer in
+                Darwin.poll(buffer.baseAddress, nfds_t(buffer.count), -1)
+            }
+            if ready < 0 {
+                if errno == EINTR { continue }
+                return
+            }
+            if pollFDs[1].revents != 0 { return }
+            guard pollFDs[0].revents & Int16(POLLIN) != 0 else { continue }
             let client = Darwin.accept(listenFD, nil, nil)
             if client < 0 {
                 if errno == EINTR { continue }

@@ -591,9 +591,9 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         ]
         let foreign: [String: Any] = ["command": "echo existing"]
 
-        XCTAssertEqual(relay.identity(of: current), .current)
-        XCTAssertEqual(relay.identity(of: legacy), .legacy)
-        XCTAssertEqual(relay.identity(of: foreign), .none)
+        XCTAssertEqual(relay.identity(of: current, eventName: "SessionStart"), .current)
+        XCTAssertEqual(relay.identity(of: legacy, eventName: "SessionStart"), .legacy)
+        XCTAssertEqual(relay.identity(of: foreign, eventName: "SessionStart"), .none)
     }
 
     @MainActor

@@ -215,23 +215,25 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         }
         applyTask(from: event)
         if event.resolvedState == .waitingForUser, let pending = event.pendingReply {
-            pendingReplies.removeAll { $0.replyId == pending.replyId }
-            pendingReplies.append(pending)
-            pendingReply = pending
+            mergePendingReply(pending)
         }
     }
 
     private mutating func applyPendingReply(from event: AgentEvent) {
         if event.resolvedState == .waitingForUser {
             if let pending = event.pendingReply {
-                pendingReplies.removeAll { $0.replyId == pending.replyId }
-                pendingReplies.append(pending)
-                pendingReply = pending
+                mergePendingReply(pending)
             }
         } else if event.resolvedState == .completed || event.resolvedState == .failed {
             pendingReplies.removeAll()
             pendingReply = nil
         }
+    }
+
+    private mutating func mergePendingReply(_ pending: AgentPendingReply) {
+        pendingReplies.removeAll { $0.replyId == pending.replyId }
+        pendingReplies.append(pending)
+        pendingReply = pending
     }
 
     public mutating func retainPendingReplies(where isLive: (UUID) -> Bool) {

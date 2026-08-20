@@ -46,6 +46,9 @@ struct SettingsView: View {
         .onChange(of: answerFromNotchEnabled) { _, enabled in
             runtime.applyAnswerFromNotchEnabled(enabled)
         }
+        .onChange(of: privacyModeEnabled) { _, enabled in
+            runtime.applyPrivacyModeEnabled(enabled)
+        }
         .confirmationDialog("Clear completed session history?", isPresented: $confirmsClearHistory) {
             Button("Clear History", role: .destructive) { runtime.clearHistory() }
         } message: {

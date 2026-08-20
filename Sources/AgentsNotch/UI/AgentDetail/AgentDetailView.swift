@@ -83,6 +83,7 @@ struct AgentDetailView: View {
                                 pending: pending,
                                 onAnswer: onAnswer
                             )
+                            .id(pending.replyId)
                         }
                         AgentRelationshipsView(
                             parent: parent,

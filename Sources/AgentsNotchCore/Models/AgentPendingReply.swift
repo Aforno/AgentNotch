@@ -160,4 +160,10 @@ public enum AgentReplyPolicy {
             false
         }
     }
+
+    /// Empty grants means the notch cannot represent the prompt, so the hook
+    /// must fail open instead of blocking for `waitSeconds`.
+    public static func shouldAwaitReply(_ pending: AgentPendingReply) -> Bool {
+        !pending.grants.isEmpty
+    }
 }

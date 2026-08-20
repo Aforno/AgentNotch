@@ -134,6 +134,7 @@ struct WaitingReplyView: View {
     private var actions: some View {
         if canAnswer, let pending {
             WaitingReplyActions(pending: pending, onAnswer: onAnswer)
+                .id(pending.replyId)
         }
     }
 

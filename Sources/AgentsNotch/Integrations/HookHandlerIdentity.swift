@@ -32,7 +32,7 @@ struct HookRelayIdentity: Sendable {
 
     func identity(
         of handler: [String: Any],
-        eventName: String = "SessionStart",
+        eventName: String,
         blocking: Bool? = nil
     ) -> HookHandlerIdentity {
         guard isOwned(handler) else { return .none }

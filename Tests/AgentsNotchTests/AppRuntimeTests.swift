@@ -54,6 +54,56 @@ final class AppRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testPrivacyModeInstallsObserverHooksWhenAnswerFromNotchIsEnabled() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("an-privacy-hooks-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundledRelayURL = root.appendingPathComponent("agentsnotch-hook")
+        try Data("test relay".utf8).write(to: bundledRelayURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: bundledRelayURL.path
+        )
+        let runtime = AppRuntime(
+            persistence: SessionPersistence(fileURL: root.appendingPathComponent("sessions.json")),
+            socketURL: root.appendingPathComponent("agent.sock"),
+            replySocketURL: root.appendingPathComponent("reply.sock"),
+            monitorProviders: false,
+            providerHomeDirectoryURL: root,
+            bundledRelayURL: bundledRelayURL,
+            answersFromNotch: { true },
+            privacyModeEnabled: { true }
+        )
+        await runtime.start()
+        defer { runtime.stop() }
+
+        let manager = try XCTUnwrap(runtime.integration(for: .claudeCode))
+        manager.install()
+
+        let settingsURL = root.appendingPathComponent(".claude/settings.json")
+        let hooks = try XCTUnwrap(
+            (JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any])?["hooks"] as? [String: Any]
+        )
+        let permission = try XCTUnwrap(
+            ((hooks["PermissionRequest"] as? [[String: Any]])?.first?["hooks"] as? [[String: Any]])?.first
+        )
+        XCTAssertEqual(permission["async"] as? Bool, true)
+        XCTAssertEqual(permission["timeout"] as? Int, 5)
+        XCTAssertEqual(permission["args"] as? [String], ["--provider", "claude-code"])
+        XCTAssertFalse(
+            ((permission["args"] as? [String]) ?? []).contains("--answer"),
+            "privacy mode must not install blocking --answer hooks"
+        )
+
+        let preToolGroups = try XCTUnwrap(hooks["PreToolUse"] as? [[String: Any]])
+        XCTAssertEqual(preToolGroups.count, 1, "privacy mode must not split PreToolUse into blocking matchers")
+        let preTool = try XCTUnwrap((preToolGroups.first?["hooks"] as? [[String: Any]])?.first)
+        XCTAssertEqual(preTool["async"] as? Bool, true)
+        XCTAssertEqual(preTool["args"] as? [String], ["--provider", "claude-code"])
+    }
+
+    @MainActor
     func testAnswerFromNotchDeliversReplyAndClearsWaitingSession() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("an-answer-\(UUID().uuidString.prefix(8))", isDirectory: true)

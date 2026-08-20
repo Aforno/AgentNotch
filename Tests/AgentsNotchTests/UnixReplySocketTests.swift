@@ -65,6 +65,34 @@ final class UnixReplySocketTests: XCTestCase {
         XCTAssertFalse(server.submit(AgentReply(replyId: replyId, decision: .allow)))
     }
 
+    func testStopThenStartRebindsTheSamePath() throws {
+        let socketURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("an-reply-rebind-\(UUID().uuidString.prefix(8)).sock")
+        let first = UnixReplyServer(socketURL: socketURL)
+        try first.start()
+        first.stop()
+        let second = UnixReplyServer(socketURL: socketURL)
+        try second.start()
+        defer {
+            second.stop()
+            try? FileManager.default.removeItem(atPath: socketURL.path + ".lock")
+        }
+
+        let replyId = UUID()
+        let helloReady = expectation(description: "hook registered after rebind")
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = UnixReplyClient.awaitReply(
+                id: replyId,
+                socketURL: socketURL,
+                timeoutSeconds: 2,
+                afterRegistration: { helloReady.fulfill() }
+            )
+        }
+        wait(for: [helloReady], timeout: 2)
+        XCTAssertTrue(second.isPending(replyId))
+        XCTAssertTrue(second.submit(AgentReply(replyId: replyId, decision: .deny)))
+    }
+
     func testSubmitUnknownReplyIdReturnsFalse() throws {
         let socketURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("an-reply-\(UUID().uuidString.prefix(8)).sock")

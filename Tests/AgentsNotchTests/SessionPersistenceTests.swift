@@ -209,7 +209,9 @@ final class SessionPersistenceTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(50))
         let saveCountDuringBurst = await persistence.saveInvocationCount
         XCTAssertEqual(saveCountDuringBurst, startupSaveCount)
-        try await Task.sleep(for: .milliseconds(160))
+        for _ in 0..<50 where await persistence.saveInvocationCount == startupSaveCount {
+            try await Task.sleep(for: .milliseconds(20))
+        }
         let saveCountAfterDebounce = await persistence.saveInvocationCount
         XCTAssertEqual(saveCountAfterDebounce, startupSaveCount + 1)
     }

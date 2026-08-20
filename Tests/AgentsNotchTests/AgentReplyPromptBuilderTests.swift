@@ -67,6 +67,53 @@ final class AgentReplyPromptBuilderTests: XCTestCase {
         XCTAssertEqual(pending.detail, "Split hook install by config shape")
     }
 
+    func testAskUserQuestionWithTooManyEntriesDoesNotAwaitReply() throws {
+        let questions = (1...5).map {
+            """
+            {"question": "Question \($0)?", "options": [{"label": "A"}, {"label": "B"}]}
+            """
+        }.joined(separator: ",")
+        let payload = try decode("""
+        {
+          "session_id": "q-overflow",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "AskUserQuestion",
+          "tool_input": {"questions": [\(questions)]}
+        }
+        """)
+        let pending = try XCTUnwrap(AgentReplyPromptBuilder.make(payload: payload, replyId: UUID()))
+
+        XCTAssertEqual(pending.kind, .question)
+        XCTAssertEqual(pending.prompt, "Answer in Claude")
+        XCTAssertEqual(pending.grants, [])
+        XCTAssertFalse(AgentReplyPolicy.shouldAwaitReply(pending))
+    }
+
+    func testAskUserQuestionWithUnparseableOptionsDoesNotAwaitReply() throws {
+        let payload = try decode("""
+        {
+          "session_id": "q-empty",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "AskUserQuestion",
+          "tool_input": {
+            "questions": [{"question": "Which path?", "options": []}]
+          }
+        }
+        """)
+        let pending = try XCTUnwrap(AgentReplyPromptBuilder.make(payload: payload, replyId: UUID()))
+
+        XCTAssertEqual(pending.grants, [])
+        XCTAssertFalse(AgentReplyPolicy.shouldAwaitReply(pending))
+        XCTAssertTrue(AgentReplyPolicy.shouldAwaitReply(AgentPendingReply(
+            replyId: UUID(),
+            kind: .permission,
+            prompt: "Allow?",
+            grants: [.deny, .allow]
+        )))
+    }
+
     func testOnlyCodexAndClaudeCanDecide() {
         XCTAssertTrue(AgentReplyPolicy.canDecide(provider: .codex))
         XCTAssertTrue(AgentReplyPolicy.canDecide(provider: .claudeCode))

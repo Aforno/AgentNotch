@@ -126,7 +126,7 @@ struct GroupedHooksInstall: HookInstallStrategy {
             guard var groups = hooks[eventName] as? [[String: Any]] else {
                 throw ProviderIntegrationError.invalidHookEvent(eventName, hooksURL.path)
             }
-            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay) }
+            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay, eventName: eventName) }
             groups.append(contentsOf: newGroups)
             hooks[eventName] = groups
         }
@@ -147,7 +147,7 @@ struct GroupedHooksInstall: HookInstallStrategy {
 
         for eventName in Array(hooks.keys) {
             guard var groups = hooks[eventName] as? [[String: Any]] else { continue }
-            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay) }
+            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay, eventName: eventName) }
             if groups.isEmpty {
                 hooks.removeValue(forKey: eventName)
             } else {
@@ -203,17 +203,21 @@ struct GroupedHooksInstall: HookInstallStrategy {
         guard let configuration = try? io.readRoot(at: hooksURL),
               let hooks = try? io.hooksDictionary(in: configuration.root, hooksURL: hooksURL)
         else { return false }
-        return hooks.values.contains { value in
+        return hooks.contains { eventName, value in
             let groups = value as? [[String: Any]] ?? []
             return groups.contains { group in
-                handlers(in: group).contains { relay.identity(of: $0).isOwned }
+                handlers(in: group).contains { relay.identity(of: $0, eventName: eventName).isOwned }
             }
         }
     }
 
-    private func removeOwnedHandlers(from group: [String: Any], relay: HookRelayIdentity) -> [String: Any]? {
+    private func removeOwnedHandlers(
+        from group: [String: Any],
+        relay: HookRelayIdentity,
+        eventName: String
+    ) -> [String: Any]? {
         guard var hooks = group["hooks"] as? [[String: Any]] else { return group }
-        hooks.removeAll { relay.identity(of: $0).isOwned }
+        hooks.removeAll { relay.identity(of: $0, eventName: eventName).isOwned }
         guard !hooks.isEmpty else { return nil }
         var updated = group
         updated["hooks"] = hooks
@@ -300,7 +304,7 @@ struct CursorHooksInstall: HookInstallStrategy {
 
         for eventName in Array(hooks.keys) {
             guard var handlers = hooks[eventName] as? [[String: Any]] else { continue }
-            handlers.removeAll { relay.identity(of: $0).isOwned }
+            handlers.removeAll { relay.identity(of: $0, eventName: eventName).isOwned }
             if handlers.isEmpty {
                 hooks.removeValue(forKey: eventName)
             } else {
@@ -335,9 +339,9 @@ struct CursorHooksInstall: HookInstallStrategy {
         guard let configuration = try? io.readRoot(at: hooksURL),
               let hooks = try? io.hooksDictionary(in: configuration.root, hooksURL: hooksURL)
         else { return false }
-        return hooks.values.contains { value in
+        return hooks.contains { eventName, value in
             let handlers = value as? [[String: Any]] ?? []
-            return handlers.contains { relay.identity(of: $0).isOwned }
+            return handlers.contains { relay.identity(of: $0, eventName: eventName).isOwned }
         }
     }
 }

@@ -51,7 +51,8 @@ do {
            let pending = AgentReplyPromptBuilder.make(
             payload: enriched.payload,
             replyId: UUID()
-           )
+           ),
+           AgentReplyPolicy.shouldAwaitReply(pending)
         {
             event.pendingReply = pending
             let waitingEvent = event

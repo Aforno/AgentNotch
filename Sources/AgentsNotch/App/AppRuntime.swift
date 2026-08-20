@@ -106,7 +106,7 @@ final class AppRuntime {
                 homeDirectoryURL: providerHomeDirectoryURL,
                 bundledRelayURL: bundledRelayURL,
                 answersFromNotch: {
-                    answersFromNotch() && answerModeAvailability.value
+                    answersFromNotch() && !privacyModeEnabled() && answerModeAvailability.value
                 }
             )
         }
@@ -200,6 +200,22 @@ final class AppRuntime {
             answerModeAvailability.value = false
             replySocketError = nil
         }
+        refreshProviderHooks()
+    }
+
+    func applyPrivacyModeEnabled(_ enabled: Bool) {
+        if enabled {
+            replyServer?.stop()
+            replyServer = nil
+            liveReplyIDs = []
+            answerModeAvailability.value = false
+        } else if answersFromNotch(), replyServer == nil {
+            _ = startReplySocket()
+        }
+        refreshProviderHooks()
+    }
+
+    private func refreshProviderHooks() {
         guard monitorProviders else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
