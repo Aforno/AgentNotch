@@ -7,7 +7,7 @@ struct AgentDetailView: View {
     let children: [AgentSession]
     let onBack: () -> Void
     let onSelectSession: (String) -> Void
-    let onOpen: () -> Void
+    let onOpen: (OriginOpenAction) -> Void
     let canAnswer: Bool
     let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     let outerCornerRadius: CGFloat
@@ -145,7 +145,7 @@ struct AgentDetailView: View {
                             // treats `onPreferenceChange` as `@Sendable`.
                             .id(AgentDetailHeightSignal(
                                 contentHeight: contentHeight,
-                                showsOriginControl: showsOriginControl
+                                originActionCount: originDestinations.count
                             ))
                     }
                 }
@@ -153,50 +153,52 @@ struct AgentDetailView: View {
             .scrollIndicators(.never)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if showsOriginControl {
-                Button(action: onOpen) {
-                    HStack(spacing: DynamicIslandSpacing.related) {
-                        Image(systemName: "arrow.up.forward.app")
-                        Text(canOpenApplication ? "Open session" : "Reveal repository")
+            if !originDestinations.isEmpty {
+                HStack(spacing: DynamicIslandSpacing.related) {
+                    ForEach(originDestinations, id: \.action) { destination in
+                        Button {
+                            onOpen(destination.action)
+                        } label: {
+                            HStack(spacing: DynamicIslandSpacing.related) {
+                                Image(systemName: destination.systemImage)
+                                Text(destination.title)
+                            }
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.78))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 30)
+                            .background(
+                                .white.opacity(0.09),
+                                in: RoundedRectangle(
+                                    cornerRadius: DynamicIslandSpacing.insetCornerRadius(
+                                        outerRadius: outerCornerRadius
+                                    ),
+                                    style: .continuous
+                                )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(destination.title)
                     }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.78))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 30)
-                    .background(
-                        .white.opacity(0.09),
-                        in: RoundedRectangle(
-                            cornerRadius: DynamicIslandSpacing.insetCornerRadius(
-                                outerRadius: outerCornerRadius
-                            ),
-                            style: .continuous
-                        )
-                    )
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, DynamicIslandSpacing.outer)
-                .accessibilityLabel(canOpenApplication ? "Open session" : "Reveal repository")
             }
         }
         .padding(.bottom, DynamicIslandSpacing.outer)
     }
 
-    private var canOpenApplication: Bool {
-        OriginActivationService.canOpenApplication(for: session)
-    }
-
-    private var showsOriginControl: Bool {
-        canOpenApplication || session.workingDirectory != nil
+    private var originDestinations: [OriginOpenDestination] {
+        OriginActivationService.destinations(for: session)
     }
 
     private func reportIdealHeight(_ contentHeight: CGFloat) {
         guard contentHeight > 0 else { return }
-        let fixedChromeHeight: CGFloat = showsOriginControl ? 98 : 56
+        let fixedChromeHeight: CGFloat = originDestinations.isEmpty ? 56 : 98
         onIdealHeightChange(contentHeight + fixedChromeHeight)
     }
 }
 
 private struct AgentDetailHeightSignal: Hashable {
     var contentHeight: CGFloat
-    var showsOriginControl: Bool
+    var originActionCount: Int
 }

@@ -352,7 +352,7 @@ struct NotchRootView: View {
                         .sorted { $0.updatedAt > $1.updatedAt },
                     onBack: { withPresentationAnimation { selectedSessionID = nil } },
                     onSelectSession: { id in withPresentationAnimation { selectedSessionID = id } },
-                    onOpen: { runtime.open(session) },
+                    onOpen: { runtime.open(session, action: $0) },
                     canAnswer: runtime.canAnswer(session),
                     onAnswer: { decision, optionId, answers in
                         runtime.answer(session, decision: decision, optionId: optionId, answers: answers)

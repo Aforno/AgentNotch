@@ -5,7 +5,7 @@ struct ActivitySessionDetailView: View {
     let session: AgentSession
     let parent: AgentSession?
     let children: [AgentSession]
-    let onOpen: () -> Void
+    let onOpen: (OriginOpenAction) -> Void
     let onOpenFile: (String) -> Void
     let onSelectSession: (String) -> Void
 
@@ -100,10 +100,14 @@ struct ActivitySessionDetailView: View {
                     .font(NotchWindowFont.footnote)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
 
-                Button(action: onOpen) {
-                    Label("Open Origin", systemImage: "arrow.up.forward.app")
+                ForEach(OriginActivationService.destinations(for: session), id: \.action) { destination in
+                    Button {
+                        onOpen(destination.action)
+                    } label: {
+                        Label(destination.title, systemImage: destination.systemImage)
+                    }
+                    .buttonStyle(NotchPillButtonStyle())
                 }
-                .buttonStyle(NotchPillButtonStyle())
             }
 
             Text(session.task)

@@ -459,6 +459,10 @@ final class AppRuntime {
         originActivation.open(session)
     }
 
+    func open(_ session: AgentSession, action: OriginOpenAction) {
+        originActivation.open(session, action: action)
+    }
+
     func openFile(_ path: String) {
         originActivation.openFile(path)
     }

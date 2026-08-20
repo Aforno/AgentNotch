@@ -20,6 +20,8 @@ pills.
 - Command-1, the notch chrome, or the global activity shortcut opens Activity
   Center.
 - A clicked thread stays pinned until Back or a click outside the notch.
+- Thread detail offers Open session/Open app and Open terminal as separate
+  actions when both origins exist. Reveal repository is only the fallback.
 
 UI behavior and layout changes need `./script/build_and_run.sh --verify` plus
 visual inspection of the packaged app at native scale. Socket and process

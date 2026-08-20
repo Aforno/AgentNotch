@@ -12,6 +12,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   prompts with Deny, Allow, or a listed option. The setting is off by default.
   Grok, Gemini, Cursor, and OpenCode remain display-only. Privacy mode hides
   the prompt and disables its buttons.
+- Session detail can open the provider session or IDE separately from the
+  captured terminal. Terminal.app and iTerm2 also focus the recorded tab when
+  the relay has a TTY or session id. Finder still reveals the working directory
+  when neither origin is available.
 - Homebrew cask install from this repository:
   `brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch` then
   `brew install --cask aforno/agentnotch/agents-notch`.

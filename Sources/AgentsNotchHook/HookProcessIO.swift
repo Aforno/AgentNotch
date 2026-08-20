@@ -46,37 +46,10 @@ enum HookProcessIO {
     }
 
     static func origin() -> AgentOrigin? {
-        let environment = ProcessInfo.processInfo.environment
-        let processIdentifier = getppid()
-        let terminalProgram = environment["TERM_PROGRAM"]
-        let bundleIdentifier = environment["AGENTS_NOTCH_BUNDLE_IDENTIFIER"]
-            ?? environment["__CFBundleIdentifier"]
-            ?? terminalProgram.flatMap(bundleIdentifier(forTerminalProgram:))
-        let sessionIdentifier = environment["TERM_SESSION_ID"]
-            ?? environment["ITERM_SESSION_ID"]
-            ?? environment["WEZTERM_PANE"]
-            ?? environment["KITTY_WINDOW_ID"]
-        let origin = AgentOrigin(
-            bundleIdentifier: bundleIdentifier?.nonEmpty,
-            processIdentifier: processIdentifier,
-            processStartedAt: AgentProcessIdentity.startedAt(for: processIdentifier),
-            terminalProgram: terminalProgram?.nonEmpty,
-            terminalSessionIdentifier: sessionIdentifier?.nonEmpty,
-            tty: environment["TTY"]?.nonEmpty
+        AgentOrigin.captured(
+            environment: ProcessInfo.processInfo.environment,
+            processIdentifier: getppid()
         )
-        return origin.isEmpty ? nil : origin
-    }
-
-    private static func bundleIdentifier(forTerminalProgram program: String) -> String? {
-        switch program.lowercased() {
-        case "apple_terminal": "com.apple.Terminal"
-        case "iterm.app": "com.googlecode.iterm2"
-        case "vscode": "com.microsoft.VSCode"
-        case "warpterminal": "dev.warp.Warp-Stable"
-        case "wezterm": "com.github.wez.wezterm"
-        case "ghostty": "com.mitchellh.ghostty"
-        default: nil
-        }
     }
 }
 
