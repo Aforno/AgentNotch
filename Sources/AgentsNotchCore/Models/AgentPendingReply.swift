@@ -131,10 +131,13 @@ public struct AgentReplyAcknowledgement: Codable, Sendable, Equatable {
 public enum AgentReplyPolicy {
     public static let waitSeconds = 120
 
-    /// Claude PreToolUse matcher for tools that stay asynchronous observers.
-    public static let claudePassiveToolMatcher = "^(?!AskUserQuestion$|ExitPlanMode$).*"
-    /// Claude PreToolUse matcher for tools that block until the user answers.
+    /// Claude `PreToolUse` matcher for the tools the notch can answer.
+    /// Hook install and install verification must share this constant.
     public static let claudeInteractiveToolMatcher = "AskUserQuestion|ExitPlanMode"
+
+    /// Claude `PreToolUse` matcher for tools that remain passive observers
+    /// while Answer from the notch is enabled.
+    public static let claudePassiveToolMatcher = "^(?!AskUserQuestion$|ExitPlanMode$).*"
 
     public static func waitsForAnswer(eventName: String, toolName: String? = nil) -> Bool {
         switch HookEventName(rawEventName: eventName) {

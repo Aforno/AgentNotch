@@ -18,6 +18,9 @@ public final class UnixReplyServer: @unchecked Sendable {
 
     private let socketURL: URL
     private let pendingChanged: @Sendable (Set<UUID>) -> Void
+    /// Guards `descriptor`, `ownedInode`, `listener`, `pending`, and `clients`.
+    /// `descriptor` is also read by the accept thread, so every access must
+    /// go through this lock to stay data-race free.
     private let lock = NSLock()
     private let clientsQueue = DispatchQueue(
         label: "com.agentsnotch.reply.clients",
@@ -43,7 +46,7 @@ public final class UnixReplyServer: @unchecked Sendable {
     }
 
     public func start() throws {
-        guard descriptor == -1 else { return }
+        guard lock.withLock({ descriptor == -1 }) else { return }
         try FileManager.default.createDirectory(
             at: socketURL.deletingLastPathComponent(),
             withIntermediateDirectories: true,
@@ -81,7 +84,6 @@ public final class UnixReplyServer: @unchecked Sendable {
 
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw AgentSocketError.systemCall("socket", errno) }
-        descriptor = fd
 
         do {
             var address = try makeReplyAddress(path: socketURL.path)
@@ -98,11 +100,16 @@ public final class UnixReplyServer: @unchecked Sendable {
             guard let inode = replyInode(of: socketURL.path) else {
                 throw AgentSocketError.systemCall("stat", errno)
             }
-            ownedInode = inode
+            lock.withLock {
+                descriptor = fd
+                ownedInode = inode
+            }
         } catch {
             Darwin.close(fd)
-            descriptor = -1
-            ownedInode = nil
+            lock.withLock {
+                descriptor = -1
+                ownedInode = nil
+            }
             if !isReplySocketAccepting(at: socketURL.path) {
                 unlink(socketURL.path)
             }
@@ -114,18 +121,23 @@ public final class UnixReplyServer: @unchecked Sendable {
         }
         thread.name = "com.agentsnotch.reply.listener"
         thread.qualityOfService = .userInitiated
-        listener = thread
+        lock.withLock { listener = thread }
         thread.start()
     }
 
     public func stop() {
-        let fd = descriptor
-        descriptor = -1
-        if fd >= 0 {
-            _ = Darwin.shutdown(fd, SHUT_RDWR)
-            Darwin.close(fd)
+        let state = lock.withLock { () -> (fd: Int32, inode: ino_t?) in
+            let current = descriptor
+            let inode = ownedInode
+            descriptor = -1
+            ownedInode = nil
+            listener = nil
+            return (current, inode)
         }
-        listener = nil
+        if state.fd >= 0 {
+            _ = Darwin.shutdown(state.fd, SHUT_RDWR)
+            Darwin.close(state.fd)
+        }
         lock.lock()
         let openClients = clients
         let hadPendingReplies = !pending.isEmpty
@@ -137,10 +149,9 @@ public final class UnixReplyServer: @unchecked Sendable {
             Darwin.close(client)
         }
         if hadPendingReplies { publishPendingReplies() }
-        if let ownedInode, replyInode(of: socketURL.path) == ownedInode {
+        if let inode = state.inode, replyInode(of: socketURL.path) == inode {
             unlink(socketURL.path)
         }
-        ownedInode = nil
     }
 
     public func isPending(_ replyId: UUID) -> Bool {
@@ -185,7 +196,7 @@ public final class UnixReplyServer: @unchecked Sendable {
 
     private func acceptLoop() {
         while true {
-            let listenFD = descriptor
+            let listenFD = lock.withLock { descriptor }
             guard listenFD >= 0 else { return }
             let client = Darwin.accept(listenFD, nil, nil)
             if client < 0 {
@@ -301,6 +312,9 @@ public final class UnixReplyServer: @unchecked Sendable {
 }
 
 public enum UnixReplyClient {
+    /// The default timeout is 10 seconds shorter than the provider hook's
+    /// 120-second timeout so the hook process still has time to write its
+    /// passive response and exit 0 after a notch wait fails open.
     public static func awaitReply(
         id: UUID,
         socketURL: URL = AgentReplySocketLocation.defaultURL,
