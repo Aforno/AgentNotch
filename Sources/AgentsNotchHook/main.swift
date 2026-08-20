@@ -14,6 +14,7 @@ if invocation.skipCompatibilityHook {
 do {
     let payload = try AgentHookInput.decode(input)
     let enriched = ProviderHookEnricher.enrich(payload, provider: invocation.provider)
+    var answered = false
     if var event = AgentHookEventMapper.map(
         enriched.payload,
         provider: invocation.provider,
@@ -40,7 +41,6 @@ do {
         if let rawURL = ProcessInfo.processInfo.environment["AGENTS_NOTCH_APPLICATION_URL"] {
             event.applicationURL = URL(string: rawURL)
         }
-        var answered = false
         if invocation.answersFromNotch,
            event.type == .waiting,
            AgentReplyPolicy.canDecide(provider: invocation.provider),
@@ -81,17 +81,6 @@ do {
         } else {
             try? UnixSocketClient.send(event, to: invocation.socketURL)
         }
-        if answered {
-            if var workflowEvent = enriched.workflowEvent {
-                if invocation.isSelfTest {
-                    var metadata = workflowEvent.metadata ?? [:]
-                    metadata["source"] = "self-test"
-                    workflowEvent.metadata = metadata
-                }
-                try? UnixSocketClient.send(workflowEvent, to: invocation.socketURL)
-            }
-            exit(EXIT_SUCCESS)
-        }
     }
     if var workflowEvent = enriched.workflowEvent {
         if invocation.isSelfTest {
@@ -100,6 +89,9 @@ do {
             workflowEvent.metadata = metadata
         }
         try? UnixSocketClient.send(workflowEvent, to: invocation.socketURL)
+    }
+    if answered {
+        exit(EXIT_SUCCESS)
     }
     HookProcessIO.writePassiveResponse(for: invocation.provider)
 } catch {

@@ -199,21 +199,7 @@ public final class UnixReplyServer: @unchecked Sendable {
             _ = Darwin.shutdown(client, SHUT_RDWR)
             Darwin.close(client)
         }
-        guard var payload = try? JSONEncoder.agentsNotch.encode(reply) else { return false }
-        payload.append(0x0A)
-        let delivered = payload.withUnsafeBytes { bytes in
-            var offset = 0
-            while offset < bytes.count {
-                let written = Darwin.write(
-                    client,
-                    bytes.baseAddress!.advanced(by: offset),
-                    bytes.count - offset
-                )
-                guard written > 0 else { return false }
-                offset += written
-            }
-            return true
-        }
+        let delivered = writeLine(reply, to: client)
         publishPendingReplies()
         return delivered
     }
@@ -383,24 +369,7 @@ public enum UnixReplyClient {
         }
         guard connected == 0 else { return nil }
 
-        guard var hello = try? JSONEncoder.agentsNotch.encode(AgentReplyHello(replyId: id)) else {
-            return nil
-        }
-        hello.append(0x0A)
-        let wroteHello: Bool = hello.withUnsafeBytes { bytes in
-            var offset = 0
-            while offset < bytes.count {
-                let written = Darwin.write(
-                    fd,
-                    bytes.baseAddress!.advanced(by: offset),
-                    bytes.count - offset
-                )
-                guard written > 0 else { return false }
-                offset += written
-            }
-            return true
-        }
-        guard wroteHello else { return nil }
+        guard writeLine(AgentReplyHello(replyId: id), to: fd) else { return nil }
         guard let ackData = readReplyLine(from: fd, maximumBytes: 1_024),
               let ack = try? JSONDecoder.agentsNotch.decode(AgentReplyAcknowledgement.self, from: ackData),
               ack.registered

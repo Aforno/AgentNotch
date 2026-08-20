@@ -18,10 +18,8 @@ public enum ProviderDecisionMapper {
         reply: AgentReply
     ) -> [String: Any] {
         switch (provider, HookEventName(rawEventName: payload.hookEventName)) {
-        case (.codex, .permissionRequest):
-            return permissionOutput(eventName: "PermissionRequest", reply: reply)
-        case (.claudeCode, .permissionRequest):
-            return permissionOutput(eventName: "PermissionRequest", reply: reply)
+        case (.codex, .permissionRequest), (.claudeCode, .permissionRequest):
+            return permissionOutput(reply: reply)
         case (.claudeCode, .preToolUse):
             switch payload.toolName.map(ProviderEventPolicy.toolIdentifier) {
             case "askuserquestion": return claudeQuestionOutput(payload: payload, reply: reply)
@@ -35,14 +33,11 @@ public enum ProviderDecisionMapper {
         }
     }
 
-    private static func permissionOutput(
-        eventName: String,
-        reply: AgentReply
-    ) -> [String: Any] {
+    private static func permissionOutput(reply: AgentReply) -> [String: Any] {
         let allowed = reply.decision == .allow
         return [
             "hookSpecificOutput": [
-                "hookEventName": eventName,
+                "hookEventName": "PermissionRequest",
                 "decision": decisionBody(allowed: allowed),
             ] as [String: Any],
         ]

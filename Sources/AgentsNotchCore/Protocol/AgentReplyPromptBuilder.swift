@@ -10,9 +10,6 @@ public enum AgentReplyPromptBuilder {
         if ProviderEventPolicy.isInteractiveTool(payload.toolName) {
             return interactivePrompt(payload: payload, replyId: replyId)
         }
-        if HookEventName(rawEventName: payload.hookEventName) == .permissionRequest {
-            return permissionPrompt(payload: payload, replyId: replyId)
-        }
         if HookEventName(rawEventName: payload.hookEventName) == .elicitation
             || ProviderEventPolicy.isWaitingNotification(payload.notificationType)
         {
