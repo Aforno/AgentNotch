@@ -58,7 +58,19 @@ The `Release` workflow requires these repository Actions secrets:
 Push a signed `vX.Y.Z` tag only after CI passes. The workflow validates that
 the tag matches `VERSION`, imports the temporary certificate, builds and
 notarizes the app, creates the checksum, and publishes both files to the GitHub
-release.
+release. After the GitHub files are up, it points `Casks/agents-notch.rb` at
+that ZIP and checksum and pushes the cask bump to the default branch. Homebrew
+users on this tap pick that up with `brew update`.
+
+If the cask commit cannot push, update it locally from the published checksum:
+
+```sh
+./script/update_cask.sh --version "$(tr -d '[:space:]' < VERSION)" \
+  --checksum-file "dist/Agents-Notch-$(tr -d '[:space:]' < VERSION)-macOS-arm64.zip.sha256"
+```
+
+Do not rewrite the cask SHA-256 during release prep. The checksum belongs to the
+notarized GitHub artifact, not a local ad-hoc rebuild.
 
 Signing credentials are an external release gate. Never commit them to this
 repository or print them in workflow logs.

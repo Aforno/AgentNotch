@@ -15,6 +15,20 @@ integration sends the same `AgentEvent` values to a local socket.
 
 Requirements: Apple Silicon Mac and macOS 14 or later.
 
+### Homebrew
+
+This repository is a Homebrew tap. Install the current GitHub release with:
+
+```sh
+brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch
+brew install --cask agents-notch
+```
+
+Later cask bumps land on `main`. Update with `brew update` and
+`brew upgrade --cask agents-notch`.
+
+### Manual
+
 When a release is up, download the ZIP and the matching `.sha256` file from the
 [GitHub releases page](../../releases). Verify it before you open the app:
 
@@ -226,6 +240,12 @@ are opt-in and delivered by macOS.
 Remove each installed provider integration from Settings → Integrations before
 deleting the app. That deletes only Agents Notch hook entries. Other provider
 config stays.
+
+If you installed with Homebrew:
+
+```sh
+brew uninstall --cask agents-notch
+```
 
 After quitting, optional local history and the copied relay live in:
 
