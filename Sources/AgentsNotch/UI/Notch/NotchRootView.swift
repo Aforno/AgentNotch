@@ -92,8 +92,8 @@ struct NotchRootView: View {
                     radius: min(10, geometry.notchHeight * 0.32)
                 )
             }
-                return NotchLayout(
-                    width: geometry.notchWidth
+            return NotchLayout(
+                width: geometry.notchWidth
                     + DynamicIslandSpacing.compactEarWidth(for: snapshot.activeGroupCount) * 2,
                 height: geometry.notchHeight + 2,
                 radius: min(10, (geometry.notchHeight + 2) * 0.32)

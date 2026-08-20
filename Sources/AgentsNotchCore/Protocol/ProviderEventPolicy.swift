@@ -1,7 +1,7 @@
 import Foundation
 
-/// Per-provider skip and enrich rules. `AgentHookEventMapper` stays a switch
-/// on `HookEventName`; vendor quirks live here.
+/// Shared event semantics. `AgentHookEventMapper` stays a switch on
+/// `HookEventName`; provider quirks live in the per-provider policy types.
 public enum ProviderEventPolicy {
     public static func shouldMapSessionStart(
         provider: AgentProvider,
@@ -9,9 +9,7 @@ public enum ProviderEventPolicy {
     ) -> Bool {
         switch provider {
         case .grok:
-            // Grok emits SessionStart for non-agent commands such as
-            // `grok --version`, then exits without a matching SessionEnd.
-            return false
+            return GrokEventPolicy.shouldMapSessionStart
         default:
             return !isLifecycleReentry(source: source)
         }
@@ -22,29 +20,31 @@ public enum ProviderEventPolicy {
         payload: AgentHookPayload,
         parentSessionId: String?
     ) -> Bool {
-        provider == .grok
-            && payload.agentId?.nonEmpty == nil
-            && parentSessionId == nil
+        GrokEventPolicy.remapsParentScopedSubagent(
+            provider: provider,
+            payload: payload,
+            parentSessionId: parentSessionId
+        )
     }
 
     public static func isInteractiveTool(_ toolName: String?) -> Bool {
-        ClaudeCode.isInteractiveTool(toolName)
+        ClaudeEventPolicy.isInteractiveTool(toolName)
     }
 
     public static func interactiveToolActivity(for payload: AgentHookPayload) -> String {
-        ClaudeCode.interactiveToolActivity(for: payload)
+        ClaudeEventPolicy.interactiveToolActivity(for: payload)
     }
 
     public static func isWaitingNotification(_ type: String?) -> Bool {
-        ClaudeCode.isWaitingNotification(type)
+        ClaudeEventPolicy.isWaitingNotification(type)
     }
 
     public static func waitingNotificationActivity(for type: String?, message: String?) -> String {
-        ClaudeCode.waitingNotificationActivity(for: type, message: message)
+        ClaudeEventPolicy.waitingNotificationActivity(for: type, message: message)
     }
 
     public static func approvalActivity(for payload: AgentHookPayload) -> String {
-        ClaudeCode.approvalActivity(for: payload)
+        ClaudeEventPolicy.approvalActivity(for: payload)
     }
 
     public static func toolPresentation(
@@ -79,8 +79,8 @@ public enum ProviderEventPolicy {
             ),
             file: file,
             rawTool: rawTool,
-            plan: Codex.planSnapshot(from: payload, tool: semanticTool, now: now),
-            workflowUpdate: Codex.workflowUpdate(
+            plan: CodexEventPolicy.planSnapshot(from: payload, tool: semanticTool, now: now),
+            workflowUpdate: CodexEventPolicy.workflowUpdate(
                 from: payload,
                 tool: semanticTool,
                 sessionId: sessionId
@@ -96,148 +96,6 @@ public enum ProviderEventPolicy {
         public let rawTool: String
         public let plan: AgentPlan?
         public let workflowUpdate: AgentWorkflowUpdate?
-    }
-
-    public enum Codex {
-        public static func planSnapshot(
-            from payload: AgentHookPayload,
-            tool: String,
-            now: Date
-        ) -> AgentPlan? {
-            guard tool == "update_plan",
-                  let values = payload.toolInput?["plan"]?.arrayValue
-            else { return nil }
-
-            let steps = values.enumerated().compactMap { index, value -> AgentStep? in
-                guard let object = value.objectValue,
-                      let title = object["step"]?.stringValue?.nonEmpty
-                else { return nil }
-                return AgentStep(
-                    id: "plan-step-\(index)",
-                    title: title,
-                    status: stepStatus(from: object["status"]?.stringValue)
-                )
-            }
-            guard !steps.isEmpty else { return nil }
-            return AgentPlan(
-                title: payload.toolInput?["title"]?.stringValue?.nonEmpty,
-                explanation: payload.toolInput?["explanation"]?.stringValue?.nonEmpty,
-                steps: steps,
-                updatedAt: now
-            )
-        }
-
-        public static func workflowUpdate(
-            from payload: AgentHookPayload,
-            tool: String,
-            sessionId: String
-        ) -> AgentWorkflowUpdate? {
-            let workflowID = payload.toolInput?["workflow_id"]?.stringValue?.nonEmpty
-                ?? payload.toolInput?["id"]?.stringValue?.nonEmpty
-                ?? "goal:\(sessionId)"
-            switch tool {
-            case "create_goal":
-                return AgentWorkflowUpdate(
-                    id: workflowID,
-                    title: payload.toolInput?["objective"]?.stringValue?.nonEmpty ?? "Goal",
-                    status: .running
-                )
-            case "update_goal":
-                let status = switch payload.toolInput?["status"]?.stringValue {
-                case "complete", "completed": AgentWorkflowStatus.completed
-                case "blocked": AgentWorkflowStatus.blocked
-                case "failed": AgentWorkflowStatus.failed
-                case "waiting": AgentWorkflowStatus.waiting
-                default: AgentWorkflowStatus.running
-                }
-                return AgentWorkflowUpdate(id: workflowID, status: status)
-            default:
-                return nil
-            }
-        }
-    }
-
-    public enum ClaudeCode {
-        /// AskUserQuestion and ExitPlanMode pause for user input.
-        public static func isInteractiveTool(_ toolName: String?) -> Bool {
-            switch toolName.map(toolIdentifier) {
-            case "askuserquestion", "exitplanmode": true
-            default: false
-            }
-        }
-
-        public static func interactiveToolActivity(for payload: AgentHookPayload) -> String {
-            switch payload.toolName.map(toolIdentifier) {
-            case "askuserquestion":
-                if let questions = payload.toolInput?["questions"]?.arrayValue {
-                    for question in questions {
-                        if let text = question.objectValue?["question"]?.stringValue?.nonEmpty {
-                            return concise(text, limit: 90)
-                        }
-                    }
-                }
-                return "Needs an answer"
-            case "exitplanmode":
-                return "Needs plan approval"
-            default:
-                return "Needs approval"
-            }
-        }
-
-        public static func isWaitingNotification(_ type: String?) -> Bool {
-            switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-            case "permission_prompt", "idle_prompt", "agent_needs_input",
-                 "elicitation_dialog", "elicitation_url_dialog",
-                 "toolpermission", "tool_permission":
-                return true
-            default:
-                return false
-            }
-        }
-
-        public static func waitingNotificationActivity(for type: String?, message: String?) -> String {
-            if let message = message?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
-                return concise(message, limit: 90)
-            }
-            switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-            case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog",
-                 "toolpermission", "tool_permission":
-                return "Needs approval"
-            default:
-                return "Waiting for input"
-            }
-        }
-
-        public static func approvalActivity(for payload: AgentHookPayload) -> String {
-            guard let toolName = payload.toolName else { return "Needs approval" }
-            switch toolIdentifier(toolName) {
-            case "bash": return "Needs command approval"
-            case "apply_patch", "edit", "write": return "Needs edit approval"
-            case "askuserquestion": return "Needs an answer"
-            case "exitplanmode": return "Needs plan approval"
-            default: return "Needs approval for \(displayTool(toolName))"
-            }
-        }
-    }
-
-    public enum Grok {
-        public static func shouldPublishWorkflowState(_ payload: AgentHookPayload) -> Bool {
-            switch HookEventName(rawEventName: payload.hookEventName) {
-            case .subagentStart, .subagentStop, .sessionEnd, .stop:
-                return true
-            default:
-                return payload.toolName?.lowercased() == "workflow"
-            }
-        }
-
-        public static func shouldResolveSessionContext(_ payload: AgentHookPayload) -> Bool {
-            if shouldPublishWorkflowState(payload) { return true }
-            if HookEventName(rawEventName: payload.hookEventName) == .userPromptSubmit {
-                return true
-            }
-            if payload.parentSessionId?.nonEmpty != nil { return false }
-            return true
-        }
     }
 
     private static func toolActivity(
@@ -280,17 +138,7 @@ public enum ProviderEventPolicy {
         }
     }
 
-    private static func stepStatus(from value: String?) -> AgentStepStatus {
-        switch value?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "in_progress", "running": .inProgress
-        case "completed", "complete", "done": .completed
-        case "failed": .failed
-        case "blocked": .blocked
-        default: .pending
-        }
-    }
-
-    fileprivate static func toolIdentifier(_ tool: String) -> String {
+    static func toolIdentifier(_ tool: String) -> String {
         tool.split(separator: "__").last.map(String.init)?.lowercased() ?? tool.lowercased()
     }
 
@@ -303,7 +151,7 @@ public enum ProviderEventPolicy {
         }
     }
 
-    fileprivate static func displayTool(_ tool: String) -> String {
+    static func displayTool(_ tool: String) -> String {
         if tool == "Bash" { return "command" }
         if tool.hasPrefix("mcp__") {
             return tool.split(separator: "__").last.map(String.init) ?? "tool"

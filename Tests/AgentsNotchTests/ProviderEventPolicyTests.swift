@@ -67,7 +67,7 @@ final class ProviderEventPolicyTests: XCTestCase {
         """#)
         let now = Date(timeIntervalSince1970: 100)
         let plan = try XCTUnwrap(
-            ProviderEventPolicy.Codex.planSnapshot(from: payload, tool: "update_plan", now: now)
+            CodexEventPolicy.planSnapshot(from: payload, tool: "update_plan", now: now)
         )
         XCTAssertEqual(plan.title, "Ship")
         XCTAssertEqual(plan.steps.first?.title, "Inspect")

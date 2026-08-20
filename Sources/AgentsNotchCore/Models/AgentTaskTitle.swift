@@ -1,16 +1,14 @@
 import Foundation
 
-/// Titles derived from provider prompts. Grok wraps the visible user message in
-/// `<user_query>` tags, so the first raw line is often the tag itself. Follow-up
-/// turns may send only an image placeholder.
+/// Generic title cleanup: drop empty values, image placeholders, markup tags,
+/// system prompts, and housekeeping text. Provider prompt unwrapping happens
+/// before this runs.
 public enum AgentTaskTitle {
     public static let untitled = "Untitled task"
 
     public static func fromPrompt(_ prompt: String, limit: Int = 140) -> String? {
-        let source = unwrapUserQuery(prompt)
-        let line = source
+        let line = prompt
             .split(whereSeparator: \.isNewline)
-            .map { stripLeadingUserQueryTag(String($0)) }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .compactMap(displayable)
             .first ?? ""
@@ -50,31 +48,6 @@ public enum AgentTaskTitle {
         if displayable(current) == nil { return incoming }
         if let projectName, current == projectName { return incoming }
         return current
-    }
-
-    private static func unwrapUserQuery(_ prompt: String) -> String {
-        let open = "<user_query>"
-        let close = "</user_query>"
-        guard let openRange = prompt.range(of: open, options: .caseInsensitive),
-              let closeRange = prompt.range(
-                of: close,
-                options: .caseInsensitive,
-                range: openRange.upperBound..<prompt.endIndex
-              )
-        else { return prompt }
-        return String(prompt[openRange.upperBound..<closeRange.lowerBound])
-    }
-
-    private static func stripLeadingUserQueryTag(_ line: String) -> String {
-        let prefixes = ["<user_query>", "</user_query>"]
-        for prefix in prefixes {
-            if line.count >= prefix.count,
-               line.prefix(prefix.count).caseInsensitiveCompare(prefix) == .orderedSame
-            {
-                return String(line.dropFirst(prefix.count))
-            }
-        }
-        return line
     }
 
     private static func strippingImagePlaceholders(_ text: String) -> String {

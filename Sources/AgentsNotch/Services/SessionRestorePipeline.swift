@@ -2,7 +2,7 @@ import AgentsNotchCore
 import Foundation
 
 /// Launch-time restore: load history, reconcile runners, apply provider-owned
-/// title/hierarchy evidence, then persist the migrated snapshot.
+/// title/hierarchy evidence, then persist the normalized snapshot.
 @MainActor
 enum SessionRestorePipeline {
     struct Result {

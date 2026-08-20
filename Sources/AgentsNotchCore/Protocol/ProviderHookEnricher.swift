@@ -41,7 +41,7 @@ public enum ProviderHookEnricher {
         ) -> ProviderHookEnrichment {
             var payload = payload
             let context: GrokSessionContext?
-            if ProviderEventPolicy.Grok.shouldResolveSessionContext(payload) {
+            if GrokEventPolicy.shouldResolveSessionContext(payload) {
                 context = GrokSessionContextResolver.resolve(payload)
             } else {
                 context = nil
@@ -52,7 +52,7 @@ public enum ProviderHookEnricher {
             }
 
             var workflowEvent = context.flatMap {
-                guard ProviderEventPolicy.Grok.shouldPublishWorkflowState(payload) else {
+                guard GrokEventPolicy.shouldPublishWorkflowState(payload) else {
                     return nil as AgentEvent?
                 }
                 return $0.workflowEvent(

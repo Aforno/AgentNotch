@@ -95,7 +95,9 @@ public enum AgentHookEventMapper {
         case .userPromptSubmit:
             return context.event(
                 type: .activity,
-                task: payload.prompt.flatMap { AgentTaskTitle.fromPrompt($0) },
+                task: payload.prompt.flatMap { prompt in
+                    AgentTaskTitle.fromPrompt(visiblePrompt(prompt, provider: context.provider))
+                },
                 activity: "Thinking",
                 state: .thinking
             )
@@ -319,5 +321,14 @@ public enum AgentHookEventMapper {
 
     private static func repositoryName(from cwd: String, provider: AgentProvider) -> String {
         URL(fileURLWithPath: cwd).lastPathComponent.nonEmpty ?? "\(provider.displayName) session"
+    }
+
+    private static func visiblePrompt(_ prompt: String, provider: AgentProvider) -> String {
+        switch provider {
+        case .grok:
+            return GrokEventPolicy.visiblePrompt(prompt)
+        default:
+            return prompt
+        }
     }
 }

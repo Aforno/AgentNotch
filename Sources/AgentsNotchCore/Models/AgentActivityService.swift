@@ -48,7 +48,7 @@ public final class AgentActivityService {
         historyRevision = 0
         index = .empty
         sessionsByID = [:]
-        migrateRestoredHistory()
+        normalizeRestoredSessions()
         self.sessions.sort(by: Self.orderSessions)
         rebuildLookups()
         // Match replaceSessions: seed the temporary attention surface when the
@@ -177,7 +177,7 @@ public final class AgentActivityService {
 
     public func replaceSessions(_ sessions: [AgentSession]) {
         self.sessions = sessions
-        migrateRestoredHistory()
+        normalizeRestoredSessions()
         // Restoring from disk has no live event stream; rebuild the temporary
         // attention surface from any session that is still waiting for input.
         commitSessionChanges(orderSessions: true, attentionRefresh: .always)
@@ -385,9 +385,10 @@ public final class AgentActivityService {
         return true
     }
 
-    /// One-shot history rewrite: drop orphaned Grok SessionStart rows, prefix
+    /// Restore normalization: drop orphaned Grok SessionStart rows, prefix
     /// every session and parent, then keep the newest row per identity.
-    private func migrateRestoredHistory() {
+    /// Idempotent. Runs on init and every replaceSessions restore boundary.
+    private func normalizeRestoredSessions() {
         sessions.removeAll(where: Self.isOrphanedGrokStart)
         for index in sessions.indices {
             namespaceSessionIdentity(&sessions[index])
