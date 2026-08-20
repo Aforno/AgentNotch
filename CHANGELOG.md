@@ -8,6 +8,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- "Answer from the notch" lets users answer Codex and Claude Code permission
+  prompts with Deny, Allow, or a listed option. The setting is off by default.
+  Grok, Gemini, Cursor, and OpenCode remain display-only. Privacy mode hides
+  the prompt and disables its buttons.
 - Homebrew cask install from this repository:
   `brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch` then
   `brew install --cask aforno/agentnotch/agents-notch`.

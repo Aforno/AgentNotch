@@ -8,6 +8,8 @@ struct AgentDetailView: View {
     let onBack: () -> Void
     let onSelectSession: (String) -> Void
     let onOpen: () -> Void
+    let canAnswer: Bool
+    let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     let outerCornerRadius: CGFloat
     let onIdealHeightChange: (CGFloat) -> Void
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
@@ -76,6 +78,13 @@ struct AgentDetailView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white.opacity(0.48))
                     } else {
+                        if canAnswer, let pending = session.pendingReply {
+                            WaitingReplyActions(
+                                pending: pending,
+                                onAnswer: onAnswer
+                            )
+                            .id(pending.replyId)
+                        }
                         AgentRelationshipsView(
                             parent: parent,
                             children: children,

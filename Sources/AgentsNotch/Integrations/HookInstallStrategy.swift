@@ -118,18 +118,16 @@ struct GroupedHooksInstall: HookInstallStrategy {
         var root = configuration.root
         var hooks = try io.hooksDictionary(in: root, hooksURL: hooksURL)
         for eventName in eventNames {
-            let newGroup: [String: Any] = [
-                "hooks": [relay.commandHandler(timeout: timeout(for: eventName), claudeExecForm: usesClaudeExecForm)],
-            ]
+            let newGroups = groupsToInstall(for: eventName, relay: relay)
             if hooks[eventName] == nil {
-                hooks[eventName] = [newGroup]
+                hooks[eventName] = newGroups
                 continue
             }
             guard var groups = hooks[eventName] as? [[String: Any]] else {
                 throw ProviderIntegrationError.invalidHookEvent(eventName, hooksURL.path)
             }
-            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay) }
-            groups.append(newGroup)
+            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay, eventName: eventName) }
+            groups.append(contentsOf: newGroups)
             hooks[eventName] = groups
         }
 
@@ -149,7 +147,7 @@ struct GroupedHooksInstall: HookInstallStrategy {
 
         for eventName in Array(hooks.keys) {
             guard var groups = hooks[eventName] as? [[String: Any]] else { continue }
-            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay) }
+            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay, eventName: eventName) }
             if groups.isEmpty {
                 hooks.removeValue(forKey: eventName)
             } else {
@@ -166,8 +164,28 @@ struct GroupedHooksInstall: HookInstallStrategy {
         else { return false }
         return eventNames.allSatisfy { eventName in
             let groups = hooks[eventName] as? [[String: Any]] ?? []
+            if usesClaudeExecForm, relay.answersFromNotch, eventName == "PreToolUse" {
+                let passiveRelay = HookRelayIdentity(provider: relay.provider, relayURL: relay.relayURL)
+                let hasPassive = groups.contains { group in
+                    group["matcher"] as? String == AgentReplyPolicy.claudePassiveToolMatcher
+                        && handlers(in: group).contains { passiveRelay.identity(of: $0, eventName: eventName) == .current }
+                }
+                let hasAnswer = groups.contains { group in
+                    group["matcher"] as? String == AgentReplyPolicy.claudeInteractiveToolMatcher
+                        && handlers(in: group).contains {
+                            $0["async"] as? Bool == false
+                                && ($0["timeout"] as? Int) == AgentReplyPolicy.waitSeconds
+                                && relay.identity(
+                                    of: $0,
+                                    eventName: eventName,
+                                    blocking: true
+                                ) == .current
+                        }
+                }
+                return hasPassive && hasAnswer
+            }
             return groups.contains { group in
-                handlers(in: group).contains { relay.identity(of: $0) == .current }
+                handlers(in: group).contains { relay.identity(of: $0, eventName: eventName) == .current }
             }
         }
     }
@@ -185,17 +203,21 @@ struct GroupedHooksInstall: HookInstallStrategy {
         guard let configuration = try? io.readRoot(at: hooksURL),
               let hooks = try? io.hooksDictionary(in: configuration.root, hooksURL: hooksURL)
         else { return false }
-        return hooks.values.contains { value in
+        return hooks.contains { eventName, value in
             let groups = value as? [[String: Any]] ?? []
             return groups.contains { group in
-                handlers(in: group).contains { relay.identity(of: $0).isOwned }
+                handlers(in: group).contains { relay.identity(of: $0, eventName: eventName).isOwned }
             }
         }
     }
 
-    private func removeOwnedHandlers(from group: [String: Any], relay: HookRelayIdentity) -> [String: Any]? {
+    private func removeOwnedHandlers(
+        from group: [String: Any],
+        relay: HookRelayIdentity,
+        eventName: String
+    ) -> [String: Any]? {
         guard var hooks = group["hooks"] as? [[String: Any]] else { return group }
-        hooks.removeAll { relay.identity(of: $0).isOwned }
+        hooks.removeAll { relay.identity(of: $0, eventName: eventName).isOwned }
         guard !hooks.isEmpty else { return nil }
         var updated = group
         updated["hooks"] = hooks
@@ -204,6 +226,38 @@ struct GroupedHooksInstall: HookInstallStrategy {
 
     private func handlers(in group: [String: Any]) -> [[String: Any]] {
         group["hooks"] as? [[String: Any]] ?? []
+    }
+
+    private func groupsToInstall(for eventName: String, relay: HookRelayIdentity) -> [[String: Any]] {
+        if usesClaudeExecForm, relay.answersFromNotch, eventName == "PreToolUse" {
+            let passiveRelay = HookRelayIdentity(provider: relay.provider, relayURL: relay.relayURL)
+            return [
+                [
+                    "matcher": AgentReplyPolicy.claudePassiveToolMatcher,
+                    "hooks": [passiveRelay.commandHandler(
+                        timeout: timeout(for: eventName),
+                        claudeExecForm: true,
+                        eventName: eventName
+                    )],
+                ],
+                [
+                    "matcher": AgentReplyPolicy.claudeInteractiveToolMatcher,
+                    "hooks": [relay.commandHandler(
+                        timeout: timeout(for: eventName),
+                        claudeExecForm: true,
+                        eventName: eventName,
+                        blocking: true
+                    )],
+                ],
+            ]
+        }
+        return [[
+            "hooks": [relay.commandHandler(
+                timeout: timeout(for: eventName),
+                claudeExecForm: usesClaudeExecForm,
+                eventName: eventName
+            )],
+        ]]
     }
 }
 
@@ -224,11 +278,11 @@ struct CursorHooksInstall: HookInstallStrategy {
         var hooks = try io.hooksDictionary(in: root, hooksURL: hooksURL)
 
         for eventName in eventNames {
-            let handler = relay.cursorHandler(timeout: timeout(for: eventName))
+            let handler = relay.cursorHandler(timeout: timeout(for: eventName), eventName: eventName)
             guard var handlers = hooks[eventName] as? [[String: Any]] ?? (hooks[eventName] == nil ? [] : nil) else {
                 throw ProviderIntegrationError.invalidHookEvent(eventName, hooksURL.path)
             }
-            handlers.removeAll { relay.identity(of: $0).isOwned }
+            handlers.removeAll { relay.identity(of: $0, eventName: eventName).isOwned }
             handlers.append(handler)
             hooks[eventName] = handlers
         }
@@ -250,7 +304,7 @@ struct CursorHooksInstall: HookInstallStrategy {
 
         for eventName in Array(hooks.keys) {
             guard var handlers = hooks[eventName] as? [[String: Any]] else { continue }
-            handlers.removeAll { relay.identity(of: $0).isOwned }
+            handlers.removeAll { relay.identity(of: $0, eventName: eventName).isOwned }
             if handlers.isEmpty {
                 hooks.removeValue(forKey: eventName)
             } else {
@@ -268,7 +322,7 @@ struct CursorHooksInstall: HookInstallStrategy {
         else { return false }
         return eventNames.allSatisfy { eventName in
             let handlers = hooks[eventName] as? [[String: Any]] ?? []
-            return handlers.contains { relay.identity(of: $0).isOwned }
+            return handlers.contains { relay.identity(of: $0, eventName: eventName) == .current }
         }
     }
 
@@ -285,9 +339,9 @@ struct CursorHooksInstall: HookInstallStrategy {
         guard let configuration = try? io.readRoot(at: hooksURL),
               let hooks = try? io.hooksDictionary(in: configuration.root, hooksURL: hooksURL)
         else { return false }
-        return hooks.values.contains { value in
+        return hooks.contains { eventName, value in
             let handlers = value as? [[String: Any]] ?? []
-            return handlers.contains { relay.identity(of: $0).isOwned }
+            return handlers.contains { relay.identity(of: $0, eventName: eventName).isOwned }
         }
     }
 }

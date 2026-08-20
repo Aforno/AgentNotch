@@ -42,14 +42,17 @@ final class ProviderIntegrationManager {
     private var maintenanceGeneration = 0
 
     nonisolated private let store: ProviderHookStore
+    nonisolated private let answersFromNotch: @Sendable () -> Bool
 
     init(
         provider: AgentProvider,
         fileManager: FileManager = .default,
         homeDirectoryURL: URL? = nil,
-        bundledRelayURL: URL? = nil
+        bundledRelayURL: URL? = nil,
+        answersFromNotch: @escaping @Sendable () -> Bool = { false }
     ) {
         self.provider = provider
+        self.answersFromNotch = answersFromNotch
         store = ProviderHookStore(
             provider: provider,
             fileSystem: ProviderFileSystem(fileManager),
@@ -111,8 +114,9 @@ final class ProviderIntegrationManager {
     func prepareForMonitoring() async {
         maintenanceGeneration &+= 1
         let generation = maintenanceGeneration
+        let answering = answersFromNotch()
         let preparation = await Task.detached(priority: .utility) { [store] in
-            store.prepareForMonitoringOnDisk()
+            store.prepareForMonitoringOnDisk(answersFromNotch: answering)
         }.value
         guard generation == maintenanceGeneration else { return }
         if let error = preparation.error {
@@ -131,7 +135,7 @@ final class ProviderIntegrationManager {
     func install() {
         maintenanceGeneration &+= 1
         do {
-            try store.install()
+            try store.install(answersFromNotch: answersFromNotch())
             status = hasReceivedEvent ? .connected : .awaitingFirstEvent
             lastError = nil
         } catch {

@@ -18,6 +18,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var agentRole: String?
     public var plan: AgentPlan?
     public var workflows: [AgentWorkflow]
+    public var pendingReply: AgentPendingReply?
+    public var pendingReplies: [AgentPendingReply]
 
     public init(event: AgentEvent) {
         id = event.sessionId
@@ -43,6 +45,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         agentRole = event.agentRole
         plan = event.plan
         workflows = []
+        pendingReply = event.resolvedState == .waitingForUser ? event.pendingReply : nil
+        pendingReplies = pendingReply.map { [$0] } ?? []
         applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         reconcilePlanWithTerminalState(at: event.timestamp)
     }
@@ -192,6 +196,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         mergePlan(from: event)
         applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         reconcilePlanWithTerminalState(at: event.timestamp)
+        applyPendingReply(from: event)
     }
 
     private mutating func mergeNonAdvancingEvent(_ event: AgentEvent) {
@@ -209,6 +214,31 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         }
         applyTask(from: event)
+        if event.resolvedState == .waitingForUser, let pending = event.pendingReply {
+            mergePendingReply(pending)
+        }
+    }
+
+    private mutating func applyPendingReply(from event: AgentEvent) {
+        if event.resolvedState == .waitingForUser {
+            if let pending = event.pendingReply {
+                mergePendingReply(pending)
+            }
+        } else if event.resolvedState == .completed || event.resolvedState == .failed {
+            pendingReplies.removeAll()
+            pendingReply = nil
+        }
+    }
+
+    private mutating func mergePendingReply(_ pending: AgentPendingReply) {
+        pendingReplies.removeAll { $0.replyId == pending.replyId }
+        pendingReplies.append(pending)
+        pendingReply = pending
+    }
+
+    public mutating func retainPendingReplies(where isLive: (UUID) -> Bool) {
+        pendingReplies.removeAll { !isLive($0.replyId) }
+        pendingReply = pendingReplies.last
     }
 
     private mutating func applyTask(from event: AgentEvent) {
@@ -269,6 +299,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         completedAt = timestamp
         updatedAt = max(updatedAt, timestamp)
         currentActivity = terminalState == .failed ? "Session failed" : "Session ended"
+        pendingReply = nil
         reconcilePlanWithTerminalState(at: timestamp)
     }
 
@@ -419,7 +450,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, provider, task, currentActivity, state, startedAt, updatedAt, completedAt
         case workingDirectory, recentFiles, recentEvents, applicationURL, origin
-        case parentSessionId, agentRole, plan, workflows
+        case parentSessionId, agentRole, plan, workflows, pendingReply, pendingReplies
     }
 
     public init(from decoder: Decoder) throws {
@@ -452,6 +483,14 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 .sorted { $0.updatedAt > $1.updatedAt }
                 .prefix(6)
         )
+        pendingReply = try values.decodeIfPresent(AgentPendingReply.self, forKey: .pendingReply)
+        pendingReplies = try values.decodeIfPresent([AgentPendingReply].self, forKey: .pendingReplies)
+            ?? pendingReply.map { [$0] }
+            ?? []
+        if state != .waitingForUser {
+            pendingReply = nil
+            pendingReplies.removeAll()
+        }
         reconcilePlanWithTerminalState(at: completedAt ?? updatedAt)
     }
 }

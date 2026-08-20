@@ -75,6 +75,7 @@ struct AttentionSettingsSection: View {
     let notificationsEnabled: Binding<Bool>
     let soundEnabled: Binding<Bool>
     let failureNotificationsEnabled: Binding<Bool>
+    let answerFromNotchEnabled: Binding<Bool>
 
     var body: some View {
         SettingsSection(title: "Attention") {
@@ -97,6 +98,11 @@ struct AttentionSettingsSection: View {
             )
             .disabled(!notificationsEnabled.wrappedValue)
             .opacity(notificationsEnabled.wrappedValue ? 1 : 0.45)
+            SettingsToggleRow(
+                title: "Answer from the notch",
+                detail: "Show Deny and Allow on Codex and Claude permission prompts. Other providers stay observers.",
+                isOn: answerFromNotchEnabled
+            )
         }
     }
 }

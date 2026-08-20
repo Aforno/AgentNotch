@@ -59,6 +59,7 @@ struct NotchRootView: View {
     @State private var hasDrawnLayout = false
     @State private var sizeGeneration = 0
     @State private var detailContentHeight = NotchLayoutMetrics.minimumDetailContentHeight
+    @State private var waitingContentHeight: CGFloat = 96
     @AppStorage("animationsEnabled") private var animationsEnabled = true
 
     private var activity: AgentActivityService { runtime.activity }
@@ -99,9 +100,12 @@ struct NotchRootView: View {
                 radius: min(10, (geometry.notchHeight + 2) * 0.32)
             )
         case .temporary:
+            let extraHeight = snapshot.attentionSession?.pendingReply == nil
+                ? 56
+                : min(max(waitingContentHeight, 96), 240)
             return NotchLayout(
                 width: expandedWidth(preferred: NotchLayoutMetrics.temporaryPreferredWidth),
-                height: geometry.notchHeight + 56,
+                height: geometry.notchHeight + extraHeight,
                 radius: 18
             )
         case .list:
@@ -292,17 +296,35 @@ struct NotchRootView: View {
 
         case .temporary:
             if let session = snapshot.attentionSession {
-                Button {
-                    withPresentationAnimation { selectedSessionID = session.id }
-                } label: {
-                    TemporaryActivityView(
+                if session.pendingReply != nil {
+                    WaitingReplyView(
                         session: session,
-                        waitingCount: snapshot.attentionCount
+                        waitingCount: snapshot.attentionCount,
+                        canAnswer: runtime.canAnswer(session),
+                        onAnswer: { decision, optionId, answers in
+                            runtime.answer(session, decision: decision, optionId: optionId, answers: answers)
+                        },
+                        onOpenDetail: {
+                            withPresentationAnimation { selectedSessionID = session.id }
+                        },
+                        onIdealHeightChange: { height in
+                            guard abs(waitingContentHeight - height) >= 0.5 else { return }
+                            waitingContentHeight = height
+                        }
                     )
-                        .frame(height: 40)
-                        .contentShape(Rectangle())
+                } else {
+                    Button {
+                        withPresentationAnimation { selectedSessionID = session.id }
+                    } label: {
+                        TemporaryActivityView(
+                            session: session,
+                            waitingCount: snapshot.attentionCount
+                        )
+                            .frame(height: 40)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
         case .list:
@@ -331,6 +353,10 @@ struct NotchRootView: View {
                     onBack: { withPresentationAnimation { selectedSessionID = nil } },
                     onSelectSession: { id in withPresentationAnimation { selectedSessionID = id } },
                     onOpen: { runtime.open(session) },
+                    canAnswer: runtime.canAnswer(session),
+                    onAnswer: { decision, optionId, answers in
+                        runtime.answer(session, decision: decision, optionId: optionId, answers: answers)
+                    },
                     outerCornerRadius: layout.radius,
                     onIdealHeightChange: { height in
                         guard abs(detailContentHeight - height) >= 0.5 else { return }

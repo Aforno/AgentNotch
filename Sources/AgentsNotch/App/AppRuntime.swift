@@ -16,6 +16,8 @@ final class AppRuntime {
 
     private(set) var socketStatus = "Starting"
     private(set) var socketError: String?
+    private(set) var replySocketError: String?
+    private(set) var liveReplyIDs: Set<UUID> = []
     private(set) var persistenceError: String?
     private(set) var persistenceRecoveryNotice: String?
     private(set) var lastEventReceivedAt: [AgentProvider: Date] = [:]
@@ -30,12 +32,17 @@ final class AppRuntime {
     private let persistence: SessionPersistence
     private let persistScheduler: SessionPersistScheduler
     private let socketURL: URL
+    private let replySocketURL: URL
     private let monitorProviders: Bool
+    private let answersFromNotch: @Sendable () -> Bool
+    private let answerModeAvailability: AnswerModeAvailability
+    private let privacyModeEnabled: @Sendable () -> Bool
     private let grokHome: URL
     private let codexHome: URL
     private let historyRetentionDays: () -> Int?
     private let originActivation = OriginActivationService()
     private var socketServer: UnixSocketServer?
+    private var replyServer: UnixReplyServer?
     /// Completes sessions still in `.unknown` when no live hook confirms them.
     private var unknownGraceTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
@@ -58,6 +65,7 @@ final class AppRuntime {
     init(
         persistence: SessionPersistence = SessionPersistence(),
         socketURL: URL = AgentSocketLocation.defaultURL,
+        replySocketURL: URL = AgentReplySocketLocation.defaultURL,
         monitorProviders: Bool = true,
         grokHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".grok"),
         codexHome: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex"),
@@ -67,6 +75,12 @@ final class AppRuntime {
         persistMaximumDelay: Duration = .seconds(2),
         historyRetentionDays: @escaping () -> Int? = {
             UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int
+        },
+        answersFromNotch: @escaping @Sendable () -> Bool = {
+            UserDefaults.standard.bool(forKey: "answerFromNotchEnabled")
+        },
+        privacyModeEnabled: @escaping @Sendable () -> Bool = {
+            UserDefaults.standard.bool(forKey: "privacyModeEnabled")
         }
     ) {
         self.persistence = persistence
@@ -76,7 +90,12 @@ final class AppRuntime {
             maximumDelay: persistMaximumDelay
         )
         self.socketURL = socketURL
+        self.replySocketURL = replySocketURL
         self.monitorProviders = monitorProviders
+        self.answersFromNotch = answersFromNotch
+        let answerModeAvailability = AnswerModeAvailability()
+        self.answerModeAvailability = answerModeAvailability
+        self.privacyModeEnabled = privacyModeEnabled
         self.grokHome = grokHome
         self.codexHome = codexHome
         self.historyRetentionDays = historyRetentionDays
@@ -85,7 +104,10 @@ final class AppRuntime {
             ProviderIntegrationManager(
                 provider: provider,
                 homeDirectoryURL: providerHomeDirectoryURL,
-                bundledRelayURL: bundledRelayURL
+                bundledRelayURL: bundledRelayURL,
+                answersFromNotch: {
+                    answersFromNotch() && !privacyModeEnabled() && answerModeAvailability.value
+                }
             )
         }
         self.integrations = integrations
@@ -102,6 +124,9 @@ final class AppRuntime {
     func start() async {
         guard let generation = beginStartup() else { return }
         startSocket(generation: generation)
+        if answersFromNotch() {
+            _ = startReplySocket()
+        }
         guard await restorePersistedState(generation: generation) else { return }
         completeRestoration(generation: generation)
         guard await startProviderMonitoring(generation: generation) else { return }
@@ -136,6 +161,144 @@ final class AppRuntime {
         } catch {
             socketStatus = "Unavailable"
             socketError = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    private func startReplySocket() -> Bool {
+        let server = UnixReplyServer(socketURL: replySocketURL) { [weak self] replyIDs in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.liveReplyIDs = replyIDs
+                self.activity.reconcilePendingReplies(isLive: replyIDs.contains)
+            }
+        }
+        do {
+            try server.start()
+            replyServer = server
+            answerModeAvailability.value = true
+            replySocketError = nil
+            return true
+        } catch {
+            replyServer = nil
+            liveReplyIDs = []
+            answerModeAvailability.value = false
+            replySocketError = "Answer from the notch is unavailable: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func applyAnswerFromNotchEnabled(_ enabled: Bool) {
+        if enabled {
+            if replyServer == nil {
+                _ = startReplySocket()
+            }
+        } else {
+            replyServer?.stop()
+            replyServer = nil
+            liveReplyIDs = []
+            answerModeAvailability.value = false
+            replySocketError = nil
+        }
+        refreshProviderHooks()
+    }
+
+    func applyPrivacyModeEnabled(_ enabled: Bool) {
+        if enabled {
+            replyServer?.stop()
+            replyServer = nil
+            liveReplyIDs = []
+            answerModeAvailability.value = false
+        } else if answersFromNotch(), replyServer == nil {
+            _ = startReplySocket()
+        }
+        refreshProviderHooks()
+    }
+
+    private func refreshProviderHooks() {
+        guard monitorProviders else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            for integration in integrations {
+                await integration.prepareForMonitoring()
+            }
+        }
+    }
+
+    func canAnswer(_ session: AgentSession) -> Bool {
+        guard !privacyModeEnabled(),
+              session.state == .waitingForUser,
+              let pending = session.pendingReply
+        else { return false }
+        #if DEBUG
+        if DebugEventSimulator.isSimulated(session) {
+            return true
+        }
+        #endif
+        guard answersFromNotch() else { return false }
+        // liveReplyIDs is a cached snapshot for reconciliation. Registration
+        // can land on replyServer before that cache updates on the main actor.
+        return liveReplyIDs.contains(pending.replyId)
+            || replyServer?.isPending(pending.replyId) == true
+    }
+
+    func answer(
+        _ session: AgentSession,
+        decision: AgentReplyDecision,
+        optionId: String? = nil,
+        answers: [String: [String]]? = nil
+    ) {
+        guard canAnswer(session), let pending = session.pendingReply else { return }
+        let reply = AgentReply(
+            replyId: pending.replyId,
+            decision: decision,
+            optionId: optionId,
+            answers: answers
+        )
+        #if DEBUG
+        let simulated = DebugEventSimulator.isSimulated(session)
+        #else
+        let simulated = false
+        #endif
+        let delivered = replyServer?.submit(reply) ?? false
+        guard delivered || simulated else { return }
+        let remaining = session.pendingReplies.filter { candidate in
+            candidate.replyId != pending.replyId
+                && replyServer?.isPending(candidate.replyId) == true
+        }
+        let activityText: String = switch decision {
+        case .deny:
+            "Denied"
+        case .allow:
+            "Allowed"
+        case .option:
+            pending.options.first { $0.id == optionId }?.label ?? "Answered"
+        case .cancel:
+            "Cancelled"
+        }
+        if let next = remaining.last {
+            process(
+                AgentEvent(
+                    type: .waiting,
+                    sessionId: session.id,
+                    provider: session.provider,
+                    activity: activityText,
+                    state: .waitingForUser,
+                    pendingReply: next
+                ),
+                notify: false
+            )
+        } else {
+            process(
+                AgentEvent(
+                    type: .activity,
+                    sessionId: session.id,
+                    provider: session.provider,
+                    activity: activityText,
+                    state: .running
+                ),
+                notify: false
+            )
         }
     }
 
@@ -217,6 +380,10 @@ final class AppRuntime {
         }
         socketServer?.stop()
         socketServer = nil
+        replyServer?.stop()
+        replyServer = nil
+        liveReplyIDs = []
+        answerModeAvailability.value = false
     }
 
     private func schedulePersist() {
@@ -354,5 +521,15 @@ final class AppRuntime {
 
     func integration(for provider: AgentProvider) -> ProviderIntegrationManager? {
         integrations.first { $0.provider == provider }
+    }
+}
+
+private final class AnswerModeAvailability: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = false
+
+    var value: Bool {
+        get { lock.withLock { storage } }
+        set { lock.withLock { storage = newValue } }
     }
 }

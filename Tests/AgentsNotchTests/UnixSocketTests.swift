@@ -38,6 +38,13 @@ final class UnixSocketTests: XCTestCase {
                 id: "release",
                 title: "Release",
                 status: .running
+            ),
+            pendingReply: AgentPendingReply(
+                replyId: UUID(),
+                kind: .permission,
+                prompt: "Allow this command?",
+                detail: "swift test",
+                grants: [.deny, .allow]
             )
         )
         try UnixSocketClient.send(sent, to: socketURL)
@@ -57,6 +64,7 @@ final class UnixSocketTests: XCTestCase {
             try XCTUnwrap(sent.plan?.updatedAt)
         )), 0.001)
         XCTAssertEqual(actual.workflowUpdate, sent.workflowUpdate)
+        XCTAssertEqual(actual.pendingReply, sent.pendingReply)
         XCTAssertLessThan(abs(actual.timestamp.timeIntervalSince(sent.timestamp)), 0.001)
     }
 

@@ -183,6 +183,13 @@ public final class AgentActivityService {
         commitSessionChanges(orderSessions: true, attentionRefresh: .always)
     }
 
+    public func reconcilePendingReplies(isLive: (UUID) -> Bool) {
+        for index in sessions.indices {
+            sessions[index].retainPendingReplies(where: isLive)
+        }
+        commitSessionChanges(orderSessions: false, attentionRefresh: .ifMissing)
+    }
+
     /// Reconciles workflow metadata discovered from provider-owned storage
     /// without treating app startup as new agent activity.
     public func reconcileRestoredWorkflow(_ event: AgentEvent) {
@@ -403,6 +410,10 @@ public final class AgentActivityService {
             newestByIdentity[key] = session
         }
         sessions = Array(newestByIdentity.values)
+        for index in sessions.indices {
+            sessions[index].pendingReply = nil
+            sessions[index].pendingReplies.removeAll()
+        }
     }
 
     private func namespaceSessionIdentity(_ session: inout AgentSession) {

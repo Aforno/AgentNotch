@@ -63,10 +63,10 @@ struct ProviderHookStore: Sendable {
             .appendingPathComponent("agentsnotch-hook")
     }
 
-    func prepareForMonitoringOnDisk() -> MonitoringPreparation {
+    func prepareForMonitoringOnDisk(answersFromNotch: Bool) -> MonitoringPreparation {
         queue.sync {
             let io = HookConfigurationIO(fileSystem: fileSystem)
-            let relay = HookRelayIdentity(provider: provider, relayURL: installedRelayURL)
+            let relay = hookRelay(answersFromNotch: answersFromNotch)
             guard fileSystem.manager.isExecutableFile(atPath: installedRelayURL.path),
                   strategy.looksInstalled(io: io, relay: relay)
             else {
@@ -82,12 +82,12 @@ struct ProviderHookStore: Sendable {
         }
     }
 
-    func install() throws {
+    func install(answersFromNotch: Bool) throws {
         try queue.sync {
             try writeBundledRelay()
             try strategy.install(
                 io: HookConfigurationIO(fileSystem: fileSystem),
-                relay: HookRelayIdentity(provider: provider, relayURL: installedRelayURL)
+                relay: hookRelay(answersFromNotch: answersFromNotch)
             )
         }
     }
@@ -96,7 +96,7 @@ struct ProviderHookStore: Sendable {
         try queue.sync {
             try strategy.uninstall(
                 io: HookConfigurationIO(fileSystem: fileSystem),
-                relay: HookRelayIdentity(provider: provider, relayURL: installedRelayURL)
+                relay: hookRelay(answersFromNotch: false)
             )
         }
     }
@@ -104,10 +104,20 @@ struct ProviderHookStore: Sendable {
     func looksInstalled() -> Bool {
         queue.sync {
             let io = HookConfigurationIO(fileSystem: fileSystem)
-            let relay = HookRelayIdentity(provider: provider, relayURL: installedRelayURL)
+            let relay = hookRelay(answersFromNotch: false)
+            let answeringRelay = hookRelay(answersFromNotch: true)
             return fileSystem.manager.isExecutableFile(atPath: installedRelayURL.path)
-                && strategy.looksInstalled(io: io, relay: relay)
+                && (strategy.looksInstalled(io: io, relay: relay)
+                    || strategy.looksInstalled(io: io, relay: answeringRelay))
         }
+    }
+
+    private func hookRelay(answersFromNotch: Bool) -> HookRelayIdentity {
+        HookRelayIdentity(
+            provider: provider,
+            relayURL: installedRelayURL,
+            answersFromNotch: answersFromNotch
+        )
     }
 
     private func updateInstalledRelayIfNeeded() throws {

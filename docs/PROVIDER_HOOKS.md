@@ -1,9 +1,22 @@
 # Provider hooks
 
-Provider hooks are passive observers. They must not make permission decisions,
-block tools, or inject context. The hook ignores `SIGPIPE`, drains stdin,
-decodes and enriches within bounds, sends an event when applicable, writes the
-provider's passive response, and exits 0 even if Agents Notch is not running.
+Provider hooks are passive observers by default. They do not make permission
+decisions, block tools, or inject context. The hook ignores `SIGPIPE`, drains
+stdin, decodes and enriches within bounds, sends an event when applicable,
+writes the provider's passive response, and exits 0 even if Agents Notch is not
+running.
+
+Enabling Answer from the notch adds `--answer` and a 120-second timeout to
+Codex and Claude Code permission and elicitation handlers. Claude Code also gets
+narrow synchronous `PreToolUse` matchers for `AskUserQuestion` and
+`ExitPlanMode`; other tools keep a 5-second asynchronous observer. The hook
+waits for a `reply.sock` registration ACK before it sends the actionable waiting event. A notch click writes
+the provider decision JSON. If the app is unavailable or no answer arrives, the
+hook writes the passive response and the provider shows its own prompt. Claude
+permission handlers become synchronous only while this setting is enabled.
+Grok, Gemini, Cursor, and OpenCode do not wait for a decision. Gemini's
+Notification hook only reports status. Cursor has no approval hook, and the
+OpenCode plugin does not wait.
 
 Passive stdout is provider-specific. Claude Code receives empty stdout. The
 other integrated providers receive `{}` followed by a newline. Keep this in
@@ -23,7 +36,8 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   resolves missing title/hierarchy from its session tree, and skips duplicate
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
 - Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
-  no-decision handlers for permission and elicitation events.
+  handlers for permission and elicitation events. Enabling Answer from the
+  notch adds `--answer` handlers only for supported interactive events.
 - Cursor exposes session, prompt, tool, failure, and completion hooks. It has
   no passive native approval hook, so it cannot raise notch attention for
   approval.

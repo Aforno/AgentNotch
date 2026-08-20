@@ -36,8 +36,12 @@ It modifies only its own entries in supported provider hook configuration.
   socket; other users must not be able to read from or write to it.
 - Existing provider configuration and plugins belong to the user and must be
   preserved across install, refresh, and removal.
-- Provider hooks are observers. Their availability or output must never grant,
-  deny, or block a tool action.
+- Provider hooks are observers unless the user enables Answer from the notch.
+  When enabled, the app starts `~/.agentsnotch/reply.sock` with mode `0600` and
+  accepts grant or deny decisions for waiting tools. Same-user processes can
+  connect. The app never grants automatically, and Privacy mode disables all
+  answers. If no answer arrives within 120 seconds, the provider shows its own
+  prompt.
 - Release artifacts cross a separate trust boundary and must match reviewed
   source, version metadata, Developer ID signing, and Apple notarization.
 
@@ -46,7 +50,8 @@ It modifies only its own entries in supported provider hook configuration.
 - The default socket directory is mode `0700`, the socket is mode `0600`, and
   an individual payload is bounded to 1 MiB.
 - The relay returns success and an empty passive response when the app is
-  unavailable or an event is malformed.
+  unavailable, an event is malformed, or an Answer from the notch wait times
+  out.
 - The app does not invent a transcript parser, inject agent context, upload
   source, or send analytics or telemetry. The one Codex exception is a
   fail-open 4 MiB tail read used only to decide whether a PermissionRequest

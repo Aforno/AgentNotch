@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("showVirtualNotch") private var showVirtualNotch = false
     @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = false
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @AppStorage("answerFromNotchEnabled") private var answerFromNotchEnabled = false
     @AppStorage("globalActivityShortcut") private var globalActivityShortcut = GlobalActivityShortcut.off.rawValue
     #if DEBUG
     @AppStorage("debugMode") private var debugMode = false
@@ -42,6 +43,12 @@ struct SettingsView: View {
         .onChange(of: notchEnabled) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: showVirtualNotch) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: globalActivityShortcut) { _, value in runtime.updateGlobalShortcut(value) }
+        .onChange(of: answerFromNotchEnabled) { _, enabled in
+            runtime.applyAnswerFromNotchEnabled(enabled)
+        }
+        .onChange(of: privacyModeEnabled) { _, enabled in
+            runtime.applyPrivacyModeEnabled(enabled)
+        }
         .confirmationDialog("Clear completed session history?", isPresented: $confirmsClearHistory) {
             Button("Clear History", role: .destructive) { runtime.clearHistory() }
         } message: {
@@ -70,6 +77,7 @@ struct SettingsView: View {
                 notificationsEnabled: notificationBinding,
                 soundEnabled: $attentionNotificationSoundEnabled,
                 failureNotificationsEnabled: $failureNotificationsEnabled,
+                answerFromNotchEnabled: $answerFromNotchEnabled,
                 privacyModeEnabled: $privacyModeEnabled,
                 retentionDays: $historyRetentionDays,
                 notificationError: notificationError,
