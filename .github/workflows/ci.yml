@@ -41,6 +41,18 @@ jobs:
       - name: Verify repository hygiene
         run: ./script/check_repository.sh
 
+      - name: Audit Homebrew cask
+        if: matrix.os == 'macos-15'
+        run: |
+          set -euo pipefail
+          TAP="$(brew --repository)/Library/Taps/aforno/homebrew-agentnotch"
+          if [[ ! -d "$TAP" ]]; then
+            brew tap-new --no-git aforno/agentnotch
+          fi
+          mkdir -p "$TAP/Casks"
+          cp Casks/agents-notch.rb "$TAP/Casks/agents-notch.rb"
+          brew style --cask aforno/agentnotch/agents-notch
+
       - name: Run debug tests
         run: swift test
 

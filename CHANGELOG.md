@@ -6,6 +6,12 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Homebrew cask install from this repository:
+  `brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch` then
+  `brew install --cask aforno/agentnotch/agents-notch`.
+
 ### Changed
 
 - Collapsed notch provider icons drop the hairline ring. Stacked marks still
