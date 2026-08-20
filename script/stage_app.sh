@@ -62,6 +62,7 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$EXECUTABLE_NAME"
 HOOK_BINARY="$APP_RESOURCES/bin/agentsnotch-hook"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+APP_ENTITLEMENTS="$ROOT_DIR/Resources/AgentsNotch.entitlements"
 APP_ICON_SOURCE="$ROOT_DIR/Resources/AppIcon/AppIcon.icns"
 PROVIDER_ICONS_SOURCE="$ROOT_DIR/Sources/AgentsNotch/Resources/ProviderIcons.xcassets"
 
@@ -116,6 +117,8 @@ cat >"$INFO_PLIST" <<PLIST
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Agents Notch uses Apple Events to focus the terminal tab where an agent is running.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>
@@ -128,7 +131,7 @@ if [[ "$SIGN_IDENTITY" != "-" ]]; then
 fi
 
 codesign "${sign_arguments[@]}" "$HOOK_BINARY"
-codesign "${sign_arguments[@]}" "$APP_BUNDLE"
+codesign "${sign_arguments[@]}" --entitlements "$APP_ENTITLEMENTS" "$APP_BUNDLE"
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
 printf '%s\n' "$APP_BUNDLE"
