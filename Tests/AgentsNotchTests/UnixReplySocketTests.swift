@@ -20,7 +20,7 @@ final class UnixReplySocketTests: XCTestCase {
                 id: replyId,
                 socketURL: socketURL,
                 timeoutSeconds: 2,
-                afterHello: { helloReady.fulfill() }
+                afterRegistration: { helloReady.fulfill() }
             )
             XCTAssertEqual(reply?.decision, .allow)
             XCTAssertEqual(reply?.replyId, replyId)
@@ -28,15 +28,7 @@ final class UnixReplySocketTests: XCTestCase {
         }
 
         wait(for: [helloReady], timeout: 2)
-        var pending = false
-        for _ in 0..<50 {
-            if server.isPending(replyId) {
-                pending = true
-                break
-            }
-            Thread.sleep(forTimeInterval: 0.02)
-        }
-        XCTAssertTrue(pending)
+        XCTAssertTrue(server.isPending(replyId))
         XCTAssertTrue(server.submit(AgentReply(replyId: replyId, decision: .allow)))
         wait(for: [answered], timeout: 2)
     }
@@ -44,7 +36,10 @@ final class UnixReplySocketTests: XCTestCase {
     func testDisconnectedHookIsDroppedFromPending() throws {
         let socketURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("an-reply-\(UUID().uuidString.prefix(8)).sock")
-        let server = UnixReplyServer(socketURL: socketURL)
+        let disconnected = expectation(description: "disconnect is published")
+        let server = UnixReplyServer(socketURL: socketURL) { replyIDs in
+            if replyIDs.isEmpty { disconnected.fulfill() }
+        }
         try server.start()
         defer { server.stop() }
 
@@ -56,32 +51,17 @@ final class UnixReplySocketTests: XCTestCase {
                 id: replyId,
                 socketURL: socketURL,
                 timeoutSeconds: 1,
-                afterHello: { helloReady.fulfill() }
+                afterRegistration: { helloReady.fulfill() }
             )
             XCTAssertNil(reply)
             timedOut.fulfill()
         }
 
         wait(for: [helloReady], timeout: 2)
-        var pending = false
-        for _ in 0..<50 {
-            if server.isPending(replyId) {
-                pending = true
-                break
-            }
-            Thread.sleep(forTimeInterval: 0.02)
-        }
-        XCTAssertTrue(pending)
+        XCTAssertTrue(server.isPending(replyId))
         wait(for: [timedOut], timeout: 3)
-        var dropped = false
-        for _ in 0..<50 {
-            if !server.isPending(replyId) {
-                dropped = true
-                break
-            }
-            Thread.sleep(forTimeInterval: 0.02)
-        }
-        XCTAssertTrue(dropped, "timed-out hook must close and leave pending")
+        wait(for: [disconnected], timeout: 2)
+        XCTAssertFalse(server.isPending(replyId), "timed-out hook must close and leave pending")
         XCTAssertFalse(server.submit(AgentReply(replyId: replyId, decision: .allow)))
     }
 

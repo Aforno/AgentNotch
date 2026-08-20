@@ -13,17 +13,29 @@ public enum AgentReplySocketLocation {
 /// user clicks Deny, Allow, or an option.
 public final class UnixReplyServer: @unchecked Sendable {
     private static let helloTimeout = timeval(tv_sec: 2, tv_usec: 0)
+    private static let maximumConcurrentClients = 64
     private static let startLock = NSLock()
 
     private let socketURL: URL
+    private let pendingChanged: @Sendable (Set<UUID>) -> Void
     private let lock = NSLock()
+    private let clientsQueue = DispatchQueue(
+        label: "com.agentsnotch.reply.clients",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
     private var descriptor: Int32 = -1
     private var listener: Thread?
     private var ownedInode: ino_t?
     private var pending: [UUID: Int32] = [:]
+    private var clients: Set<Int32> = []
 
-    public init(socketURL: URL = AgentReplySocketLocation.defaultURL) {
+    public init(
+        socketURL: URL = AgentReplySocketLocation.defaultURL,
+        pendingChanged: @escaping @Sendable (Set<UUID>) -> Void = { _ in }
+    ) {
         self.socketURL = socketURL
+        self.pendingChanged = pendingChanged
     }
 
     deinit {
@@ -46,6 +58,21 @@ public final class UnixReplyServer: @unchecked Sendable {
 
         Self.startLock.lock()
         defer { Self.startLock.unlock() }
+
+        let lockPath = socketURL.path + ".lock"
+        let lockFD = Darwin.open(lockPath, O_CREAT | O_RDWR, mode_t(0o600))
+        guard lockFD >= 0 else { throw AgentSocketError.systemCall("open", errno) }
+        var processLock = flock()
+        processLock.l_type = Int16(F_WRLCK)
+        processLock.l_whence = Int16(SEEK_SET)
+        defer {
+            processLock.l_type = Int16(F_UNLCK)
+            _ = Darwin.fcntl(lockFD, F_SETLK, &processLock)
+            Darwin.close(lockFD)
+        }
+        guard Darwin.fcntl(lockFD, F_SETLKW, &processLock) == 0 else {
+            throw AgentSocketError.systemCall("fcntl(F_SETLKW)", errno)
+        }
 
         if isReplySocketAccepting(at: socketURL.path) {
             throw AgentSocketError.alreadyInUse
@@ -100,13 +127,16 @@ public final class UnixReplyServer: @unchecked Sendable {
         }
         listener = nil
         lock.lock()
-        let clients = Array(pending.values)
+        let openClients = clients
+        let hadPendingReplies = !pending.isEmpty
         pending.removeAll()
+        clients.removeAll()
         lock.unlock()
-        for client in clients {
+        for client in openClients {
             _ = Darwin.shutdown(client, SHUT_RDWR)
             Darwin.close(client)
         }
+        if hadPendingReplies { publishPendingReplies() }
         if let ownedInode, replyInode(of: socketURL.path) == ownedInode {
             unlink(socketURL.path)
         }
@@ -119,10 +149,15 @@ public final class UnixReplyServer: @unchecked Sendable {
         return pending[replyId] != nil
     }
 
+    public var pendingReplyIDs: Set<UUID> {
+        lock.withLock { Set(pending.keys) }
+    }
+
     @discardableResult
     public func submit(_ reply: AgentReply) -> Bool {
         lock.lock()
         let client = pending.removeValue(forKey: reply.replyId)
+        if let client { clients.remove(client) }
         lock.unlock()
         guard let client else { return false }
         defer {
@@ -131,7 +166,7 @@ public final class UnixReplyServer: @unchecked Sendable {
         }
         guard var payload = try? JSONEncoder.agentsNotch.encode(reply) else { return false }
         payload.append(0x0A)
-        return payload.withUnsafeBytes { bytes in
+        let delivered = payload.withUnsafeBytes { bytes in
             var offset = 0
             while offset < bytes.count {
                 let written = Darwin.write(
@@ -144,6 +179,8 @@ public final class UnixReplyServer: @unchecked Sendable {
             }
             return true
         }
+        publishPendingReplies()
+        return delivered
     }
 
     private func acceptLoop() {
@@ -171,7 +208,15 @@ public final class UnixReplyServer: @unchecked Sendable {
                 &nosigpipe,
                 socklen_t(MemoryLayout<Int32>.size)
             )
-            register(client: client)
+            lock.lock()
+            guard clients.count < Self.maximumConcurrentClients else {
+                lock.unlock()
+                Darwin.close(client)
+                continue
+            }
+            clients.insert(client)
+            lock.unlock()
+            clientsQueue.async { [weak self] in self?.register(client: client) }
         }
     }
 
@@ -184,14 +229,14 @@ public final class UnixReplyServer: @unchecked Sendable {
                 data.append(buffer, count: count)
                 if data.contains(0x0A) { break }
             } else {
-                Darwin.close(client)
+                closeUnregistered(client)
                 return
             }
         }
         let line = firstLine(in: data)
         guard let hello = try? JSONDecoder.agentsNotch.decode(AgentReplyHello.self, from: line)
         else {
-            Darwin.close(client)
+            closeUnregistered(client)
             return
         }
         var idle = timeval(tv_sec: AgentReplyPolicy.waitSeconds + 5, tv_usec: 0)
@@ -204,22 +249,29 @@ public final class UnixReplyServer: @unchecked Sendable {
         )
         lock.lock()
         if let previous = pending.updateValue(client, forKey: hello.replyId) {
+            clients.remove(previous)
             lock.unlock()
+            _ = Darwin.shutdown(previous, SHUT_RDWR)
             Darwin.close(previous)
         } else {
             lock.unlock()
         }
+        guard writeLine(AgentReplyAcknowledgement(), to: client) else {
+            dropIfStillPending(replyId: hello.replyId, client: client)
+            return
+        }
+        publishPendingReplies()
         watchDisconnect(replyId: hello.replyId, client: client)
     }
 
     /// Drops a waiter when the hook closes or times out. SO_RCVTIMEO does not
     /// fire unless someone reads; this read is that someone.
     private func watchDisconnect(replyId: UUID, client: Int32) {
-        Thread { [weak self] in
+        clientsQueue.async { [weak self] in
             var buffer = [UInt8](repeating: 0, count: 1)
             _ = Darwin.read(client, &buffer, 1)
             self?.dropIfStillPending(replyId: replyId, client: client)
-        }.start()
+        }
     }
 
     private func dropIfStillPending(replyId: UUID, client: Int32) {
@@ -227,11 +279,24 @@ public final class UnixReplyServer: @unchecked Sendable {
         let matches = pending[replyId] == client
         if matches {
             pending.removeValue(forKey: replyId)
+            clients.remove(client)
         }
         lock.unlock()
         guard matches else { return }
         _ = Darwin.shutdown(client, SHUT_RDWR)
         Darwin.close(client)
+        publishPendingReplies()
+    }
+
+    private func closeUnregistered(_ client: Int32) {
+        lock.lock()
+        let shouldClose = clients.remove(client) != nil
+        lock.unlock()
+        if shouldClose { Darwin.close(client) }
+    }
+
+    private func publishPendingReplies() {
+        pendingChanged(pendingReplyIDs)
     }
 }
 
@@ -240,7 +305,7 @@ public enum UnixReplyClient {
         id: UUID,
         socketURL: URL = AgentReplySocketLocation.defaultURL,
         timeoutSeconds: Int = AgentReplyPolicy.waitSeconds - 10,
-        afterHello: (() -> Void)? = nil
+        afterRegistration: (() -> Void)? = nil
     ) -> AgentReply? {
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return nil }
@@ -278,24 +343,44 @@ public enum UnixReplyClient {
             return true
         }
         guard wroteHello else { return nil }
-        afterHello?()
+        guard let ackData = readReplyLine(from: fd, maximumBytes: 1_024),
+              let ack = try? JSONDecoder.agentsNotch.decode(AgentReplyAcknowledgement.self, from: ackData),
+              ack.registered
+        else { return nil }
+        afterRegistration?()
 
         var wait = timeval(tv_sec: max(1, timeoutSeconds), tv_usec: 0)
         _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &wait, socklen_t(MemoryLayout<timeval>.size))
 
-        var data = Data()
-        var buffer = [UInt8](repeating: 0, count: 1_024)
-        while data.count < 8_192 {
-            let count = Darwin.read(fd, &buffer, buffer.count)
-            if count > 0 {
-                data.append(buffer, count: count)
-                if data.contains(0x0A) { break }
-            } else {
-                return nil
-            }
-        }
-        return try? JSONDecoder.agentsNotch.decode(AgentReply.self, from: firstLine(in: data))
+        guard let data = readReplyLine(from: fd, maximumBytes: 8_192) else { return nil }
+        return try? JSONDecoder.agentsNotch.decode(AgentReply.self, from: data)
     }
+}
+
+private func writeLine<T: Encodable>(_ value: T, to descriptor: Int32) -> Bool {
+    guard var payload = try? JSONEncoder.agentsNotch.encode(value) else { return false }
+    payload.append(0x0A)
+    return payload.withUnsafeBytes { bytes in
+        var offset = 0
+        while offset < bytes.count {
+            let written = Darwin.write(descriptor, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+            guard written > 0 else { return false }
+            offset += written
+        }
+        return true
+    }
+}
+
+private func readReplyLine(from descriptor: Int32, maximumBytes: Int) -> Data? {
+    var data = Data()
+    var byte: UInt8 = 0
+    while data.count < maximumBytes {
+        let count = Darwin.read(descriptor, &byte, 1)
+        guard count > 0 else { return nil }
+        if byte == 0x0A { return data }
+        data.append(byte)
+    }
+    return nil
 }
 
 private func firstLine(in data: Data) -> Data {

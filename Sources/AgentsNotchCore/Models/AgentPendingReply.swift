@@ -19,12 +19,29 @@ public struct AgentPromptOption: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+/// One Claude AskUserQuestion entry. Claude keys `updatedInput.answers` by the
+/// original question text.
+public struct AgentPromptQuestion: Codable, Hashable, Sendable, Identifiable {
+    public var text: String
+    public var header: String?
+    public var options: [AgentPromptOption]
+    public var allowsMultiple: Bool
+
+    public var id: String { text }
+
+    public init(text: String, header: String? = nil, options: [AgentPromptOption], allowsMultiple: Bool) {
+        self.text = text
+        self.header = header
+        self.options = options
+        self.allowsMultiple = allowsMultiple
+    }
+}
+
 /// Buttons a provider will honor for this prompt.
 public enum AgentReplyGrant: String, Codable, Sendable {
     case deny
-    case once
     case allow
-    case session
+    case cancel
 }
 
 /// A waiting prompt and the ID used to match its reply to a hook process.
@@ -34,6 +51,7 @@ public struct AgentPendingReply: Codable, Hashable, Sendable, Identifiable {
     public var prompt: String
     public var detail: String?
     public var options: [AgentPromptOption]
+    public var questions: [AgentPromptQuestion]?
     public var grants: [AgentReplyGrant]
 
     public var id: UUID { replyId }
@@ -44,6 +62,7 @@ public struct AgentPendingReply: Codable, Hashable, Sendable, Identifiable {
         prompt: String,
         detail: String? = nil,
         options: [AgentPromptOption] = [],
+        questions: [AgentPromptQuestion] = [],
         grants: [AgentReplyGrant] = []
     ) {
         self.replyId = replyId
@@ -51,31 +70,42 @@ public struct AgentPendingReply: Codable, Hashable, Sendable, Identifiable {
         self.prompt = prompt
         self.detail = detail
         self.options = options
+        self.questions = questions
         self.grants = grants
     }
 
-    public var allowsOnce: Bool { grants.contains(.once) }
-    public var allowsAllow: Bool { grants.contains(.allow) || grants.contains(.session) }
+    public var allowsAllow: Bool { grants.contains(.allow) }
     public var allowsDeny: Bool { grants.contains(.deny) }
+    public var allowsCancel: Bool { grants.contains(.cancel) }
 }
 
 /// Decision written back to a blocked hook.
 public enum AgentReplyDecision: String, Codable, Sendable {
     case deny
     case allow
-    case once
     case option
+    case cancel
 }
 
 public struct AgentReply: Codable, Hashable, Sendable {
     public var replyId: UUID
     public var decision: AgentReplyDecision
     public var optionId: String?
+    public var answers: [String: [String]]?
+    public var content: JSONValue?
 
-    public init(replyId: UUID, decision: AgentReplyDecision, optionId: String? = nil) {
+    public init(
+        replyId: UUID,
+        decision: AgentReplyDecision,
+        optionId: String? = nil,
+        answers: [String: [String]]? = nil,
+        content: JSONValue? = nil
+    ) {
         self.replyId = replyId
         self.decision = decision
         self.optionId = optionId
+        self.answers = answers
+        self.content = content
     }
 
     public var isDeny: Bool { decision == .deny }
@@ -89,16 +119,28 @@ public struct AgentReplyHello: Codable, Sendable {
     }
 }
 
+public struct AgentReplyAcknowledgement: Codable, Sendable, Equatable {
+    public var registered: Bool
+
+    public init(registered: Bool = true) {
+        self.registered = registered
+    }
+}
+
 /// Defines which hooks can wait for a reply and how long they wait.
 public enum AgentReplyPolicy {
     public static let waitSeconds = 120
 
-    public static func waitsForAnswer(eventName: String) -> Bool {
+    public static func waitsForAnswer(eventName: String, toolName: String? = nil) -> Bool {
         switch HookEventName(rawEventName: eventName) {
-        case .permissionRequest, .preToolUse, .elicitation:
-            true
+        case .permissionRequest, .elicitation:
+            return true
+        case .preToolUse:
+            guard let toolName else { return false }
+            let tool = ProviderEventPolicy.toolIdentifier(toolName)
+            return tool == "askuserquestion" || tool == "exitplanmode"
         default:
-            false
+            return false
         }
     }
 

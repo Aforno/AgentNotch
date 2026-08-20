@@ -30,9 +30,10 @@ must never send an unprefixed provider session ID into the reducer.
 
 An `agent.waiting` event may include `pendingReply`. It carries `replyId`,
 `kind` (`permission`, `question`, `plan`, or `elicitation`), `prompt`, optional
-`detail`, `options`, and `grants`. Without `pendingReply`, the notch only shows
+`detail`, `options`, provider-specific `questions`, and `grants`. Without `pendingReply`, the notch only shows
 the waiting state. The hook that created `replyId` waits on
-`~/.agentsnotch/reply.sock` for one `AgentReply` line. If the app is unavailable
+`~/.agentsnotch/reply.sock` for a registration ACK and one `AgentReply` line.
+The app tracks simultaneous replies by `replyId`. If the app is unavailable
 or no reply arrives within 120 seconds, the provider shows its own prompt.
 
 `AgentHookPayload` is a compatibility decoder, not a protocol version. It accepts

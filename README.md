@@ -93,16 +93,18 @@ also requires new command hooks to be trusted.
 
 By default, provider hooks do not return decisions, inject context, or block
 tools. Enabling Settings → Alerts & Privacy → Answer from the notch makes Codex
-and Claude Code permission hooks wait up to 120 seconds for Deny, Allow, or a
-listed option. Grok, Gemini, Cursor, and OpenCode remain display-only. If the
-app is unavailable or no answer arrives, the provider shows its own prompt.
+and Claude Code permission hooks wait up to 120 seconds for a supported answer.
+Claude's `AskUserQuestion` and `ExitPlanMode` hooks also wait, but unrelated
+`PreToolUse` events remain asynchronous observers. Grok, Gemini, Cursor, and
+OpenCode remain display-only. If the reply socket is unavailable or no answer
+arrives, the provider shows its own prompt and Agents Notch still observes the wait.
 
 They subscribe to each provider's documented session, prompt, tool, permission,
 notification, and stop events. Claude Code observers use the documented
 exec-form `args` array with asynchronous command handlers, so they cannot block
 or control permission, elicitation, AskUserQuestion, or ExitPlanMode. Enabling
-Answer from the notch replaces the permission handlers with synchronous ones
-that wait up to 120 seconds.
+Answer from the notch adds synchronous handlers only for provider events the
+notch can answer faithfully.
 
 The relay accepts the snake_case payload used by Codex, Claude Code, Gemini CLI,
 and Cursor, and Grok's camelCase payload. The OpenCode bridge converts plugin

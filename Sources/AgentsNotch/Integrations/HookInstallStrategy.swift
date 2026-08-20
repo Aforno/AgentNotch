@@ -118,22 +118,16 @@ struct GroupedHooksInstall: HookInstallStrategy {
         var root = configuration.root
         var hooks = try io.hooksDictionary(in: root, hooksURL: hooksURL)
         for eventName in eventNames {
-            let newGroup: [String: Any] = [
-                "hooks": [relay.commandHandler(
-                    timeout: timeout(for: eventName),
-                    claudeExecForm: usesClaudeExecForm,
-                    eventName: eventName
-                )],
-            ]
+            let newGroups = groupsToInstall(for: eventName, relay: relay)
             if hooks[eventName] == nil {
-                hooks[eventName] = [newGroup]
+                hooks[eventName] = newGroups
                 continue
             }
             guard var groups = hooks[eventName] as? [[String: Any]] else {
                 throw ProviderIntegrationError.invalidHookEvent(eventName, hooksURL.path)
             }
             groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay) }
-            groups.append(newGroup)
+            groups.append(contentsOf: newGroups)
             hooks[eventName] = groups
         }
 
@@ -170,6 +164,26 @@ struct GroupedHooksInstall: HookInstallStrategy {
         else { return false }
         return eventNames.allSatisfy { eventName in
             let groups = hooks[eventName] as? [[String: Any]] ?? []
+            if usesClaudeExecForm, relay.answersFromNotch, eventName == "PreToolUse" {
+                let passiveRelay = HookRelayIdentity(provider: relay.provider, relayURL: relay.relayURL)
+                let hasPassive = groups.contains { group in
+                    group["matcher"] as? String == "^(?!AskUserQuestion$|ExitPlanMode$).*"
+                        && handlers(in: group).contains { passiveRelay.identity(of: $0, eventName: eventName) == .current }
+                }
+                let hasAnswer = groups.contains { group in
+                    group["matcher"] as? String == "AskUserQuestion|ExitPlanMode"
+                        && handlers(in: group).contains {
+                            $0["async"] as? Bool == false
+                                && ($0["timeout"] as? Int) == AgentReplyPolicy.waitSeconds
+                                && relay.identity(
+                                    of: $0,
+                                    eventName: eventName,
+                                    blocking: true
+                                ) == .current
+                        }
+                }
+                return hasPassive && hasAnswer
+            }
             return groups.contains { group in
                 handlers(in: group).contains { relay.identity(of: $0, eventName: eventName) == .current }
             }
@@ -208,6 +222,38 @@ struct GroupedHooksInstall: HookInstallStrategy {
 
     private func handlers(in group: [String: Any]) -> [[String: Any]] {
         group["hooks"] as? [[String: Any]] ?? []
+    }
+
+    private func groupsToInstall(for eventName: String, relay: HookRelayIdentity) -> [[String: Any]] {
+        if usesClaudeExecForm, relay.answersFromNotch, eventName == "PreToolUse" {
+            let passiveRelay = HookRelayIdentity(provider: relay.provider, relayURL: relay.relayURL)
+            return [
+                [
+                    "matcher": "^(?!AskUserQuestion$|ExitPlanMode$).*",
+                    "hooks": [passiveRelay.commandHandler(
+                        timeout: timeout(for: eventName),
+                        claudeExecForm: true,
+                        eventName: eventName
+                    )],
+                ],
+                [
+                    "matcher": "AskUserQuestion|ExitPlanMode",
+                    "hooks": [relay.commandHandler(
+                        timeout: timeout(for: eventName),
+                        claudeExecForm: true,
+                        eventName: eventName,
+                        blocking: true
+                    )],
+                ],
+            ]
+        }
+        return [[
+            "hooks": [relay.commandHandler(
+                timeout: timeout(for: eventName),
+                claudeExecForm: usesClaudeExecForm,
+                eventName: eventName
+            )],
+        ]]
     }
 }
 

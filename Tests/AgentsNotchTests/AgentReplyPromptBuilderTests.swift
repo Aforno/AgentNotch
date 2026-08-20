@@ -47,7 +47,8 @@ final class AgentReplyPromptBuilderTests: XCTestCase {
         XCTAssertEqual(pending.kind, .question)
         XCTAssertEqual(pending.prompt, "Which migration strategy?")
         XCTAssertEqual(pending.options.map(\.label), ["Expand in place", "New table"])
-        XCTAssertTrue(pending.grants.isEmpty)
+        XCTAssertEqual(pending.grants, [.deny])
+        XCTAssertEqual(pending.questions?.first?.text, "Which migration strategy?")
     }
 
     func testExitPlanModeUsesPlanGrants() throws {

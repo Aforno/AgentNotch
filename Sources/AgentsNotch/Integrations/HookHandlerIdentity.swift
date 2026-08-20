@@ -30,25 +30,30 @@ struct HookRelayIdentity: Sendable {
         return command
     }
 
-    func identity(of handler: [String: Any], eventName: String = "SessionStart") -> HookHandlerIdentity {
+    func identity(
+        of handler: [String: Any],
+        eventName: String = "SessionStart",
+        blocking: Bool? = nil
+    ) -> HookHandlerIdentity {
         guard isOwned(handler) else { return .none }
-        return isCurrent(handler, eventName: eventName) ? .current : .legacy
+        return isCurrent(handler, eventName: eventName, blocking: blocking) ? .current : .legacy
     }
 
     func commandHandler(
         timeout: HookTimeout,
         claudeExecForm: Bool,
-        eventName: String
+        eventName: String,
+        blocking: Bool? = nil
     ) -> [String: Any] {
-        let resolvedTimeout = waitTimeout(timeout, eventName: eventName)
+        let isBlocking = blocking ?? (sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName))
+        let resolvedTimeout = isBlocking ? answerTimeout(timeout) : timeout
         if claudeExecForm {
-            let blocking = sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName)
             return [
                 "type": "command",
                 "command": relayURL.path,
                 "args": commandArguments(),
                 "timeout": resolvedTimeout.jsonValue,
-                "async": !blocking,
+                "async": !isBlocking,
             ]
         }
         return [
@@ -81,6 +86,10 @@ struct HookRelayIdentity: Sendable {
         guard sendsDecisions, AgentReplyPolicy.waitsForAnswer(eventName: eventName) else {
             return timeout
         }
+        return answerTimeout(timeout)
+    }
+
+    private func answerTimeout(_ timeout: HookTimeout) -> HookTimeout {
         switch timeout.unit {
         case .seconds:
             return .seconds(AgentReplyPolicy.waitSeconds)
@@ -103,13 +112,19 @@ struct HookRelayIdentity: Sendable {
         return provider == .codex && !args.contains("--provider")
     }
 
-    private func isCurrent(_ handler: [String: Any], eventName: String) -> Bool {
+    private func isCurrent(
+        _ handler: [String: Any],
+        eventName: String,
+        blocking: Bool?
+    ) -> Bool {
         let args = handler["args"] as? [String] ?? []
         let command = handler["command"] as? String ?? ""
         let hasAnswerFlag = args.contains("--answer") || command.contains(" --answer")
         guard hasAnswerFlag == sendsDecisions else { return false }
         guard provider == .claudeCode else { return true }
-        let expectedAsync = !(sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName))
+        let isBlocking = blocking
+            ?? (sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName))
+        let expectedAsync = !isBlocking
         return handler["type"] as? String == "command"
             && handler["async"] as? Bool == expectedAsync
             && handler["command"] as? String == relayURL.path

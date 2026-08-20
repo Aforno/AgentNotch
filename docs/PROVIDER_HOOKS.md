@@ -7,8 +7,10 @@ writes the provider's passive response, and exits 0 even if Agents Notch is not
 running.
 
 Enabling Answer from the notch adds `--answer` and a 120-second timeout to
-Codex and Claude Code permission, PreToolUse, and elicitation handlers. The hook
-registers on `reply.sock` before it sends the waiting event. A notch click writes
+Codex and Claude Code permission and elicitation handlers. Claude Code also gets
+narrow synchronous `PreToolUse` matchers for `AskUserQuestion` and
+`ExitPlanMode`; other tools keep a 5-second asynchronous observer. The hook
+waits for a `reply.sock` registration ACK before it sends the actionable waiting event. A notch click writes
 the provider decision JSON. If the app is unavailable or no answer arrives, the
 hook writes the passive response and the provider shows its own prompt. Claude
 permission handlers become synchronous only while this setting is enabled.
@@ -35,7 +37,7 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
 - Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
   handlers for permission and elicitation events. Enabling Answer from the
-  notch replaces them with `--answer` handlers that wait up to 120 seconds.
+  notch adds `--answer` handlers only for supported interactive events.
 - Cursor exposes session, prompt, tool, failure, and completion hooks. It has
   no passive native approval hook, so it cannot raise notch attention for
   approval.

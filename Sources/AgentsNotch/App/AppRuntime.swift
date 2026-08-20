@@ -16,6 +16,8 @@ final class AppRuntime {
 
     private(set) var socketStatus = "Starting"
     private(set) var socketError: String?
+    private(set) var replySocketError: String?
+    private(set) var liveReplyIDs: Set<UUID> = []
     private(set) var persistenceError: String?
     private(set) var persistenceRecoveryNotice: String?
     private(set) var lastEventReceivedAt: [AgentProvider: Date] = [:]
@@ -33,6 +35,7 @@ final class AppRuntime {
     private let replySocketURL: URL
     private let monitorProviders: Bool
     private let answersFromNotch: @Sendable () -> Bool
+    private let answerModeAvailability: AnswerModeAvailability
     private let privacyModeEnabled: @Sendable () -> Bool
     private let grokHome: URL
     private let codexHome: URL
@@ -90,6 +93,8 @@ final class AppRuntime {
         self.replySocketURL = replySocketURL
         self.monitorProviders = monitorProviders
         self.answersFromNotch = answersFromNotch
+        let answerModeAvailability = AnswerModeAvailability()
+        self.answerModeAvailability = answerModeAvailability
         self.privacyModeEnabled = privacyModeEnabled
         self.grokHome = grokHome
         self.codexHome = codexHome
@@ -100,7 +105,9 @@ final class AppRuntime {
                 provider: provider,
                 homeDirectoryURL: providerHomeDirectoryURL,
                 bundledRelayURL: bundledRelayURL,
-                answersFromNotch: answersFromNotch
+                answersFromNotch: {
+                    answersFromNotch() && answerModeAvailability.value
+                }
             )
         }
         self.integrations = integrations
@@ -118,7 +125,7 @@ final class AppRuntime {
         guard let generation = beginStartup() else { return }
         startSocket(generation: generation)
         if answersFromNotch() {
-            startReplySocket()
+            _ = startReplySocket()
         }
         guard await restorePersistedState(generation: generation) else { return }
         completeRestoration(generation: generation)
@@ -157,24 +164,41 @@ final class AppRuntime {
         }
     }
 
-    private func startReplySocket() {
-        let server = UnixReplyServer(socketURL: replySocketURL)
+    @discardableResult
+    private func startReplySocket() -> Bool {
+        let server = UnixReplyServer(socketURL: replySocketURL) { [weak self] replyIDs in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.liveReplyIDs = replyIDs
+                self.activity.reconcilePendingReplies(isLive: replyIDs.contains)
+            }
+        }
         do {
             try server.start()
             replyServer = server
+            answerModeAvailability.value = true
+            replySocketError = nil
+            return true
         } catch {
             replyServer = nil
+            liveReplyIDs = []
+            answerModeAvailability.value = false
+            replySocketError = "Answer from the notch is unavailable: \(error.localizedDescription)"
+            return false
         }
     }
 
     func applyAnswerFromNotchEnabled(_ enabled: Bool) {
         if enabled {
             if replyServer == nil {
-                startReplySocket()
+                _ = startReplySocket()
             }
         } else {
             replyServer?.stop()
             replyServer = nil
+            liveReplyIDs = []
+            answerModeAvailability.value = false
+            replySocketError = nil
         }
         guard monitorProviders else { return }
         Task { @MainActor [weak self] in
@@ -188,23 +212,29 @@ final class AppRuntime {
     func canAnswer(_ session: AgentSession) -> Bool {
         guard !privacyModeEnabled(),
               session.state == .waitingForUser,
-              session.pendingReply != nil
+              let pending = session.pendingReply
         else { return false }
         #if DEBUG
         if DebugEventSimulator.isSimulated(session) {
             return true
         }
         #endif
-        return answersFromNotch()
+        return answersFromNotch() && liveReplyIDs.contains(pending.replyId)
     }
 
     func answer(
         _ session: AgentSession,
         decision: AgentReplyDecision,
-        optionId: String? = nil
+        optionId: String? = nil,
+        answers: [String: [String]]? = nil
     ) {
         guard canAnswer(session), let pending = session.pendingReply else { return }
-        let reply = AgentReply(replyId: pending.replyId, decision: decision, optionId: optionId)
+        let reply = AgentReply(
+            replyId: pending.replyId,
+            decision: decision,
+            optionId: optionId,
+            answers: answers
+        )
         #if DEBUG
         let simulated = DebugEventSimulator.isSimulated(session)
         #else
@@ -212,24 +242,44 @@ final class AppRuntime {
         #endif
         let delivered = replyServer?.submit(reply) ?? false
         guard delivered || simulated else { return }
+        let remaining = session.pendingReplies.filter { candidate in
+            candidate.replyId != pending.replyId
+                && replyServer?.isPending(candidate.replyId) == true
+        }
         let activityText: String = switch decision {
         case .deny:
             "Denied"
-        case .allow, .once:
+        case .allow:
             "Allowed"
         case .option:
             pending.options.first { $0.id == optionId }?.label ?? "Answered"
+        case .cancel:
+            "Cancelled"
         }
-        process(
-            AgentEvent(
-                type: .activity,
-                sessionId: session.id,
-                provider: session.provider,
-                activity: activityText,
-                state: .running
-            ),
-            notify: false
-        )
+        if let next = remaining.last {
+            process(
+                AgentEvent(
+                    type: .waiting,
+                    sessionId: session.id,
+                    provider: session.provider,
+                    activity: activityText,
+                    state: .waitingForUser,
+                    pendingReply: next
+                ),
+                notify: false
+            )
+        } else {
+            process(
+                AgentEvent(
+                    type: .activity,
+                    sessionId: session.id,
+                    provider: session.provider,
+                    activity: activityText,
+                    state: .running
+                ),
+                notify: false
+            )
+        }
     }
 
     private func restorePersistedState(generation: Int) async -> Bool {
@@ -312,6 +362,8 @@ final class AppRuntime {
         socketServer = nil
         replyServer?.stop()
         replyServer = nil
+        liveReplyIDs = []
+        answerModeAvailability.value = false
     }
 
     private func schedulePersist() {
@@ -449,5 +501,15 @@ final class AppRuntime {
 
     func integration(for provider: AgentProvider) -> ProviderIntegrationManager? {
         integrations.first { $0.provider == provider }
+    }
+}
+
+private final class AnswerModeAvailability: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = false
+
+    var value: Bool {
+        get { lock.withLock { storage } }
+        set { lock.withLock { storage = newValue } }
     }
 }

@@ -6,7 +6,7 @@ struct WaitingReplyView: View {
     let session: AgentSession
     let waitingCount: Int
     let canAnswer: Bool
-    let onAnswer: (AgentReplyDecision, String?) -> Void
+    let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     let onOpenDetail: () -> Void
     let onIdealHeightChange: (CGFloat) -> Void
 
@@ -40,20 +40,29 @@ struct WaitingReplyView: View {
             guard canAnswer, !privacyModeEnabled else { return .ignored }
             switch press.key {
             case .escape:
-                onAnswer(.deny, nil)
-                return .handled
-            case .return:
-                if pending?.kind == .question, let first = pending?.options.first {
-                    onAnswer(.option, first.id)
+                guard let pending else { return .ignored }
+                if pending.allowsCancel {
+                    onAnswer(.cancel, nil, nil)
+                } else if pending.allowsDeny {
+                    onAnswer(.deny, nil, nil)
                 } else {
-                    onAnswer(.allow, nil)
+                    return .ignored
                 }
                 return .handled
+            case .return:
+                guard pending?.questions?.isEmpty != false, pending?.allowsAllow == true else {
+                    return .ignored
+                }
+                onAnswer(.allow, nil, nil)
+                return .handled
             default:
-                if let number = Int(press.characters),
-                   let option = pending?.options[safe: number - 1]
+                if pending?.questions?.count == 1,
+                   pending?.questions?.first?.allowsMultiple == false,
+                   let number = Int(press.characters),
+                   let question = pending?.questions?.first,
+                   let option = question.options[safe: number - 1]
                 {
-                    onAnswer(.option, option.id)
+                    onAnswer(.option, option.id, [question.text: [option.label]])
                     return .handled
                 }
                 return .ignored
@@ -138,31 +147,88 @@ struct WaitingReplyView: View {
 
 struct WaitingReplyActions: View {
     let pending: AgentPendingReply
-    let onAnswer: (AgentReplyDecision, String?) -> Void
+    let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
+    @State private var selections: [String: Set<String>] = [:]
 
     var body: some View {
-        if !pending.options.isEmpty {
-            HStack(spacing: DynamicIslandSpacing.related) {
-                ForEach(Array(pending.options.prefix(3))) { option in
-                    replyButton(option.label, kind: .choice) {
-                        onAnswer(.option, option.id)
+        if let questions = pending.questions, !questions.isEmpty {
+            VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
+                ForEach(questions) { question in
+                    if questions.count > 1 {
+                        Text(question.header ?? question.text)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.72))
                     }
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 92), spacing: 6)],
+                        spacing: 6
+                    ) {
+                        ForEach(question.options) { option in
+                            let kind: ReplyButtonKind = isSelected(option, for: question)
+                                ? .allow
+                                : .choice
+                            replyButton(option.label, kind: kind) {
+                                select(option, for: question)
+                                if questions.count == 1, !question.allowsMultiple {
+                                    onAnswer(.option, option.id, [question.text: [option.label]])
+                                }
+                            }
+                        }
+                    }
+                }
+                if questions.count > 1 || questions.contains(where: \.allowsMultiple) {
+                    replyButton("Submit answers", kind: .allow) {
+                        onAnswer(.option, nil, selectedAnswers(for: questions))
+                    }
+                    .disabled(!hasCompleteAnswers(for: questions))
                 }
             }
         } else {
             HStack(spacing: DynamicIslandSpacing.related) {
                 if pending.allowsDeny {
                     replyButton(pending.kind == .plan ? "Keep planning" : "Deny", kind: .deny) {
-                        onAnswer(.deny, nil)
+                        onAnswer(.deny, nil, nil)
                     }
                 }
                 if pending.allowsAllow {
                     replyButton(pending.kind == .plan ? "Start coding" : "Allow", kind: .allow) {
-                        onAnswer(.allow, nil)
+                        onAnswer(.allow, nil, nil)
+                    }
+                }
+                if pending.allowsCancel {
+                    replyButton("Cancel", kind: .deny) {
+                        onAnswer(.cancel, nil, nil)
                     }
                 }
             }
         }
+    }
+
+    private func isSelected(_ option: AgentPromptOption, for question: AgentPromptQuestion) -> Bool {
+        selections[question.text]?.contains(option.label) == true
+    }
+
+    private func select(_ option: AgentPromptOption, for question: AgentPromptQuestion) {
+        if question.allowsMultiple {
+            var values = selections[question.text] ?? []
+            if !values.insert(option.label).inserted { values.remove(option.label) }
+            selections[question.text] = values
+        } else {
+            selections[question.text] = [option.label]
+        }
+    }
+
+    private func selectedAnswers(for questions: [AgentPromptQuestion]) -> [String: [String]] {
+        Dictionary(uniqueKeysWithValues: questions.map { question in
+            let selected = question.options.map(\.label).filter {
+                selections[question.text]?.contains($0) == true
+            }
+            return (question.text, selected)
+        })
+    }
+
+    private func hasCompleteAnswers(for questions: [AgentPromptQuestion]) -> Bool {
+        questions.allSatisfy { selections[$0.text]?.isEmpty == false }
     }
 
     private func replyButton(_ title: String, kind: ReplyButtonKind, action: @escaping () -> Void) -> some View {

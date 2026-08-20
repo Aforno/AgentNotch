@@ -352,6 +352,23 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(permission["timeout"] as? Int, 120)
         XCTAssertEqual(permission["args"] as? [String], ["--provider", "claude-code", "--answer"])
 
+        let preToolGroups = try XCTUnwrap(hooks["PreToolUse"] as? [[String: Any]])
+        let passiveGroup = try XCTUnwrap(preToolGroups.first {
+            $0["matcher"] as? String == "^(?!AskUserQuestion$|ExitPlanMode$).*"
+        })
+        let passive = try XCTUnwrap((passiveGroup["hooks"] as? [[String: Any]])?.first)
+        XCTAssertEqual(passive["async"] as? Bool, true)
+        XCTAssertEqual(passive["timeout"] as? Int, 5)
+        XCTAssertEqual(passive["args"] as? [String], ["--provider", "claude-code"])
+
+        let answerGroup = try XCTUnwrap(preToolGroups.first {
+            $0["matcher"] as? String == "AskUserQuestion|ExitPlanMode"
+        })
+        let interactive = try XCTUnwrap((answerGroup["hooks"] as? [[String: Any]])?.first)
+        XCTAssertEqual(interactive["async"] as? Bool, false)
+        XCTAssertEqual(interactive["timeout"] as? Int, 120)
+        XCTAssertEqual(interactive["args"] as? [String], ["--provider", "claude-code", "--answer"])
+
         let sessionStart = try XCTUnwrap(
             ((hooks["SessionStart"] as? [[String: Any]])?.first?["hooks"] as? [[String: Any]])?.first
         )

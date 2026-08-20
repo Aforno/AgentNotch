@@ -9,7 +9,7 @@ struct AgentDetailView: View {
     let onSelectSession: (String) -> Void
     let onOpen: () -> Void
     let canAnswer: Bool
-    let onAnswer: (AgentReplyDecision, String?) -> Void
+    let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     let outerCornerRadius: CGFloat
     let onIdealHeightChange: (CGFloat) -> Void
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false

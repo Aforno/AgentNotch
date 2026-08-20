@@ -27,19 +27,25 @@ public enum AgentReplyPromptBuilder {
     ) -> AgentPendingReply {
         switch payload.toolName.map(ProviderEventPolicy.toolIdentifier) {
         case "askuserquestion":
-            let questions = payload.toolInput?["questions"]?.arrayValue ?? []
-            let first = questions.first?.objectValue
-            let prompt = first?["question"]?.stringValue?.nonEmpty
-                ?? first?["header"]?.stringValue?.nonEmpty
-                ?? "Needs an answer"
-            let options = options(from: first?["options"])
+            let questions = questionModels(from: payload.toolInput?["questions"])
+            guard !questions.isEmpty else {
+                return AgentPendingReply(
+                    replyId: replyId,
+                    kind: .question,
+                    prompt: "Answer in Claude",
+                    detail: "Agents Notch cannot represent this question faithfully."
+                )
+            }
             return AgentPendingReply(
                 replyId: replyId,
                 kind: .question,
-                prompt: ProviderEventPolicy.concise(prompt, limit: 160),
+                prompt: questions.count == 1
+                    ? ProviderEventPolicy.concise(questions[0].text, limit: 160)
+                    : "Answer \(questions.count) questions",
                 detail: nil,
-                options: Array(options.prefix(6)),
-                grants: options.isEmpty ? [.deny, .allow] : []
+                options: questions.count == 1 ? questions[0].options : [],
+                questions: questions,
+                grants: [.deny]
             )
         case "exitplanmode":
             let plan = payload.toolInput?["plan"]?.stringValue
@@ -80,6 +86,23 @@ public enum AgentReplyPromptBuilder {
         )
     }
 
+    private static func questionModels(from value: JSONValue?) -> [AgentPromptQuestion] {
+        guard let values = value?.arrayValue, values.count <= 4 else { return [] }
+        return values.compactMap { entry in
+            guard let object = entry.objectValue,
+                  let question = object["question"]?.stringValue?.nonEmpty
+            else { return nil }
+            let options = options(from: object["options"])
+            guard !options.isEmpty else { return nil }
+            return AgentPromptQuestion(
+                text: question,
+                header: object["header"]?.stringValue?.nonEmpty,
+                options: options,
+                allowsMultiple: object["multiSelect"]?.boolValue ?? false
+            )
+        }
+    }
+
     private static func elicitationPrompt(
         payload: AgentHookPayload,
         replyId: UUID
@@ -91,7 +114,7 @@ public enum AgentReplyPromptBuilder {
             replyId: replyId,
             kind: .elicitation,
             prompt: ProviderEventPolicy.concise(message, limit: 160),
-            grants: [.deny, .allow]
+            grants: [.deny, .cancel]
         )
     }
 
@@ -106,7 +129,8 @@ public enum AgentReplyPromptBuilder {
                 ?? object?["title"]?.stringValue?.nonEmpty
                 ?? object?["text"]?.stringValue?.nonEmpty
             guard let label else { return nil }
-            let id = object?["id"]?.stringValue?.nonEmpty ?? "option-\(index)"
+            // Keep a stable internal ID while the decision mapper returns labels.
+            let id = "option-\(index)"
             return AgentPromptOption(id: id, label: ProviderEventPolicy.concise(label, limit: 48))
         }
     }

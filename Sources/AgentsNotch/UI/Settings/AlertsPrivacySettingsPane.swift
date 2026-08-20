@@ -35,6 +35,13 @@ struct AlertsPrivacySettingsPane: View {
                 if let notificationError {
                     SettingsMessage(text: notificationError, symbol: "bell.slash.fill", color: .orange)
                 }
+                if let replySocketError = runtime.replySocketError {
+                    SettingsMessage(
+                        text: replySocketError,
+                        symbol: "exclamationmark.triangle.fill",
+                        color: .orange
+                    )
+                }
             }
             .settingsPanePadding()
         }

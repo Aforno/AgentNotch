@@ -44,6 +44,10 @@ do {
         if invocation.answersFromNotch,
            event.type == .waiting,
            AgentReplyPolicy.canDecide(provider: invocation.provider),
+           AgentReplyPolicy.waitsForAnswer(
+            eventName: enriched.payload.hookEventName,
+            toolName: enriched.payload.toolName
+           ),
            let pending = AgentReplyPromptBuilder.make(
             payload: enriched.payload,
             replyId: UUID()
@@ -54,7 +58,7 @@ do {
             if let reply = UnixReplyClient.awaitReply(
                 id: pending.replyId,
                 socketURL: invocation.replySocketURL,
-                afterHello: {
+                afterRegistration: {
                     try? UnixSocketClient.send(waitingEvent, to: invocation.socketURL)
                 }
             ) {
@@ -66,6 +70,12 @@ do {
                     )
                 )
                 answered = true
+            } else {
+                // The native provider prompt remains authoritative, but answer
+                // mode must never make the observer signal disappear.
+                var observerEvent = event
+                observerEvent.pendingReply = nil
+                try? UnixSocketClient.send(observerEvent, to: invocation.socketURL)
             }
         } else {
             try? UnixSocketClient.send(event, to: invocation.socketURL)

@@ -15,6 +15,45 @@ final class AppRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testReplySocketBindFailureDisablesAnswerabilityAndReportsError() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("an-bind-failure-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let replyURL = root.appendingPathComponent("reply.sock")
+        let owner = UnixReplyServer(socketURL: replyURL)
+        try owner.start()
+        defer { owner.stop() }
+
+        let runtime = AppRuntime(
+            persistence: SessionPersistence(fileURL: root.appendingPathComponent("sessions.json")),
+            socketURL: root.appendingPathComponent("agent.sock"),
+            replySocketURL: replyURL,
+            monitorProviders: false,
+            answersFromNotch: { true },
+            privacyModeEnabled: { false }
+        )
+        await runtime.start()
+        defer { runtime.stop() }
+
+        XCTAssertNotNil(runtime.replySocketError)
+        let pending = AgentPendingReply(
+            replyId: UUID(),
+            kind: .permission,
+            prompt: "Allow?",
+            grants: [.deny, .allow]
+        )
+        runtime.activity.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "codex:observer-only",
+            provider: .codex,
+            state: .waitingForUser,
+            pendingReply: pending
+        ))
+        XCTAssertFalse(runtime.canAnswer(try XCTUnwrap(runtime.activity.session(id: "codex:observer-only"))))
+    }
+
+    @MainActor
     func testAnswerFromNotchDeliversReplyAndClearsWaitingSession() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("an-answer-\(UUID().uuidString.prefix(8))", isDirectory: true)
@@ -41,7 +80,7 @@ final class AppRuntimeTests: XCTestCase {
                 id: replyId,
                 socketURL: replySocketURL,
                 timeoutSeconds: 3,
-                afterHello: { helloReady.fulfill() }
+                afterRegistration: { helloReady.fulfill() }
             )
             box.set(reply)
             received.fulfill()
