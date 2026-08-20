@@ -10,7 +10,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Homebrew cask install from this repository:
   `brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch` then
-  `brew install --cask agents-notch`.
+  `brew install --cask aforno/agentnotch/agents-notch`.
 
 ### Changed
 

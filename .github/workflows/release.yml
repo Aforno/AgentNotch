@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -158,7 +158,7 @@ jobs:
           git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
           ./script/update_cask.sh --version "$VERSION" --checksum-file "$CHECKSUM"
           if git diff --quiet -- Casks/agents-notch.rb; then
-            echo "Homebrew cask already points at $VERSION"
+            echo "Homebrew cask unchanged for $VERSION"
             exit 0
           fi
           git config user.name "github-actions[bot]"

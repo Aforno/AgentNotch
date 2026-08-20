@@ -21,11 +21,14 @@ This repository is a Homebrew tap. Install the current GitHub release with:
 
 ```sh
 brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch
-brew install --cask agents-notch
+brew install --cask aforno/agentnotch/agents-notch
 ```
 
+Homebrew 6 does not trust a third-party tap when you add it. The fully
+qualified name trusts only this cask.
+
 Later cask bumps land on `main`. Update with `brew update` and
-`brew upgrade --cask agents-notch`.
+`brew upgrade --cask aforno/agentnotch/agents-notch`.
 
 ### Manual
 
@@ -244,7 +247,7 @@ config stays.
 If you installed with Homebrew:
 
 ```sh
-brew uninstall --cask agents-notch
+brew uninstall --cask aforno/agentnotch/agents-notch
 ```
 
 After quitting, optional local history and the copied relay live in:

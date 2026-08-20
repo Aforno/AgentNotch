@@ -55,12 +55,14 @@ The `Release` workflow requires these repository Actions secrets:
 - `APPLE_API_ISSUER_ID`: App Store Connect issuer ID
 - `APPLE_API_PRIVATE_KEY`: complete `.p8` private-key contents
 
-Push a signed `vX.Y.Z` tag only after CI passes. The workflow validates that
-the tag matches `VERSION`, imports the temporary certificate, builds and
+Push a signed `vX.Y.Z` tag only after CI passes. All tags share one `release`
+concurrency group, so one GitHub release runs at a time. The workflow validates
+that the tag matches `VERSION`, imports the temporary certificate, builds and
 notarizes the app, creates the checksum, and publishes both files to the GitHub
 release. After the GitHub files are up, it points `Casks/agents-notch.rb` at
-that ZIP and checksum and pushes the cask bump to the default branch. Homebrew
-users on this tap pick that up with `brew update`.
+that ZIP and checksum and pushes the cask bump to the default branch unless the
+cask already names a newer version. Homebrew users on this tap pick that up
+with `brew update`.
 
 If the cask commit cannot push, update it locally from the published checksum:
 

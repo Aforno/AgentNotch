@@ -79,6 +79,24 @@ path = Path(sys.argv[1])
 version = sys.argv[2]
 sha256 = sys.argv[3]
 text = path.read_text()
+
+
+def version_key(value: str) -> tuple:
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)(.*)$", value)
+    if not match:
+        raise SystemExit(f"invalid semantic version: {value}")
+    major, minor, patch, rest = match.groups()
+    return (int(major), int(minor), int(patch), rest == "", rest)
+
+
+current_match = re.search(r'^  version "([^"]+)"', text, flags=re.M)
+if current_match is None:
+    raise SystemExit("cask must contain one version stanza")
+current_version = current_match.group(1)
+if version_key(current_version) > version_key(version):
+    print(f"Skipping cask downgrade {current_version} -> {version}")
+    raise SystemExit(0)
+
 updated, version_count = re.subn(
     r'^  version "[^"]+"',
     f'  version "{version}"',
@@ -97,6 +115,5 @@ if version_count != 1 or sha_count != 1:
     raise SystemExit("cask must contain one version stanza and one sha256 stanza")
 if updated != text:
     path.write_text(updated)
+print(f"Cask {path} -> {version} ({sha256})")
 PY
-
-echo "Cask $CASK -> $VERSION ($SHA256)"
