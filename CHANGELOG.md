@@ -6,6 +6,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in "Answer from the notch": waiting prompts show Deny, Allow once, Allow,
+  or question options. A reply socket unblocks the hook. Observers stay the
+  default. Cursor and OpenCode still cannot decide. Privacy mode hides the
+  prompt and disables buttons.
+
 ### Changed
 
 - Collapsed notch provider icons drop the hairline ring. Stacked marks still

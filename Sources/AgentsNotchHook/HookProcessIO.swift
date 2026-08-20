@@ -27,7 +27,18 @@ enum HookProcessIO {
 
     static func writePassiveResponse(for provider: AgentProvider) {
         guard provider != .claudeCode else { return }
-        let payload = Data("{}\n".utf8)
+        writeStdout(Data("{}\n".utf8))
+    }
+
+    static func writeDecision(_ data: Data) {
+        var payload = data
+        if payload.last != 0x0A {
+            payload.append(0x0A)
+        }
+        writeStdout(payload)
+    }
+
+    private static func writeStdout(_ payload: Data) {
         payload.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else { return }
             _ = Darwin.write(STDOUT_FILENO, baseAddress, buffer.count)
@@ -73,6 +84,8 @@ struct HookProcessInvocation: Sendable {
     let configuredProvider: AgentProvider
     let provider: AgentProvider
     let socketURL: URL
+    let replySocketURL: URL
+    let answersFromNotch: Bool
     let isSelfTest: Bool
     let skipCompatibilityHook: Bool
 
@@ -99,6 +112,12 @@ struct HookProcessInvocation: Sendable {
             }
             return AgentSocketLocation.defaultURL
         }()
+        let replySocketURL: URL = {
+            if let index = arguments.firstIndex(of: "--reply-socket"), arguments.indices.contains(index + 1) {
+                return URL(fileURLWithPath: arguments[index + 1])
+            }
+            return AgentReplySocketLocation.defaultURL
+        }()
         let grokNativeConfiguration = homeDirectoryURL
             .appendingPathComponent(".grok/hooks/agentsnotch.json")
         let skipCompatibilityHook = GrokHookRouting.shouldSkipClaudeCompatibilityHook(
@@ -110,6 +129,8 @@ struct HookProcessInvocation: Sendable {
             configuredProvider: configuredProvider,
             provider: provider,
             socketURL: socketURL,
+            replySocketURL: replySocketURL,
+            answersFromNotch: arguments.contains("--answer"),
             isSelfTest: arguments.contains("--self-test"),
             skipCompatibilityHook: skipCompatibilityHook
         )

@@ -337,6 +337,30 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testAnswerFromNotchInstallsBlockingClaudePermissionHooks() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .claudeCode, answersFromNotch: true)
+        manager.install()
+
+        let settingsURL = fixture.home.appendingPathComponent(".claude/settings.json")
+        let hooks = try XCTUnwrap(try Self.readJSON(at: settingsURL)["hooks"] as? [String: Any])
+        let permission = try XCTUnwrap(
+            ((hooks["PermissionRequest"] as? [[String: Any]])?.first?["hooks"] as? [[String: Any]])?.first
+        )
+        XCTAssertEqual(permission["async"] as? Bool, false)
+        XCTAssertEqual(permission["timeout"] as? Int, 120)
+        XCTAssertEqual(permission["args"] as? [String], ["--provider", "claude-code", "--answer"])
+
+        let sessionStart = try XCTUnwrap(
+            ((hooks["SessionStart"] as? [[String: Any]])?.first?["hooks"] as? [[String: Any]])?.first
+        )
+        XCTAssertEqual(sessionStart["async"] as? Bool, true)
+        XCTAssertEqual(sessionStart["timeout"] as? Int, 5)
+        XCTAssertEqual(sessionStart["args"] as? [String], ["--provider", "claude-code", "--answer"])
+    }
+
+    @MainActor
     func testPrepareForMonitoringUpgradesLegacyClaudeObserverHooks() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -537,7 +561,11 @@ final class ProviderIntegrationManagerTests: XCTestCase {
             provider: .claudeCode,
             relayURL: URL(fileURLWithPath: "/tmp/agentsnotch-hook")
         )
-        let current = relay.commandHandler(timeout: .seconds(5), claudeExecForm: true)
+        let current = relay.commandHandler(
+            timeout: .seconds(5),
+            claudeExecForm: true,
+            eventName: "SessionStart"
+        )
         let legacy: [String: Any] = [
             "type": "command",
             "command": relay.relayURL.path,
@@ -624,11 +652,12 @@ private final class Fixture: @unchecked Sendable {
     }
 
     @MainActor
-    func manager(provider: AgentProvider) -> ProviderIntegrationManager {
+    func manager(provider: AgentProvider, answersFromNotch: Bool = false) -> ProviderIntegrationManager {
         ProviderIntegrationManager(
             provider: provider,
             homeDirectoryURL: home,
-            bundledRelayURL: bundledRelay
+            bundledRelayURL: bundledRelay,
+            answersFromNotch: { answersFromNotch }
         )
     }
 

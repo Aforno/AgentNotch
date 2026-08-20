@@ -403,6 +403,9 @@ public final class AgentActivityService {
             newestByIdentity[key] = session
         }
         sessions = Array(newestByIdentity.values)
+        for index in sessions.indices {
+            sessions[index].pendingReply = nil
+        }
     }
 
     private func namespaceSessionIdentity(_ session: inout AgentSession) {

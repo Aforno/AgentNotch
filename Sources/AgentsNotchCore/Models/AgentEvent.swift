@@ -30,6 +30,7 @@ public struct AgentEvent: Codable, Identifiable, Hashable, Sendable {
     public var agentRole: String?
     public var plan: AgentPlan?
     public var workflowUpdate: AgentWorkflowUpdate?
+    public var pendingReply: AgentPendingReply?
 
     public init(
         protocolVersion: Int = 1,
@@ -49,7 +50,8 @@ public struct AgentEvent: Codable, Identifiable, Hashable, Sendable {
         parentSessionId: String? = nil,
         agentRole: String? = nil,
         plan: AgentPlan? = nil,
-        workflowUpdate: AgentWorkflowUpdate? = nil
+        workflowUpdate: AgentWorkflowUpdate? = nil,
+        pendingReply: AgentPendingReply? = nil
     ) {
         self.protocolVersion = protocolVersion
         self.id = id
@@ -69,6 +71,7 @@ public struct AgentEvent: Codable, Identifiable, Hashable, Sendable {
         self.agentRole = agentRole
         self.plan = plan
         self.workflowUpdate = workflowUpdate
+        self.pendingReply = pendingReply
     }
 
     public var resolvedState: AgentState {

@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "hasCompletedOnboarding": false,
             "automaticallyCheckForUpdates": false,
             "privacyModeEnabled": false,
+            "answerFromNotchEnabled": false,
             "globalActivityShortcut": GlobalActivityShortcut.off.rawValue,
         ]
         #if DEBUG

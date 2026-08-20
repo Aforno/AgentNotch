@@ -201,7 +201,7 @@ final class DebugEventSimulator {
         case .running: (.activity, "Running tests", nil)
         case .executingTool: (.toolStarted, "Running swift test", nil)
         case .editing: (.fileChanged, "Editing AuthService.swift", "Sources/AuthService.swift")
-        case .waitingForUser: (.waiting, "Needs approval", nil)
+        case .waitingForUser: (.waiting, "Needs command approval", nil)
         case .unknown: (.activity, "Reconnecting after restart", nil)
         case .completed: (.completed, "Tests passed", nil)
         case .failed: (.failed, "Build failed", nil)
@@ -214,7 +214,16 @@ final class DebugEventSimulator {
             activity: values.1,
             state: state,
             workingDirectory: "/Users/demo/AgentsNotch",
-            file: values.2
+            file: values.2,
+            pendingReply: state == .waitingForUser
+                ? AgentPendingReply(
+                    replyId: UUID(),
+                    kind: .permission,
+                    prompt: "Allow this command?",
+                    detail: "git push origin main --tags",
+                    grants: [.deny, .once, .allow]
+                )
+                : nil
         )
     }
 

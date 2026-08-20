@@ -15,6 +15,37 @@ final class AppRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testAnswerFromNotchClearsSimulatedWaitingSession() throws {
+        let runtime = AppRuntime(
+            monitorProviders: false,
+            answersFromNotch: { true },
+            privacyModeEnabled: { false }
+        )
+        let pending = AgentPendingReply(
+            replyId: UUID(),
+            kind: .permission,
+            prompt: "Allow this command?",
+            detail: "swift test",
+            grants: [.deny, .once, .allow]
+        )
+        runtime.activity.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "debug-simulator:state",
+            provider: .codex,
+            activity: "Needs command approval",
+            state: .waitingForUser,
+            metadata: ["source": "simulator"],
+            pendingReply: pending
+        ))
+        let session = try XCTUnwrap(runtime.activity.session(id: "debug-simulator:state"))
+        XCTAssertTrue(runtime.canAnswer(session))
+        runtime.answer(session, decision: .allow)
+        XCTAssertEqual(runtime.activity.session(id: session.id)?.state, .running)
+        XCTAssertNil(runtime.activity.session(id: session.id)?.pendingReply)
+        XCTAssertEqual(runtime.activity.session(id: session.id)?.currentActivity, "Allowed")
+    }
+
+    @MainActor
     func testRuntimeEnforcesRetentionAsNewEventsArrive() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("an-runtime-\(UUID().uuidString.prefix(8))", isDirectory: true)

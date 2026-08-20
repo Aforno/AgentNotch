@@ -59,7 +59,7 @@ Cursor, or any mix of them. Agents Notch:
 2. installs an observer-only hook or plugin through the provider's supported
    extension point, without replacing anything already there;
 3. listens on `~/.agentsnotch/agent.sock` with directory mode `0700` and socket
-   mode `0600`.
+   mode `0600`. Answer from the notch also binds `reply.sock` in that directory.
 
 Config files:
 
@@ -73,13 +73,16 @@ Config files:
 In providers that have `/hooks`, that command shows the installed entries. Codex
 also requires new command hooks to be trusted.
 
-The observers never return a decision, inject context, or block a tool. The
-relay always exits 0, even if Agents Notch is not running.
+The observers never return a decision, inject context, or block a tool, unless
+Settings → Alerts & Privacy → Answer from the notch is on. Then permission
+hooks wait on a local reply socket for Deny, Allow, or a listed option. The
+relay still exits 0 if Agents Notch is not running or the click never comes.
 
 They subscribe to each provider's documented session, prompt, tool, permission,
 notification, and stop events. Claude Code observers use the documented
 exec-form `args` array with asynchronous command handlers, so they cannot block
-or control permission, elicitation, AskUserQuestion, or ExitPlanMode.
+or control permission, elicitation, AskUserQuestion, or ExitPlanMode. Turning
+on Answer from the notch rewrites those permission handlers to wait for a click.
 
 The relay accepts the snake_case payload used by Codex, Claude Code, Gemini CLI,
 and Cursor, and Grok's camelCase payload. The OpenCode bridge converts plugin
@@ -187,6 +190,10 @@ can omit them.
 - `origin` is optional launch context from the local relay. The app can
   reactivate the source terminal or IDE. Missing origin does not invalidate the
   event.
+- `pendingReply` is optional on `agent.waiting`. It is how the notch shows a
+  prompt with buttons and how a blocked hook finds the matching click.
+- `pendingReply` is optional on `agent.waiting`. It is how the notch shows a
+  prompt with buttons and how a blocked hook finds the matching click.
 
 The built-in hook mapper turns Codex `update_plan` calls into plan snapshots,
 `create_goal`/`update_goal` into workflow updates, and native subagent lifecycle

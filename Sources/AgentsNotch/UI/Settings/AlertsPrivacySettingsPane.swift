@@ -5,6 +5,7 @@ struct AlertsPrivacySettingsPane: View {
     let notificationsEnabled: Binding<Bool>
     let soundEnabled: Binding<Bool>
     let failureNotificationsEnabled: Binding<Bool>
+    let answerFromNotchEnabled: Binding<Bool>
     let privacyModeEnabled: Binding<Bool>
     let retentionDays: Binding<Int>
     let notificationError: String?
@@ -20,7 +21,8 @@ struct AlertsPrivacySettingsPane: View {
                 AttentionSettingsSection(
                     notificationsEnabled: notificationsEnabled,
                     soundEnabled: soundEnabled,
-                    failureNotificationsEnabled: failureNotificationsEnabled
+                    failureNotificationsEnabled: failureNotificationsEnabled,
+                    answerFromNotchEnabled: answerFromNotchEnabled
                 )
                 PrivacySettingsSection(privacyModeEnabled: privacyModeEnabled)
                 HistorySettingsSection(
