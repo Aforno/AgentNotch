@@ -167,11 +167,11 @@ struct GroupedHooksInstall: HookInstallStrategy {
             if usesClaudeExecForm, relay.answersFromNotch, eventName == "PreToolUse" {
                 let passiveRelay = HookRelayIdentity(provider: relay.provider, relayURL: relay.relayURL)
                 let hasPassive = groups.contains { group in
-                    group["matcher"] as? String == "^(?!AskUserQuestion$|ExitPlanMode$).*"
+                    group["matcher"] as? String == AgentReplyPolicy.claudePassiveToolMatcher
                         && handlers(in: group).contains { passiveRelay.identity(of: $0, eventName: eventName) == .current }
                 }
                 let hasAnswer = groups.contains { group in
-                    group["matcher"] as? String == "AskUserQuestion|ExitPlanMode"
+                    group["matcher"] as? String == AgentReplyPolicy.claudeInteractiveToolMatcher
                         && handlers(in: group).contains {
                             $0["async"] as? Bool == false
                                 && ($0["timeout"] as? Int) == AgentReplyPolicy.waitSeconds
@@ -229,7 +229,7 @@ struct GroupedHooksInstall: HookInstallStrategy {
             let passiveRelay = HookRelayIdentity(provider: relay.provider, relayURL: relay.relayURL)
             return [
                 [
-                    "matcher": "^(?!AskUserQuestion$|ExitPlanMode$).*",
+                    "matcher": AgentReplyPolicy.claudePassiveToolMatcher,
                     "hooks": [passiveRelay.commandHandler(
                         timeout: timeout(for: eventName),
                         claudeExecForm: true,
@@ -237,7 +237,7 @@ struct GroupedHooksInstall: HookInstallStrategy {
                     )],
                 ],
                 [
-                    "matcher": "AskUserQuestion|ExitPlanMode",
+                    "matcher": AgentReplyPolicy.claudeInteractiveToolMatcher,
                     "hooks": [relay.commandHandler(
                         timeout: timeout(for: eventName),
                         claudeExecForm: true,

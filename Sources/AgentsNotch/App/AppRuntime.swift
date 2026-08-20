@@ -219,7 +219,11 @@ final class AppRuntime {
             return true
         }
         #endif
-        return answersFromNotch() && liveReplyIDs.contains(pending.replyId)
+        guard answersFromNotch() else { return false }
+        // liveReplyIDs is a cached snapshot for reconciliation. Registration
+        // can land on replyServer before that cache updates on the main actor.
+        return liveReplyIDs.contains(pending.replyId)
+            || replyServer?.isPending(pending.replyId) == true
     }
 
     func answer(

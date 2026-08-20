@@ -104,11 +104,7 @@ final class AppRuntimeTests: XCTestCase {
         ))
         let session = try XCTUnwrap(runtime.activity.session(id: "codex:thr-answer"))
         XCTAssertTrue(runtime.canAnswer(session))
-        for _ in 0..<50 {
-            runtime.answer(session, decision: .allow)
-            if runtime.activity.session(id: session.id)?.state == .running { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        runtime.answer(session, decision: .allow)
         await fulfillment(of: [received], timeout: 2)
 
         XCTAssertEqual(box.get()?.decision, .allow)
