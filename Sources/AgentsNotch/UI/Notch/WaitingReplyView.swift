@@ -46,7 +46,7 @@ struct WaitingReplyView: View {
                 if pending?.kind == .question, let first = pending?.options.first {
                     onAnswer(.option, first.id)
                 } else {
-                    onAnswer(.once, nil)
+                    onAnswer(.allow, nil)
                 }
                 return .handled
             default:
@@ -156,11 +156,6 @@ struct WaitingReplyActions: View {
                         onAnswer(.deny, nil)
                     }
                 }
-                if pending.allowsOnce {
-                    replyButton("Allow once", kind: .once) {
-                        onAnswer(.once, nil)
-                    }
-                }
                 if pending.allowsAllow {
                     replyButton(pending.kind == .plan ? "Start coding" : "Allow", kind: .allow) {
                         onAnswer(.allow, nil)
@@ -184,11 +179,11 @@ struct WaitingReplyActions: View {
 }
 
 private enum ReplyButtonKind {
-    case deny, once, allow, choice
+    case deny, allow, choice
 
     var color: Color {
         switch self {
-        case .deny, .once, .choice:
+        case .deny, .choice:
             Color.white.opacity(0.12)
         case .allow:
             Color.orange.opacity(0.85)

@@ -76,7 +76,7 @@ public enum AgentReplyPromptBuilder {
             kind: .permission,
             prompt: prompt,
             detail: detail.map { ProviderEventPolicy.concise($0, limit: 400) },
-            grants: [.deny, .once, .allow]
+            grants: [.deny, .allow]
         )
     }
 

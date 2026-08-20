@@ -209,6 +209,29 @@ public final class UnixReplyServer: @unchecked Sendable {
         } else {
             lock.unlock()
         }
+        watchDisconnect(replyId: hello.replyId, client: client)
+    }
+
+    /// Drops a waiter when the hook closes or times out. SO_RCVTIMEO does not
+    /// fire unless someone reads; this read is that someone.
+    private func watchDisconnect(replyId: UUID, client: Int32) {
+        Thread { [weak self] in
+            var buffer = [UInt8](repeating: 0, count: 1)
+            _ = Darwin.read(client, &buffer, 1)
+            self?.dropIfStillPending(replyId: replyId, client: client)
+        }.start()
+    }
+
+    private func dropIfStillPending(replyId: UUID, client: Int32) {
+        lock.lock()
+        let matches = pending[replyId] == client
+        if matches {
+            pending.removeValue(forKey: replyId)
+        }
+        lock.unlock()
+        guard matches else { return }
+        _ = Darwin.shutdown(client, SHUT_RDWR)
+        Darwin.close(client)
     }
 }
 

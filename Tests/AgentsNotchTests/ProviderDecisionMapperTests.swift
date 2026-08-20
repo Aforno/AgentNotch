@@ -22,6 +22,31 @@ final class ProviderDecisionMapperTests: XCTestCase {
         XCTAssertEqual(decision["behavior"] as? String, "allow")
     }
 
+    func testOnceDecisionUsesTheSameAllowPayload() throws {
+        let payload = try decode("""
+        {
+          "session_id": "thr",
+          "cwd": "/tmp",
+          "hook_event_name": "PermissionRequest",
+          "tool_name": "Bash"
+        }
+        """)
+        let allow = ProviderDecisionMapper.jsonObject(
+            provider: .codex,
+            payload: payload,
+            reply: AgentReply(replyId: UUID(), decision: .allow)
+        )
+        let once = ProviderDecisionMapper.jsonObject(
+            provider: .codex,
+            payload: payload,
+            reply: AgentReply(replyId: UUID(), decision: .once)
+        )
+        XCTAssertEqual(
+            allow["hookSpecificOutput"] as? NSDictionary,
+            once["hookSpecificOutput"] as? NSDictionary
+        )
+    }
+
     func testPermissionDenyIncludesMessage() throws {
         let payload = try decode("""
         {

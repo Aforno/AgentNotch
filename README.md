@@ -74,8 +74,9 @@ In providers that have `/hooks`, that command shows the installed entries. Codex
 also requires new command hooks to be trusted.
 
 The observers never return a decision, inject context, or block a tool, unless
-Settings → Alerts & Privacy → Answer from the notch is on. Then permission
-hooks wait on a local reply socket for Deny, Allow, or a listed option. The
+Settings → Alerts & Privacy → Answer from the notch is on. Then Codex and
+Claude Code permission hooks wait on a local reply socket for Deny, Allow, or
+a listed option. Grok, Gemini, Cursor, and OpenCode stay display-only. The
 relay still exits 0 if Agents Notch is not running or the click never comes.
 
 They subscribe to each provider's documented session, prompt, tool, permission,

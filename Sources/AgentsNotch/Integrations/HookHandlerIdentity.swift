@@ -24,7 +24,7 @@ struct HookRelayIdentity: Sendable {
         let path = relayURL.path.replacingOccurrences(of: "'", with: "'\\''")
         let providerName = provider.rawValue.replacingOccurrences(of: "'", with: "'\\''")
         var command = "'\(path)' --provider '\(providerName)'"
-        if answersFromNotch {
+        if sendsDecisions {
             command += " --answer"
         }
         return command
@@ -42,7 +42,7 @@ struct HookRelayIdentity: Sendable {
     ) -> [String: Any] {
         let resolvedTimeout = waitTimeout(timeout, eventName: eventName)
         if claudeExecForm {
-            let blocking = answersFromNotch && AgentReplyPolicy.waitsForAnswer(eventName: eventName)
+            let blocking = sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName)
             return [
                 "type": "command",
                 "command": relayURL.path,
@@ -67,14 +67,18 @@ struct HookRelayIdentity: Sendable {
 
     private func commandArguments() -> [String] {
         var arguments = ["--provider", provider.rawValue]
-        if answersFromNotch {
+        if sendsDecisions {
             arguments.append("--answer")
         }
         return arguments
     }
 
+    private var sendsDecisions: Bool {
+        answersFromNotch && AgentReplyPolicy.canDecide(provider: provider)
+    }
+
     private func waitTimeout(_ timeout: HookTimeout, eventName: String) -> HookTimeout {
-        guard answersFromNotch, AgentReplyPolicy.waitsForAnswer(eventName: eventName) else {
+        guard sendsDecisions, AgentReplyPolicy.waitsForAnswer(eventName: eventName) else {
             return timeout
         }
         switch timeout.unit {
@@ -103,9 +107,9 @@ struct HookRelayIdentity: Sendable {
         let args = handler["args"] as? [String] ?? []
         let command = handler["command"] as? String ?? ""
         let hasAnswerFlag = args.contains("--answer") || command.contains(" --answer")
-        guard hasAnswerFlag == answersFromNotch else { return false }
+        guard hasAnswerFlag == sendsDecisions else { return false }
         guard provider == .claudeCode else { return true }
-        let expectedAsync = !(answersFromNotch && AgentReplyPolicy.waitsForAnswer(eventName: eventName))
+        let expectedAsync = !(sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName))
         return handler["type"] as? String == "command"
             && handler["async"] as? Bool == expectedAsync
             && handler["command"] as? String == relayURL.path

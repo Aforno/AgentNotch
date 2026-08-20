@@ -221,7 +221,7 @@ final class DebugEventSimulator {
                     kind: .permission,
                     prompt: "Allow this command?",
                     detail: "git push origin main --tags",
-                    grants: [.deny, .once, .allow]
+                    grants: [.deny, .allow]
                 )
                 : nil
         )

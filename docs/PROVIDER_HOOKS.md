@@ -6,13 +6,14 @@ notch is on. The hook ignores `SIGPIPE`, drains stdin, decodes and enriches
 within bounds, sends an event when applicable, writes the provider's passive
 response, and exits 0 even if Agents Notch is not running.
 
-With Answer from the notch, permission, PreToolUse, and elicitation handlers
-gain `--answer` and a 120-second timeout. Waiting events register on
-`reply.sock` before the activity event is sent. A notch click writes the
-provider decision JSON. Timeout or a missing app still writes the passive
-response so the provider UI can take over. Claude permission handlers become
-synchronous only in that mode. Cursor has no approval hook. OpenCode's plugin
-does not wait.
+With Answer from the notch, Codex and Claude Code permission, PreToolUse, and
+elicitation handlers gain `--answer` and a 120-second timeout. Waiting events
+register on `reply.sock` before the activity event is sent. A notch click
+writes the provider decision JSON. Timeout or a missing app still writes the
+passive response so the provider UI can take over. Claude permission handlers
+become synchronous only in that mode. Grok, Gemini, Cursor, and OpenCode do
+not wait for a decision. Gemini's Notification hook is observability-only.
+Cursor has no approval hook. OpenCode's plugin does not wait.
 
 Passive stdout is provider-specific. Claude Code receives empty stdout. The
 other integrated providers receive `{}` followed by a newline. Keep this in

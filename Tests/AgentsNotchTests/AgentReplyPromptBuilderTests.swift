@@ -19,7 +19,7 @@ final class AgentReplyPromptBuilderTests: XCTestCase {
         XCTAssertEqual(pending.kind, .permission)
         XCTAssertEqual(pending.prompt, "Allow this command?")
         XCTAssertEqual(pending.detail, "git push origin main --tags")
-        XCTAssertEqual(pending.grants, [.deny, .once, .allow])
+        XCTAssertEqual(pending.grants, [.deny, .allow])
     }
 
     func testAskUserQuestionExtractsOptions() throws {
@@ -64,6 +64,15 @@ final class AgentReplyPromptBuilderTests: XCTestCase {
         XCTAssertEqual(pending.kind, .plan)
         XCTAssertEqual(pending.grants, [.deny, .allow])
         XCTAssertEqual(pending.detail, "Split hook install by config shape")
+    }
+
+    func testOnlyCodexAndClaudeCanDecide() {
+        XCTAssertTrue(AgentReplyPolicy.canDecide(provider: .codex))
+        XCTAssertTrue(AgentReplyPolicy.canDecide(provider: .claudeCode))
+        XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .grok))
+        XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .geminiCLI))
+        XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .cursor))
+        XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .openCode))
     }
 
     private func decode(_ json: String) throws -> AgentHookPayload {

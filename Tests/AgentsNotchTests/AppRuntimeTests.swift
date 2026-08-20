@@ -15,31 +15,64 @@ final class AppRuntimeTests: XCTestCase {
     }
 
     @MainActor
-    func testAnswerFromNotchClearsSimulatedWaitingSession() throws {
+    func testAnswerFromNotchDeliversReplyAndClearsWaitingSession() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("an-answer-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let replySocketURL = root.appendingPathComponent("reply.sock")
         let runtime = AppRuntime(
+            persistence: SessionPersistence(fileURL: root.appendingPathComponent("sessions.json")),
+            socketURL: root.appendingPathComponent("agent.sock"),
+            replySocketURL: replySocketURL,
             monitorProviders: false,
             answersFromNotch: { true },
             privacyModeEnabled: { false }
         )
+        await runtime.start()
+        defer { runtime.stop() }
+
+        let replyId = UUID()
+        let helloReady = expectation(description: "hook registered")
+        let received = expectation(description: "hook received decision")
+        let box = LockedReplyBox()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let reply = UnixReplyClient.awaitReply(
+                id: replyId,
+                socketURL: replySocketURL,
+                timeoutSeconds: 3,
+                afterHello: { helloReady.fulfill() }
+            )
+            box.set(reply)
+            received.fulfill()
+        }
+
+        await fulfillment(of: [helloReady], timeout: 2)
         let pending = AgentPendingReply(
-            replyId: UUID(),
+            replyId: replyId,
             kind: .permission,
             prompt: "Allow this command?",
             detail: "swift test",
-            grants: [.deny, .once, .allow]
+            grants: [.deny, .allow]
         )
         runtime.activity.ingest(AgentEvent(
             type: .waiting,
-            sessionId: "debug-simulator:state",
+            sessionId: "codex:thr-answer",
             provider: .codex,
             activity: "Needs command approval",
             state: .waitingForUser,
-            metadata: ["source": "simulator"],
             pendingReply: pending
         ))
-        let session = try XCTUnwrap(runtime.activity.session(id: "debug-simulator:state"))
+        let session = try XCTUnwrap(runtime.activity.session(id: "codex:thr-answer"))
         XCTAssertTrue(runtime.canAnswer(session))
-        runtime.answer(session, decision: .allow)
+        for _ in 0..<50 {
+            runtime.answer(session, decision: .allow)
+            if runtime.activity.session(id: session.id)?.state == .running { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        await fulfillment(of: [received], timeout: 2)
+
+        XCTAssertEqual(box.get()?.decision, .allow)
         XCTAssertEqual(runtime.activity.session(id: session.id)?.state, .running)
         XCTAssertNil(runtime.activity.session(id: session.id)?.pendingReply)
         XCTAssertEqual(runtime.activity.session(id: session.id)?.currentActivity, "Allowed")
@@ -125,5 +158,22 @@ final class AppRuntimeTests: XCTestCase {
             codexIntegration.hasReceivedEvent,
             "self-test traffic must not promote integration health"
         )
+    }
+}
+
+private final class LockedReplyBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: AgentReply?
+
+    func set(_ reply: AgentReply?) {
+        lock.lock()
+        value = reply
+        lock.unlock()
+    }
+
+    func get() -> AgentReply? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
     }
 }

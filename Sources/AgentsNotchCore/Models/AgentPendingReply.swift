@@ -104,7 +104,7 @@ public enum AgentReplyPolicy {
 
     public static func canDecide(provider: AgentProvider) -> Bool {
         switch provider {
-        case .codex, .claudeCode, .grok, .geminiCLI:
+        case .codex, .claudeCode:
             true
         default:
             false

@@ -18,7 +18,7 @@ public enum ProviderDecisionMapper {
         reply: AgentReply
     ) -> [String: Any] {
         let eventName = HookEventName.metadataName(for: payload.hookEventName)
-        let allowed = !reply.isDeny
+        let allowed = reply.decision != .deny
         switch HookEventName(rawEventName: payload.hookEventName) {
         case .preToolUse:
             return preToolUseOutput(eventName: eventName, allowed: allowed, reply: reply, payload: payload)

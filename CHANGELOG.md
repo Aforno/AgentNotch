@@ -8,10 +8,11 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Opt-in "Answer from the notch": waiting prompts show Deny, Allow once, Allow,
-  or question options. A reply socket unblocks the hook. Observers stay the
-  default. Cursor and OpenCode still cannot decide. Privacy mode hides the
-  prompt and disables buttons.
+- Opt-in "Answer from the notch": waiting prompts show Deny, Allow, or
+  question options. A reply socket unblocks the hook. Observers stay the
+  default. Codex and Claude Code can return a decision. Grok, Gemini, Cursor,
+  and OpenCode stay display-only. Privacy mode hides the prompt and disables
+  buttons.
 
 ### Changed
 

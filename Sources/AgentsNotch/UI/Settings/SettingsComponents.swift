@@ -100,7 +100,7 @@ struct AttentionSettingsSection: View {
             .opacity(notificationsEnabled.wrappedValue ? 1 : 0.45)
             SettingsToggleRow(
                 title: "Answer from the notch",
-                detail: "Show Deny and Allow on permission prompts. Installed hooks wait for a click instead of staying observers.",
+                detail: "Show Deny and Allow on Codex and Claude permission prompts. Other providers stay observers.",
                 isOn: answerFromNotchEnabled
             )
         }
