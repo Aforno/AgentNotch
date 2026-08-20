@@ -11,8 +11,15 @@ if invocation.skipCompatibilityHook {
     exit(EXIT_SUCCESS)
 }
 
-do {
-    let payload = try AgentHookInput.decode(input)
+/// Marks self-test events so the notch can distinguish them from real traffic.
+func stampSelfTest(_ event: inout AgentEvent) {
+    guard invocation.isSelfTest else { return }
+    var metadata = event.metadata ?? [:]
+    metadata["source"] = "self-test"
+    event.metadata = metadata
+}
+
+if let payload = try? AgentHookInput.decode(input) {
     let enriched = ProviderHookEnricher.enrich(payload, provider: invocation.provider)
     var answered = false
     if var event = AgentHookEventMapper.map(
@@ -33,11 +40,7 @@ do {
             }
         }
         event.origin = HookProcessIO.origin()
-        if invocation.isSelfTest {
-            var metadata = event.metadata ?? [:]
-            metadata["source"] = "self-test"
-            event.metadata = metadata
-        }
+        stampSelfTest(&event)
         if let rawURL = ProcessInfo.processInfo.environment["AGENTS_NOTCH_APPLICATION_URL"] {
             event.applicationURL = URL(string: rawURL)
         }
@@ -74,26 +77,19 @@ do {
             } else {
                 // The native provider prompt remains authoritative, but answer
                 // mode must never make the observer signal disappear.
-                var observerEvent = event
-                observerEvent.pendingReply = nil
-                try? UnixSocketClient.send(observerEvent, to: invocation.socketURL)
+                event.pendingReply = nil
+                try? UnixSocketClient.send(event, to: invocation.socketURL)
             }
         } else {
             try? UnixSocketClient.send(event, to: invocation.socketURL)
         }
     }
     if var workflowEvent = enriched.workflowEvent {
-        if invocation.isSelfTest {
-            var metadata = workflowEvent.metadata ?? [:]
-            metadata["source"] = "self-test"
-            workflowEvent.metadata = metadata
-        }
+        stampSelfTest(&workflowEvent)
         try? UnixSocketClient.send(workflowEvent, to: invocation.socketURL)
     }
     if answered {
         exit(EXIT_SUCCESS)
     }
-    HookProcessIO.writePassiveResponse(for: invocation.provider)
-} catch {
-    HookProcessIO.writePassiveResponse(for: invocation.provider)
 }
+HookProcessIO.writePassiveResponse(for: invocation.provider)
