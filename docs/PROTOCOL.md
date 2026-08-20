@@ -12,9 +12,12 @@ fields include `parentSessionId`, `agentRole`, `plan`, `workflowUpdate`,
 `origin`, and `pendingReply`.
 
 `applicationURL` is untrusted. The Open session action accepts it only when it
-uses HTTPS and its host belongs to the event's built-in provider. Open terminal
-uses `origin` (`bundleIdentifier`, `terminalProgram`, `tty`,
-`terminalSessionIdentifier`) and ignores `applicationURL`.
+uses HTTPS and its host belongs to the event's built-in provider. Codex threads
+instead use an app-owned `codex://threads/<thread-id>` URL. Child sessions use
+the parent thread ID. Roots use the canonical session ID only when Codex index
+evidence is present. Open terminal uses `origin` (`bundleIdentifier`,
+`terminalProgram`, `tty`, `terminalSessionIdentifier`) and ignores
+`applicationURL`.
 
 | Type | Default state |
 | --- | --- |

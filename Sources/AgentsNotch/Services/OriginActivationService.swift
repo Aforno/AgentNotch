@@ -78,28 +78,18 @@ struct OriginActivationService {
 
     @discardableResult
     func open(_ session: AgentSession) -> Bool {
-        if Self.canOpenApplication(for: session), performOpen(session, action: .application) {
-            return true
+        if Self.canOpenApplication(for: session) {
+            return open(session, action: .application)
         }
-        if Self.canOpenTerminal(for: session), performOpen(session, action: .terminal) {
-            return true
+        if Self.canOpenTerminal(for: session) {
+            return open(session, action: .terminal)
         }
-        if activateOriginProcess(session) {
-            return true
-        }
-        return revealRepository(session)
+        guard session.provider != .codex else { return false }
+        return open(session, action: .revealRepository)
     }
 
     @discardableResult
     func open(_ session: AgentSession, action: OriginOpenAction) -> Bool {
-        if performOpen(session, action: action) {
-            return true
-        }
-        guard action != .revealRepository else { return false }
-        return revealRepository(session)
-    }
-
-    private func performOpen(_ session: AgentSession, action: OriginOpenAction) -> Bool {
         switch action {
         case .application:
             return openApplication(session)
@@ -113,12 +103,20 @@ struct OriginActivationService {
     static func destinations(for session: AgentSession) -> [OriginOpenDestination] {
         var destinations: [OriginOpenDestination] = []
         if canOpenApplication(for: session) {
+            let usesCodexThreadURL = codexThreadURL(for: session) != nil
             let usesSessionURL = session.applicationURL.map {
                 isAllowedApplicationURL($0, for: session.provider)
             } ?? false
+            let title = if usesCodexThreadURL {
+                "Open in Codex"
+            } else if usesSessionURL {
+                "Open session"
+            } else {
+                "Open app"
+            }
             destinations.append(OriginOpenDestination(
                 action: .application,
-                title: usesSessionURL ? "Open session" : "Open app",
+                title: title,
                 systemImage: "arrow.up.forward.app"
             ))
         }
@@ -129,7 +127,9 @@ struct OriginActivationService {
                 systemImage: "terminal"
             ))
         }
-        if destinations.isEmpty, session.workingDirectory != nil {
+        if destinations.isEmpty,
+           session.provider != .codex,
+           session.workingDirectory != nil {
             destinations.append(OriginOpenDestination(
                 action: .revealRepository,
                 title: "Reveal repository",
@@ -158,6 +158,9 @@ struct OriginActivationService {
     }
 
     static func canOpenApplication(for session: AgentSession) -> Bool {
+        if codexThreadURL(for: session) != nil {
+            return true
+        }
         if let url = session.applicationURL, isAllowedApplicationURL(url, for: session.provider) {
             return true
         }
@@ -173,6 +176,9 @@ struct OriginActivationService {
     }
 
     private func openApplication(_ session: AgentSession) -> Bool {
+        if let threadURL = Self.codexThreadURL(for: session) {
+            return openURL(threadURL)
+        }
         if let applicationURL = session.applicationURL,
            Self.isAllowedApplicationURL(applicationURL, for: session.provider),
            openURL(applicationURL) {
@@ -185,6 +191,33 @@ struct OriginActivationService {
             return true
         }
         return false
+    }
+
+    static func codexThreadURL(for session: AgentSession) -> URL? {
+        guard session.provider == .codex,
+              let threadID = resolvedCodexThreadID(for: session),
+              isSafeCodexThreadID(threadID),
+              var components = URLComponents(string: "codex://threads")
+        else {
+            return nil
+        }
+        components.path = "/\(threadID)"
+        return components.url
+    }
+
+    /// Children open the parent thread. Roots need index evidence so a helper ULID
+    /// is not advertised as `codex://threads/<helper-id>`.
+    private static func resolvedCodexThreadID(for session: AgentSession) -> String? {
+        if let parentID = session.parentSessionId,
+           let threadID = CodexSessionTitleResolver.threadID(fromCanonicalSessionID: parentID) {
+            return threadID
+        }
+        guard session.hasOfficialSessionTitle else { return nil }
+        return CodexSessionTitleResolver.threadID(fromCanonicalSessionID: session.id)
+    }
+
+    static func isSafeCodexThreadID(_ value: String) -> Bool {
+        value.wholeMatch(of: /^[A-Za-z0-9_-]{1,128}$/) != nil
     }
 
     private func openTerminal(_ session: AgentSession) -> Bool {

@@ -125,6 +125,43 @@ final class CodexSessionTitleResolverTests: XCTestCase {
         XCTAssertEqual(events[0].metadata?["titleSource"], "session")
     }
 
+    func testRestorerEmitsIndexEvidenceWhenTitleAlreadyMatches() throws {
+        let home = try temporaryCodexHome(index: """
+        {"id":"thr_123","thread_name":"Review recent changes"}
+        """)
+        let session = AgentSession(event: AgentEvent(
+            type: .completed,
+            sessionId: "codex:thr_123",
+            provider: .codex,
+            task: "Review recent changes",
+            activity: "Implemented the canonical identity fix.",
+            state: .completed
+        ))
+
+        let events = CodexSessionRestorer.titleEvents(in: [session], codexHome: home)
+
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0].metadata?["titleSource"], "session")
+    }
+
+    func testRestorerDoesNotRestampWhenOfficialTitleEvidenceExists() throws {
+        let home = try temporaryCodexHome(index: """
+        {"id":"thr_123","thread_name":"Review recent changes"}
+        """)
+        let session = AgentSession(event: AgentEvent(
+            type: .completed,
+            sessionId: "codex:thr_123",
+            provider: .codex,
+            task: "Review recent changes",
+            activity: "Implemented the canonical identity fix.",
+            state: .completed,
+            metadata: ["titleSource": "session"]
+        ))
+
+        XCTAssertTrue(session.hasOfficialSessionTitle)
+        XCTAssertTrue(CodexSessionRestorer.titleEvents(in: [session], codexHome: home).isEmpty)
+    }
+
     private func temporaryCodexHome(index: String) throws -> URL {
         try temporaryCodexHome(index: Data(index.utf8))
     }

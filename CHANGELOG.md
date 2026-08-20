@@ -12,10 +12,12 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   prompts with Deny, Allow, or a listed option. The setting is off by default.
   Grok, Gemini, Cursor, and OpenCode remain display-only. Privacy mode hides
   the prompt and disables its buttons.
-- Session detail can open the provider session or IDE separately from the
-  captured terminal. Terminal.app and iTerm2 also focus the recorded tab when
-  the relay has a TTY or session id. Finder still reveals the working directory
-  when neither origin is available.
+- Session detail can reopen a Codex desktop thread or open another provider
+  session or IDE separately from the captured terminal. Terminal.app and iTerm2
+  also focus the recorded tab when the relay has a TTY or session id. Finder
+  still reveals the working directory when no app, session, or terminal
+  destination exists for another provider. Internal Codex helper sessions do
+  not expose a dead open action.
 - Homebrew cask install from this repository:
   `brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch` then
   `brew install --cask aforno/agentnotch/agents-notch`.
@@ -62,6 +64,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Session links accept only provider-owned HTTPS destinations, origin Open
   ignores a recycled PID, and update downloads always open the fixed official
   GitHub release page instead of a response-provided URL.
+- Codex Open in Codex uses the parent thread ID for children, and keeps official
+  title evidence after restore and later activity so helper ULIDs stay hidden.
 - Clicking outside a selected notch thread now collapses the notch instead of
   leaving detail pinned until Back.
 - The notch thread Back control uses the same 28-point hit target as the hover
