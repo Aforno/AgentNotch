@@ -15,6 +15,23 @@ integration sends the same `AgentEvent` values to a local socket.
 
 Requirements: Apple Silicon Mac and macOS 14 or later.
 
+### Homebrew
+
+This repository is a Homebrew tap. Install the current GitHub release with:
+
+```sh
+brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch
+brew install --cask aforno/agentnotch/agents-notch
+```
+
+Homebrew 6 does not trust a third-party tap when you add it. The fully
+qualified name trusts only this cask.
+
+Later cask bumps land on `main`. Update with `brew update` and
+`brew upgrade --cask aforno/agentnotch/agents-notch`.
+
+### Manual
+
 When a release is up, download the ZIP and the matching `.sha256` file from the
 [GitHub releases page](../../releases). Verify it before you open the app:
 
@@ -59,7 +76,8 @@ Cursor, or any mix of them. Agents Notch:
 2. installs an observer-only hook or plugin through the provider's supported
    extension point, without replacing anything already there;
 3. listens on `~/.agentsnotch/agent.sock` with directory mode `0700` and socket
-   mode `0600`. Answer from the notch also binds `reply.sock` in that directory.
+   mode `0600`. If Answer from the notch is enabled, the app also binds
+   `reply.sock` in that directory.
 
 Config files:
 
@@ -73,17 +91,18 @@ Config files:
 In providers that have `/hooks`, that command shows the installed entries. Codex
 also requires new command hooks to be trusted.
 
-The observers never return a decision, inject context, or block a tool, unless
-Settings → Alerts & Privacy → Answer from the notch is on. Then Codex and
-Claude Code permission hooks wait on a local reply socket for Deny, Allow, or
-a listed option. Grok, Gemini, Cursor, and OpenCode stay display-only. The
-relay still exits 0 if Agents Notch is not running or the click never comes.
+By default, provider hooks do not return decisions, inject context, or block
+tools. Enabling Settings → Alerts & Privacy → Answer from the notch makes Codex
+and Claude Code permission hooks wait up to 120 seconds for Deny, Allow, or a
+listed option. Grok, Gemini, Cursor, and OpenCode remain display-only. If the
+app is unavailable or no answer arrives, the provider shows its own prompt.
 
 They subscribe to each provider's documented session, prompt, tool, permission,
 notification, and stop events. Claude Code observers use the documented
 exec-form `args` array with asynchronous command handlers, so they cannot block
-or control permission, elicitation, AskUserQuestion, or ExitPlanMode. Turning
-on Answer from the notch rewrites those permission handlers to wait for a click.
+or control permission, elicitation, AskUserQuestion, or ExitPlanMode. Enabling
+Answer from the notch replaces the permission handlers with synchronous ones
+that wait up to 120 seconds.
 
 The relay accepts the snake_case payload used by Codex, Claude Code, Gemini CLI,
 and Cursor, and Grok's camelCase payload. The OpenCode bridge converts plugin
@@ -191,10 +210,9 @@ can omit them.
 - `origin` is optional launch context from the local relay. The app can
   reactivate the source terminal or IDE. Missing origin does not invalidate the
   event.
-- `pendingReply` is optional on `agent.waiting`. It is how the notch shows a
-  prompt with buttons and how a blocked hook finds the matching click.
-- `pendingReply` is optional on `agent.waiting`. It is how the notch shows a
-  prompt with buttons and how a blocked hook finds the matching click.
+- `pendingReply` is optional on `agent.waiting`. It contains the prompt,
+  available actions, and the ID used to match a notch answer to the waiting
+  hook.
 
 The built-in hook mapper turns Codex `update_plan` calls into plan snapshots,
 `create_goal`/`update_goal` into workflow updates, and native subagent lifecycle
@@ -234,6 +252,12 @@ are opt-in and delivered by macOS.
 Remove each installed provider integration from Settings → Integrations before
 deleting the app. That deletes only Agents Notch hook entries. Other provider
 config stays.
+
+If you installed with Homebrew:
+
+```sh
+brew uninstall --cask aforno/agentnotch/agents-notch
+```
 
 After quitting, optional local history and the copied relay live in:
 

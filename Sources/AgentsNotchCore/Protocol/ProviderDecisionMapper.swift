@@ -1,6 +1,6 @@
 import Foundation
 
-/// Maps a notch click onto the JSON body each provider's hook stdout expects.
+/// Converts a notch answer to the JSON that a provider hook writes to stdout.
 public enum ProviderDecisionMapper {
     public static func data(
         provider: AgentProvider,

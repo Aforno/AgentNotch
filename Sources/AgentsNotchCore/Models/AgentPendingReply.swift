@@ -27,7 +27,7 @@ public enum AgentReplyGrant: String, Codable, Sendable {
     case session
 }
 
-/// Display-only prompt plus the id the hook process is blocked on.
+/// A waiting prompt and the ID used to match its reply to a hook process.
 public struct AgentPendingReply: Codable, Hashable, Sendable, Identifiable {
     public var replyId: UUID
     public var kind: AgentPromptKind
@@ -89,7 +89,7 @@ public struct AgentReplyHello: Codable, Sendable {
     }
 }
 
-/// Shared wait budget for permission hooks and the reply socket.
+/// Defines which hooks can wait for a reply and how long they wait.
 public enum AgentReplyPolicy {
     public static let waitSeconds = 120
 

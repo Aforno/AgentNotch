@@ -11,8 +11,9 @@ pills.
 
 - Stay collapsed for routine tool, edit, and completion activity.
 - Expand automatically only for permission or answer attention.
-- When a waiting session has `pendingReply` and answering is enabled, the first
-  surface is the prompt plus Deny / Allow / options. Privacy mode hides that.
+- When answering is enabled and a waiting session has `pendingReply`, show its
+  prompt and available actions before the session list. Privacy mode hides the
+  prompt and disables its actions.
 - Show the three most recently updated agent groups in the expanded list.
 - Queue multiple waiting sessions and show waiting or failed descendants on
   their parent row.

@@ -17,6 +17,7 @@ required_files=(
   CHANGELOG.md
   THIRD_PARTY_NOTICES.md
   VERSION
+  Casks/agents-notch.rb
   .github/workflows/ci.yml
   .github/workflows/release.yml
 )
@@ -27,6 +28,19 @@ for required_file in "${required_files[@]}"; do
     exit 1
   fi
 done
+
+if ! rg -q '^cask "agents-notch" do$' Casks/agents-notch.rb; then
+  echo "Homebrew cask token must be agents-notch" >&2
+  exit 1
+fi
+if ! rg -q '^  version "[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?"$' Casks/agents-notch.rb; then
+  echo "Homebrew cask is missing a semantic version stanza" >&2
+  exit 1
+fi
+if ! rg -q '^  sha256 "[0-9a-f]{64}"$' Casks/agents-notch.rb; then
+  echo "Homebrew cask is missing a 64-character sha256 stanza" >&2
+  exit 1
+fi
 
 for script in script/*.sh; do
   bash -n "$script"
@@ -88,6 +102,7 @@ if rg -n --hidden \
   -g '*.yaml' \
   -g '*.json' \
   -g '*.toml' \
+  -g '*.rb' \
   '[[:blank:]]+$' \
   .; then
   echo "trailing whitespace found" >&2

@@ -1,19 +1,20 @@
 # Provider hooks
 
-Provider hooks are passive observers by default. They must not make permission
-decisions, block tools, or inject context unless Settings → Answer from the
-notch is on. The hook ignores `SIGPIPE`, drains stdin, decodes and enriches
-within bounds, sends an event when applicable, writes the provider's passive
-response, and exits 0 even if Agents Notch is not running.
+Provider hooks are passive observers by default. They do not make permission
+decisions, block tools, or inject context. The hook ignores `SIGPIPE`, drains
+stdin, decodes and enriches within bounds, sends an event when applicable,
+writes the provider's passive response, and exits 0 even if Agents Notch is not
+running.
 
-With Answer from the notch, Codex and Claude Code permission, PreToolUse, and
-elicitation handlers gain `--answer` and a 120-second timeout. Waiting events
-register on `reply.sock` before the activity event is sent. A notch click
-writes the provider decision JSON. Timeout or a missing app still writes the
-passive response so the provider UI can take over. Claude permission handlers
-become synchronous only in that mode. Grok, Gemini, Cursor, and OpenCode do
-not wait for a decision. Gemini's Notification hook is observability-only.
-Cursor has no approval hook. OpenCode's plugin does not wait.
+Enabling Answer from the notch adds `--answer` and a 120-second timeout to
+Codex and Claude Code permission, PreToolUse, and elicitation handlers. The hook
+registers on `reply.sock` before it sends the waiting event. A notch click writes
+the provider decision JSON. If the app is unavailable or no answer arrives, the
+hook writes the passive response and the provider shows its own prompt. Claude
+permission handlers become synchronous only while this setting is enabled.
+Grok, Gemini, Cursor, and OpenCode do not wait for a decision. Gemini's
+Notification hook only reports status. Cursor has no approval hook, and the
+OpenCode plugin does not wait.
 
 Passive stdout is provider-specific. Claude Code receives empty stdout. The
 other integrated providers receive `{}` followed by a newline. Keep this in
@@ -33,8 +34,8 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   resolves missing title/hierarchy from its session tree, and skips duplicate
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
 - Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
-  no-decision handlers for permission and elicitation events. Answer from the
-  notch rewrites those handlers to `--answer` and a 120-second blocking wait.
+  handlers for permission and elicitation events. Enabling Answer from the
+  notch replaces them with `--answer` handlers that wait up to 120 seconds.
 - Cursor exposes session, prompt, tool, failure, and completion hooks. It has
   no passive native approval hook, so it cannot raise notch attention for
   approval.

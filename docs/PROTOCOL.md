@@ -28,12 +28,12 @@ uses HTTPS and its host belongs to the event's built-in provider.
 Session IDs are `provider:nativeId`; subagents append `:agentId`. Hook mappers
 must never send an unprefixed provider session ID into the reducer.
 
-`pendingReply` is additive on `agent.waiting`. It carries `replyId`, `kind`
-(`permission`, `question`, `plan`, `elicitation`), `prompt`, optional `detail`,
-`options`, and `grants`. Missing `pendingReply` keeps the island display-only.
-The hook that set `replyId` then waits on `~/.agentsnotch/reply.sock` for one
-`AgentReply` line. No reply, or a missing app, fail-opens to the provider's
-own prompt.
+An `agent.waiting` event may include `pendingReply`. It carries `replyId`,
+`kind` (`permission`, `question`, `plan`, or `elicitation`), `prompt`, optional
+`detail`, `options`, and `grants`. Without `pendingReply`, the notch only shows
+the waiting state. The hook that created `replyId` waits on
+`~/.agentsnotch/reply.sock` for one `AgentReply` line. If the app is unavailable
+or no reply arrives within 120 seconds, the provider shows its own prompt.
 
 `AgentHookPayload` is a compatibility decoder, not a protocol version. It accepts
 the provider payload formats that `AgentHookEventMapper` converts into protocol

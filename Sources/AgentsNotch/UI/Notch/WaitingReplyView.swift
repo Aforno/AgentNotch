@@ -1,7 +1,7 @@
 import AgentsNotchCore
 import SwiftUI
 
-/// Expanded attention surface for a prompt the user can answer from the notch.
+/// Shows a waiting prompt and the actions available from the notch.
 struct WaitingReplyView: View {
     let session: AgentSession
     let waitingCount: Int
