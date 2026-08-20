@@ -204,7 +204,7 @@ final class OriginActivationServiceTests: XCTestCase {
                 openedURL = url
                 return true
             },
-            activateBundle: { bundle in
+            openBundle: { bundle in
                 activatedBundle = bundle
                 return true
             },
@@ -229,6 +229,35 @@ final class OriginActivationServiceTests: XCTestCase {
         XCTAssertTrue(service.open(session, action: .application))
         XCTAssertEqual(openedURL, URL(string: "https://chatgpt.com/codex/session/123"))
         XCTAssertNil(activatedBundle)
+    }
+
+    @MainActor
+    func testOpenApplicationFallsBackToBundleThenRepository() {
+        var openedBundle: String?
+        var revealedDirectory: String?
+        let service = OriginActivationService(
+            processAlive: { _ in false },
+            openBundle: { bundle in
+                openedBundle = bundle
+                return false
+            },
+            revealDirectory: { revealedDirectory = $0 }
+        )
+        let session = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "cursor:closed-app",
+            provider: .cursor,
+            state: .running,
+            workingDirectory: "/Users/me/project",
+            origin: AgentOrigin(
+                bundleIdentifier: "com.todesktop.230313mzl4w4u92",
+                terminalProgram: "vscode"
+            )
+        ))
+
+        XCTAssertTrue(service.open(session, action: .application))
+        XCTAssertEqual(openedBundle, "com.todesktop.230313mzl4w4u92")
+        XCTAssertEqual(revealedDirectory, "/Users/me/project")
     }
 
     @MainActor
@@ -265,13 +294,13 @@ final class OriginActivationServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testOpenTerminalFallsBackToBundleWhenScriptFails() {
-        var activatedBundle: String?
+    func testOpenTerminalFallsBackToBundleWhenExactFocusFails() {
+        var openedBundle: String?
         let service = OriginActivationService(
             openURL: { _ in false },
             processAlive: { _ in false },
-            activateBundle: { bundle in
-                activatedBundle = bundle
+            openBundle: { bundle in
+                openedBundle = bundle
                 return true
             },
             runAppleScript: { _ in false }
@@ -288,18 +317,18 @@ final class OriginActivationServiceTests: XCTestCase {
         ))
 
         XCTAssertTrue(service.open(session, action: .terminal))
-        XCTAssertEqual(activatedBundle, "com.mitchellh.ghostty")
+        XCTAssertEqual(openedBundle, "com.mitchellh.ghostty")
     }
 
     @MainActor
     func testOpenTerminalRejectsUnsafeTTYInAppleScript() {
         var ranScript = false
-        var activatedBundle: String?
+        var openedBundle: String?
         let service = OriginActivationService(
             openURL: { _ in false },
             processAlive: { _ in false },
-            activateBundle: { bundle in
-                activatedBundle = bundle
+            openBundle: { bundle in
+                openedBundle = bundle
                 return true
             },
             runAppleScript: { _ in
@@ -321,17 +350,20 @@ final class OriginActivationServiceTests: XCTestCase {
 
         XCTAssertTrue(service.open(session, action: .terminal))
         XCTAssertFalse(ranScript)
-        XCTAssertEqual(activatedBundle, "com.apple.Terminal")
+        XCTAssertEqual(openedBundle, "com.apple.Terminal")
     }
 
     @MainActor
-    func testOpenTerminalSelectsITermSession() {
-        var script: String?
+    func testOpenTerminalUsesITermRevealURL() throws {
+        var openedURL: URL?
         let service = OriginActivationService(
-            openURL: { _ in false },
-            runAppleScript: { source in
-                script = source
+            openURL: { url in
+                openedURL = url
                 return true
+            },
+            runAppleScript: { _ in
+                XCTFail("iTerm session reveal should not use AppleScript")
+                return false
             }
         )
         let session = AgentSession(event: AgentEvent(
@@ -347,8 +379,16 @@ final class OriginActivationServiceTests: XCTestCase {
         ))
 
         XCTAssertTrue(service.open(session, action: .terminal))
-        XCTAssertTrue(script?.contains("tell application \"iTerm\"") == true)
-        XCTAssertTrue(script?.contains("w0t0p0:ABCDEF12-3456-7890-ABCD-EF1234567890") == true)
+        XCTAssertEqual(openedURL?.scheme, "iterm2")
+        XCTAssertEqual(openedURL?.path, "/reveal")
+        XCTAssertTrue(openedURL?.absoluteString.hasPrefix("iterm2:///reveal?") == true)
+        XCTAssertEqual(
+            URLComponents(url: try XCTUnwrap(openedURL), resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first { $0.name == "sessionid" }?
+                .value,
+            "w0t0p0:ABCDEF12-3456-7890-ABCD-EF1234567890"
+        )
     }
 
     @MainActor

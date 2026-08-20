@@ -20,7 +20,7 @@ struct OriginActivationService {
     private let processAlive: (Int32) -> Bool
     private let processStartedAt: (Int32) -> Date?
     private let activateProcess: (Int32) -> Bool
-    private let activateBundle: (String) -> Bool
+    private let openBundle: (String) -> Bool
     private let runAppleScript: (String) -> Bool
     private let revealDirectory: (String) -> Void
 
@@ -37,11 +37,25 @@ struct OriginActivationService {
             else { return false }
             return application.activate()
         },
-        activateBundle: @escaping (String) -> Bool = { bundleIdentifier in
-            NSRunningApplication
+        openBundle: @escaping (String) -> Bool = { bundleIdentifier in
+            if NSRunningApplication
                 .runningApplications(withBundleIdentifier: bundleIdentifier)
                 .first?
-                .activate() ?? false
+                .activate() == true {
+                return true
+            }
+            guard let applicationURL = NSWorkspace.shared.urlForApplication(
+                withBundleIdentifier: bundleIdentifier
+            ) else {
+                return false
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(
+                at: applicationURL,
+                configuration: configuration
+            ) { _, _ in }
+            return true
         },
         runAppleScript: @escaping (String) -> Bool = { source in
             var error: NSDictionary?
@@ -57,27 +71,35 @@ struct OriginActivationService {
         self.processAlive = processAlive
         self.processStartedAt = processStartedAt
         self.activateProcess = activateProcess
-        self.activateBundle = activateBundle
+        self.openBundle = openBundle
         self.runAppleScript = runAppleScript
         self.revealDirectory = revealDirectory
     }
 
     @discardableResult
     func open(_ session: AgentSession) -> Bool {
-        if Self.canOpenApplication(for: session), open(session, action: .application) {
+        if Self.canOpenApplication(for: session), performOpen(session, action: .application) {
             return true
         }
-        if Self.canOpenTerminal(for: session), open(session, action: .terminal) {
+        if Self.canOpenTerminal(for: session), performOpen(session, action: .terminal) {
             return true
         }
         if activateOriginProcess(session) {
             return true
         }
-        return open(session, action: .revealRepository)
+        return revealRepository(session)
     }
 
     @discardableResult
     func open(_ session: AgentSession, action: OriginOpenAction) -> Bool {
+        if performOpen(session, action: action) {
+            return true
+        }
+        guard action != .revealRepository else { return false }
+        return revealRepository(session)
+    }
+
+    private func performOpen(_ session: AgentSession, action: OriginOpenAction) -> Bool {
         switch action {
         case .application:
             return openApplication(session)
@@ -159,7 +181,7 @@ struct OriginActivationService {
         guard session.origin?.isGraphicalApplication == true else { return false }
         if activateOriginProcess(session) { return true }
         if let bundleIdentifier = session.origin?.bundleIdentifier,
-           activateBundle(bundleIdentifier) {
+           openBundle(bundleIdentifier) {
             return true
         }
         return false
@@ -167,13 +189,16 @@ struct OriginActivationService {
 
     private func openTerminal(_ session: AgentSession) -> Bool {
         guard let origin = session.origin, origin.isTerminalEmulator else { return false }
+        if let revealURL = Self.iTermRevealURL(for: origin), openURL(revealURL) {
+            return true
+        }
         if let script = Self.terminalFocusScript(for: origin), runAppleScript(script) {
             return true
         }
         if activateOriginProcess(session) { return true }
         if let bundleIdentifier = origin.bundleIdentifier ?? origin.terminalProgram.flatMap(
             AgentOrigin.bundleIdentifier(forProgram:)
-        ), activateBundle(bundleIdentifier) {
+        ), openBundle(bundleIdentifier) {
             return true
         }
         return false
@@ -217,30 +242,20 @@ struct OriginActivationService {
             end tell
             """
         }
-        if origin.bundleIdentifier == "com.googlecode.iterm2" || program == "iterm.app" {
-            guard let sessionID = origin.terminalSessionIdentifier,
-                  isSafeSessionIdentifier(sessionID)
-            else { return nil }
-            let escaped = appleScriptString(sessionID)
-            return """
-            tell application "iTerm"
-              activate
-              repeat with w in windows
-                repeat with t in tabs of w
-                  repeat with s in sessions of t
-                    if (id of s as string) is \(escaped) then
-                      select w
-                      select t
-                      select s
-                      return
-                    end if
-                  end repeat
-                end repeat
-              end repeat
-            end tell
-            """
-        }
         return nil
+    }
+
+    static func iTermRevealURL(for origin: AgentOrigin) -> URL? {
+        let program = origin.terminalProgram?.lowercased()
+        guard origin.bundleIdentifier == "com.googlecode.iterm2" || program == "iterm.app",
+              let sessionID = origin.terminalSessionIdentifier,
+              isSafeSessionIdentifier(sessionID),
+              var components = URLComponents(string: "iterm2:///reveal")
+        else {
+            return nil
+        }
+        components.queryItems = [URLQueryItem(name: "sessionid", value: sessionID)]
+        return components.url
     }
 
     static func isSafeTTY(_ tty: String) -> Bool {

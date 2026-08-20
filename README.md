@@ -142,8 +142,9 @@ Displays without a hardware notch can use the virtual notch or Activity Center.
 Activity Center keeps local session history. Filter by provider or status,
 search, and inspect plans, workflows, parent/child agents, recent files, and
 event details. Open session follows a provider URL. Open app activates the
-captured IDE. Open terminal brings the source emulator forward, and selects
-the tab in Terminal.app or iTerm2 when a TTY or session id is present. If
+captured IDE, launching it when needed. Open terminal brings the source
+emulator forward, and selects the tab in Terminal.app or iTerm2 when a TTY or
+session id is present. If
 neither origin is available, Agents Notch reveals the working directory in
 Finder.
 Completed-history retention is in Settings.
