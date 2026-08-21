@@ -19,7 +19,7 @@ may be asked to upgrade before a report is investigated.
 
 ## System and scope
 
-Agents Notch is a local macOS app. In scope are the SwiftUI/AppKit app, the
+Agent Notch is a local macOS app. In scope are the SwiftUI/AppKit app, the
 `AgentsNotchCore` protocol and reducer, the bundled hook relay, provider
 configuration installation and removal, local persistence, release scripts,
 and GitHub Actions workflows.
@@ -37,7 +37,7 @@ It modifies only its own entries in supported provider hook configuration.
 - Existing provider configuration and plugins belong to the user and must be
   preserved across install, refresh, and removal.
 - Provider hooks are observers unless the user enables Answer from the notch.
-  When enabled, the app starts `~/.agentsnotch/reply.sock` with mode `0600` and
+  When enabled, the app starts `~/.agentnotch/reply.sock` with mode `0600` and
   accepts grant or deny decisions for waiting tools. Same-user processes can
   connect. The app never grants automatically, and Privacy mode disables all
   answers. If no answer arrives within 120 seconds, the provider shows its own
@@ -58,7 +58,7 @@ It modifies only its own entries in supported provider hook configuration.
   is waiting on a person; missing context stays visible.
 - Integration changes are atomic and idempotent, preserve unrelated settings,
   preserve restrictive file permissions and symlinked dotfiles, and remove
-  only Agents Notch entries.
+  only Agent Notch entries.
 - Untrusted event content is rendered as data. It must not become shell input,
   hook configuration, executable code, or automatic navigation.
 - Published binaries are release builds with debug-only UI removed, signed

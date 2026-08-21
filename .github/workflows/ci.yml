@@ -50,8 +50,8 @@ jobs:
             brew tap-new --no-git aforno/agentnotch
           fi
           mkdir -p "$TAP/Casks"
-          cp Casks/agents-notch.rb "$TAP/Casks/agents-notch.rb"
-          brew style --cask aforno/agentnotch/agents-notch
+          cp Casks/agent-notch.rb "$TAP/Casks/agent-notch.rb"
+          brew style --cask aforno/agentnotch/agent-notch
 
       - name: Run debug tests
         run: swift test

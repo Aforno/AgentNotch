@@ -3,13 +3,13 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="AgentsNotch"
-DISPLAY_NAME="Agents Notch"
-BUNDLE_ID="com.afonsoferreira.AgentsNotch"
+DISPLAY_NAME="Agent Notch"
+BUNDLE_ID="com.afonsoferreira.AgentNotch"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/dist/$DISPLAY_NAME.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
-SOCKET_PATH="$HOME/.agentsnotch/agent.sock"
+SOCKET_PATH="$HOME/.agentnotch/agent.sock"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 if [[ -S "$SOCKET_PATH" ]]; then

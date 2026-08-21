@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.setActivationPolicy(.accessory)
         ProcessInfo.processInfo.disableAutomaticTermination(
-            "Agents Notch monitors local agent activity"
+            "Agent Notch monitors local agent activity"
         )
         let panel = NotchPanelController(runtime: runtime)
         panelController = panel
@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         runtime.stop()
         ProcessInfo.processInfo.enableAutomaticTermination(
-            "Agents Notch monitors local agent activity"
+            "Agent Notch monitors local agent activity"
         )
     }
 

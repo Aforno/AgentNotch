@@ -21,7 +21,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.isOpaque = true
         window.contentView = NSHostingView(rootView: root)
         window.minSize = NSSize(width: 520, height: 480)
-        let frameName = "AgentsNotchSettings"
+        let frameName = "AgentNotchSettings"
         let restoredFrame = window.setFrameUsingName(frameName)
         window.setFrameAutosaveName(frameName)
         if !restoredFrame {

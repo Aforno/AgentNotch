@@ -51,7 +51,7 @@ public enum ProviderDecisionMapper {
             "permissionDecision": allowed ? "allow" : "deny",
         ]
         if !allowed {
-            output["permissionDecisionReason"] = "Denied from Agents Notch"
+            output["permissionDecisionReason"] = "Denied from Agent Notch"
         }
         if allowed, var input = jsonObject(from: payload.toolInput), let answers {
             input["answers"] = answers.mapValues { $0.joined(separator: ", ") }
@@ -70,7 +70,7 @@ public enum ProviderDecisionMapper {
         if allowed, let input {
             output["updatedInput"] = input
         } else {
-            output["permissionDecisionReason"] = "Plan approval denied from Agents Notch"
+            output["permissionDecisionReason"] = "Plan approval denied from Agent Notch"
         }
         return ["hookSpecificOutput": output]
     }
@@ -123,7 +123,7 @@ public enum ProviderDecisionMapper {
         }
         return [
             "behavior": "deny",
-            "message": "Denied from Agents Notch",
+            "message": "Denied from Agent Notch",
         ]
     }
 

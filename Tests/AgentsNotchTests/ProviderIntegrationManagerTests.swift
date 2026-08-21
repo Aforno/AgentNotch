@@ -47,7 +47,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let installedHooks = try XCTUnwrap(installedRoot["hooks"] as? [String: Any])
         let preToolUse = try XCTUnwrap(installedHooks["PreToolUse"] as? [[String: Any]])
         XCTAssertEqual(preToolUse.count, 2, "reinstalling must not duplicate the relay")
-        XCTAssertEqual(Self.commands(in: preToolUse).filter { $0.contains("agentsnotch-hook") }.count, 1)
+        XCTAssertEqual(Self.commands(in: preToolUse).filter { $0.contains("agentnotch-hook") }.count, 1)
 
         manager.uninstall()
 
@@ -234,7 +234,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         manager.install()
         let hooksURL = fixture.home
             .appendingPathComponent(".grok/hooks", isDirectory: true)
-            .appendingPathComponent("agentsnotch.json")
+            .appendingPathComponent("agentnotch.json")
         let hooksBeforeRefresh = try Data(contentsOf: hooksURL)
 
         try Data("relay-v2".utf8).write(to: fixture.bundledRelay, options: .atomic)
@@ -426,7 +426,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         manager.install()
 
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
-        XCTAssertEqual(manager.lastError, "The bundled agent relay could not be found. Launch the packaged Agents Notch app.")
+        XCTAssertEqual(manager.lastError, "The bundled agent relay could not be found. Launch the packaged Agent Notch app.")
         XCTAssertFalse(FileManager.default.fileExists(atPath: hooksURL.path))
     }
 
@@ -500,7 +500,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         try FileManager.default.createDirectory(at: pluginsURL, withIntermediateDirectories: true)
         let siblingURL = pluginsURL.appendingPathComponent("existing.js")
         try Data("export const Existing = async () => ({})\n".utf8).write(to: siblingURL)
-        let pluginURL = pluginsURL.appendingPathComponent("agentsnotch.js")
+        let pluginURL = pluginsURL.appendingPathComponent("agentnotch.js")
 
         let manager = fixture.manager(provider: .openCode)
         manager.install()
@@ -510,8 +510,8 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertNil(manager.lastError)
         XCTAssertNotNil(manager.trustInstructions)
         let source = String(decoding: try Data(contentsOf: pluginURL), as: UTF8.self)
-        XCTAssertTrue(source.contains("// Managed by Agents Notch."))
-        XCTAssertTrue(source.contains("export const AgentsNotchPlugin"))
+        XCTAssertTrue(source.contains("// Managed by Agent Notch."))
+        XCTAssertTrue(source.contains("export const AgentNotchPlugin"))
         XCTAssertTrue(source.contains("Bun.spawn"))
         XCTAssertTrue(source.contains(manager.installedRelayURL.path))
         XCTAssertTrue(source.contains("\"--provider\", \"opencode\""))
@@ -522,7 +522,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
             process.executableURL = bunURL
             process.arguments = [
                 "-e",
-                "const module = await import(\(pluginLiteral)); const hooks = await module.AgentsNotchPlugin({ directory: '/tmp' }); if (typeof hooks.event !== 'function') process.exit(1)",
+                "const module = await import(\(pluginLiteral)); const hooks = await module.AgentNotchPlugin({ directory: '/tmp' }); if (typeof hooks.event !== 'function') process.exit(1)",
             ]
             let errors = Pipe()
             process.standardOutput = FileHandle.nullDevice
@@ -546,7 +546,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     func testOpenCodeInstallRefusesToOverwriteUnownedPlugin() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
-        let pluginURL = fixture.home.appendingPathComponent(".config/opencode/plugins/agentsnotch.js")
+        let pluginURL = fixture.home.appendingPathComponent(".config/opencode/plugins/agentnotch.js")
         try FileManager.default.createDirectory(
             at: pluginURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -576,7 +576,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     func testHandlerIdentityCollapsesOwnedLegacyAndCurrent() {
         let relay = HookRelayIdentity(
             provider: .claudeCode,
-            relayURL: URL(fileURLWithPath: "/tmp/agentsnotch-hook")
+            relayURL: URL(fileURLWithPath: "/tmp/agentnotch-hook")
         )
         let current = relay.commandHandler(
             timeout: .seconds(5),
@@ -653,7 +653,7 @@ private final class Fixture: @unchecked Sendable {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("AgentsNotchIntegrationTests-\(UUID().uuidString)", isDirectory: true)
         home = root.appendingPathComponent("home", isDirectory: true)
-        bundledRelay = root.appendingPathComponent("bundle/agentsnotch-hook")
+        bundledRelay = root.appendingPathComponent("bundle/agentnotch-hook")
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         if createBundledRelay {
             try FileManager.default.createDirectory(

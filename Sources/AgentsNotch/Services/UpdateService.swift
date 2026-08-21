@@ -38,7 +38,7 @@ final class UpdateService {
             var request = URLRequest(url: latestReleaseURL)
             request.timeoutInterval = 10
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            request.setValue("AgentsNotch/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+            request.setValue("AgentNotch/\(currentVersion)", forHTTPHeaderField: "User-Agent")
             let configuration = URLSessionConfiguration.ephemeral
             configuration.waitsForConnectivity = false
             let (data, response) = try await URLSession(configuration: configuration).data(for: request)

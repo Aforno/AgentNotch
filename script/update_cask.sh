@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Point Casks/agents-notch.rb at a packaged GitHub release.
+# Point Casks/agent-notch.rb at a packaged GitHub release.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CASK="$ROOT_DIR/Casks/agents-notch.rb"
+CASK="$ROOT_DIR/Casks/agent-notch.rb"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 CHECKSUM_FILE=""
 SHA256=""
@@ -50,7 +50,7 @@ fi
 
 if [[ -z "$SHA256" ]]; then
   if [[ -z "$CHECKSUM_FILE" ]]; then
-    CHECKSUM_FILE="$ROOT_DIR/dist/Agents-Notch-$VERSION-macOS-arm64.zip.sha256"
+    CHECKSUM_FILE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.zip.sha256"
   fi
   if [[ ! -f "$CHECKSUM_FILE" ]]; then
     echo "checksum file not found: $CHECKSUM_FILE" >&2

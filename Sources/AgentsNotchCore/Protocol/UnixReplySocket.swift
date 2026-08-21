@@ -4,7 +4,7 @@ import Foundation
 public enum AgentReplySocketLocation {
     public static var defaultURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".agentsnotch", isDirectory: true)
+            .appendingPathComponent(".agentnotch", isDirectory: true)
             .appendingPathComponent("reply.sock")
     }
 }
@@ -23,7 +23,7 @@ public final class UnixReplyServer: @unchecked Sendable {
     /// so every access must go through this lock to stay data-race free.
     private let lock = NSLock()
     private let clientsQueue = DispatchQueue(
-        label: "com.agentsnotch.reply.clients",
+        label: "com.agentnotch.reply.clients",
         qos: .userInitiated,
         attributes: .concurrent
     )
@@ -132,7 +132,7 @@ public final class UnixReplyServer: @unchecked Sendable {
             self?.acceptLoop()
             stopped.signal()
         }
-        thread.name = "com.agentsnotch.reply.listener"
+        thread.name = "com.agentnotch.reply.listener"
         thread.qualityOfService = .userInitiated
         lock.withLock {
             listener = thread

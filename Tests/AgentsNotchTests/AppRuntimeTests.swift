@@ -59,7 +59,7 @@ final class AppRuntimeTests: XCTestCase {
             .appendingPathComponent("an-privacy-hooks-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let bundledRelayURL = root.appendingPathComponent("agentsnotch-hook")
+        let bundledRelayURL = root.appendingPathComponent("agentnotch-hook")
         try Data("test relay".utf8).write(to: bundledRelayURL)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],
@@ -170,7 +170,7 @@ final class AppRuntimeTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let socketURL = root.appendingPathComponent("agent.sock")
-        let bundledRelayURL = root.appendingPathComponent("agentsnotch-hook")
+        let bundledRelayURL = root.appendingPathComponent("agentnotch-hook")
         try Data("test relay".utf8).write(to: bundledRelayURL)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],

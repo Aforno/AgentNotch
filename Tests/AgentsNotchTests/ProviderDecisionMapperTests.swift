@@ -8,7 +8,7 @@ final class ProviderDecisionMapperTests: XCTestCase {
         XCTAssertEqual(allowed["behavior"] as? String, "allow")
         let denied = try decision(provider: .codex, payload: payload, reply: .deny)
         XCTAssertEqual(denied["behavior"] as? String, "deny")
-        XCTAssertEqual(denied["message"] as? String, "Denied from Agents Notch")
+        XCTAssertEqual(denied["message"] as? String, "Denied from Agent Notch")
     }
 
     func testClaudePermissionAllowAndDenyMatchSchema() throws {

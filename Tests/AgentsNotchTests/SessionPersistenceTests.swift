@@ -277,7 +277,7 @@ final class SessionPersistenceTests: XCTestCase {
           "state": {
             "run_id": "workflow-1",
             "name": "audit-and-fix",
-            "objective": "Audit and fix Agents Notch",
+            "objective": "Audit and fix Agent Notch",
             "status": "completed",
             "phases": [{"title": "Audit"}, {"title": "Confirm"}],
             "current_phase": "Confirm"
@@ -293,7 +293,7 @@ final class SessionPersistenceTests: XCTestCase {
             type: .started,
             sessionId: "grok:parent",
             provider: .grok,
-            task: "Audit and fix Agents Notch",
+            task: "Audit and fix Agent Notch",
             state: .starting,
             timestamp: Date(timeIntervalSince1970: 100),
             workingDirectory: workspace

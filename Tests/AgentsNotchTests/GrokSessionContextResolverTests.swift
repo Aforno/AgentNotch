@@ -67,7 +67,7 @@ final class GrokSessionContextResolverTests: XCTestCase {
           "state": {
             "run_id": "workflow-1",
             "name": "audit-and-fix",
-            "objective": "Audit and fix Agents Notch",
+            "objective": "Audit and fix Agent Notch",
             "status": "active",
             "phases": [
               {"title": "Baseline"},
@@ -99,7 +99,7 @@ final class GrokSessionContextResolverTests: XCTestCase {
         XCTAssertEqual(context.agentRole, "audit:core-models")
         XCTAssertEqual(context.workflowOwnerSessionId, parent)
         XCTAssertNil(context.sessionTitle)
-        XCTAssertEqual(context.workflowTask, "Audit and fix Agents Notch")
+        XCTAssertEqual(context.workflowTask, "Audit and fix Agent Notch")
         XCTAssertEqual(context.workflowPhase, "Audit")
         XCTAssertEqual(context.workflowState, .running)
         XCTAssertEqual(context.workflowUpdate?.title, "audit-and-fix")

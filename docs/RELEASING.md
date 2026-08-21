@@ -1,4 +1,4 @@
-# Releasing Agents Notch
+# Releasing Agent Notch
 
 Production releases are Apple Silicon ZIP archives. They are signed with a
 Developer ID Application certificate, notarized by Apple, stapled, and shipped
@@ -26,17 +26,17 @@ previews. Never present them as notarized builds.
 Store App Store Connect credentials in a notarytool keychain profile once:
 
 ```sh
-xcrun notarytool store-credentials agents-notch-notary
+xcrun notarytool store-credentials agent-notch-notary
 ```
 
 Then package with the exact Developer ID identity shown by
 `security find-identity -p codesigning -v`:
 
 ```sh
-AGENTS_NOTCH_BUILD_NUMBER=1 ./script/package_release.sh \
+AGENT_NOTCH_BUILD_NUMBER=1 ./script/package_release.sh \
   --identity "Developer ID Application: Example Name (TEAMID)" \
   --notarize \
-  --keychain-profile agents-notch-notary
+  --keychain-profile agent-notch-notary
 ```
 
 The script builds the release configuration for arm64, signs nested code and
@@ -59,7 +59,7 @@ Push a signed `vX.Y.Z` tag only after CI passes. All tags share one `release`
 concurrency group, so one GitHub release runs at a time. The workflow validates
 that the tag matches `VERSION`, imports the temporary certificate, builds and
 notarizes the app, creates the checksum, and publishes both files to the GitHub
-release. After the GitHub files are up, it points `Casks/agents-notch.rb` at
+release. After the GitHub files are up, it points `Casks/agent-notch.rb` at
 that ZIP and checksum and pushes the cask bump to the default branch unless the
 cask already names a newer version. Homebrew users on this tap pick that up
 with `brew update`.
@@ -68,7 +68,7 @@ If the cask commit cannot push, update it locally from the published checksum:
 
 ```sh
 ./script/update_cask.sh --version "$(tr -d '[:space:]' < VERSION)" \
-  --checksum-file "dist/Agents-Notch-$(tr -d '[:space:]' < VERSION)-macOS-arm64.zip.sha256"
+  --checksum-file "dist/Agent-Notch-$(tr -d '[:space:]' < VERSION)-macOS-arm64.zip.sha256"
 ```
 
 Do not rewrite the cask SHA-256 during release prep. The checksum belongs to the
@@ -85,7 +85,7 @@ approved, opt in before pushing the tag:
 ```sh
 gh variable set RELEASE_MODE --repo Aforno/AgentNotch \
   --body unsigned-prerelease
-git tag -a "v$(cat VERSION)" -m "Agents Notch $(cat VERSION)"
+git tag -a "v$(cat VERSION)" -m "Agent Notch $(cat VERSION)"
 git push origin "v$(cat VERSION)"
 ```
 

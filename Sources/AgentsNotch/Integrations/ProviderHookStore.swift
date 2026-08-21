@@ -40,7 +40,7 @@ struct ProviderHookStore: Sendable {
         } else {
             strategy = GroupedHooksInstall(
                 hooksURL: homeDirectoryURL
-                    .appendingPathComponent(".agentsnotch/integrations", isDirectory: true)
+                    .appendingPathComponent(".agentnotch/integrations", isDirectory: true)
                     .appendingPathComponent("\(provider.rawValue).json"),
                 eventNames: ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"],
                 timeoutForEvent: { _ in .seconds(5) }
@@ -50,8 +50,8 @@ struct ProviderHookStore: Sendable {
 
     var installedRelayURL: URL {
         homeDirectoryURL
-            .appendingPathComponent(".agentsnotch/bin", isDirectory: true)
-            .appendingPathComponent("agentsnotch-hook")
+            .appendingPathComponent(".agentnotch/bin", isDirectory: true)
+            .appendingPathComponent("agentnotch-hook")
     }
 
     var bundledRelayURL: URL? {
@@ -60,7 +60,7 @@ struct ProviderHookStore: Sendable {
         }
         return Bundle.main.resourceURL?
             .appendingPathComponent("bin", isDirectory: true)
-            .appendingPathComponent("agentsnotch-hook")
+            .appendingPathComponent("agentnotch-hook")
     }
 
     func prepareForMonitoringOnDisk(answersFromNotch: Bool) -> MonitoringPreparation {
@@ -163,7 +163,7 @@ enum ProviderIntegrationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .relayMissing:
-            "The bundled agent relay could not be found. Launch the packaged Agents Notch app."
+            "The bundled agent relay could not be found. Launch the packaged Agent Notch app."
         case let .invalidHooksFile(path):
             "The existing \(path) file is not a JSON object."
         case let .invalidHooksSection(path):
@@ -171,9 +171,9 @@ enum ProviderIntegrationError: LocalizedError {
         case let .invalidHookEvent(event, path):
             "The existing \(event) hooks in \(path) are not an array."
         case let .configurationChanged(path):
-            "\(path) changed while Agents Notch was updating it. Try again."
+            "\(path) changed while Agent Notch was updating it. Try again."
         case let .existingOpenCodePlugin(path):
-            "Agents Notch will not replace the existing OpenCode plugin at \(path)."
+            "Agent Notch will not replace the existing OpenCode plugin at \(path)."
         case .incompleteInstallation:
             "One or more required lifecycle hooks could not be installed."
         }

@@ -32,7 +32,7 @@ struct ActivityCenterHeader: View {
                 Button("Clear Completed History", role: .destructive, action: requestClearHistory)
                     .disabled(!canClearHistory)
                 Divider()
-                Button("Quit Agents Notch") {
+                Button("Quit Agent Notch") {
                     NSApplication.shared.terminate(nil)
                 }
             } label: {

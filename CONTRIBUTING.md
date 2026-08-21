@@ -1,4 +1,4 @@
-# Contributing to Agents Notch
+# Contributing to Agent Notch
 
 Bug reports, focused fixes, documentation, and new provider adapters are
 welcome.

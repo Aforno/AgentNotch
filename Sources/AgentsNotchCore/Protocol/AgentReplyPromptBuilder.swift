@@ -30,7 +30,7 @@ public enum AgentReplyPromptBuilder {
                     replyId: replyId,
                     kind: .question,
                     prompt: "Answer in Claude",
-                    detail: "Agents Notch cannot represent this question faithfully."
+                    detail: "Agent Notch cannot represent this question faithfully."
                 )
             }
             return AgentPendingReply(

@@ -44,7 +44,7 @@ actor SessionPersistence {
         } else {
             let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             self.fileURL = support
-                .appendingPathComponent("AgentsNotch", isDirectory: true)
+                .appendingPathComponent("AgentNotch", isDirectory: true)
                 .appendingPathComponent("sessions.json")
         }
     }

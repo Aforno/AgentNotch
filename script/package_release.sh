@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
-APP_BUNDLE="$ROOT_DIR/dist/Agents Notch.app"
-ARCHIVE="$ROOT_DIR/dist/Agents-Notch-$VERSION-macOS-arm64.zip"
+APP_BUNDLE="$ROOT_DIR/dist/Agent Notch.app"
+ARCHIVE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.zip"
 CHECKSUM="$ARCHIVE.sha256"
 SIGN_IDENTITY=""
 USE_ADHOC=false

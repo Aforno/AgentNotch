@@ -3,7 +3,7 @@
 Provider hooks are passive observers by default. They do not make permission
 decisions, block tools, or inject context. The hook ignores `SIGPIPE`, drains
 stdin, decodes and enriches within bounds, sends an event when applicable,
-writes the provider's passive response, and exits 0 even if Agents Notch is not
+writes the provider's passive response, and exits 0 even if Agent Notch is not
 running.
 
 Enabling Answer from the notch adds `--answer` and a 120-second timeout to
@@ -55,10 +55,10 @@ approval bridge above. They must never invent a live session.
 | --- | --- |
 | Codex | `~/.codex/hooks.json` |
 | Claude Code | `~/.claude/settings.json` |
-| Grok | `~/.grok/hooks/agentsnotch.json` |
+| Grok | `~/.grok/hooks/agentnotch.json` |
 | Gemini CLI | `~/.gemini/settings.json` |
 | Cursor | `~/.cursor/hooks.json` |
-| OpenCode | `~/.config/opencode/plugins/agentsnotch.js` |
+| OpenCode | `~/.config/opencode/plugins/agentnotch.js` |
 
 Install and uninstall only this app's entries. Preserve unrelated entries,
 symlink targets, and file modes. Repeated operations must be idempotent.

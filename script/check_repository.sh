@@ -18,7 +18,7 @@ required_files=(
   THIRD_PARTY_NOTICES.md
   VERSION
   Resources/AgentsNotch.entitlements
-  Casks/agents-notch.rb
+  Casks/agent-notch.rb
   .github/workflows/ci.yml
   .github/workflows/release.yml
 )
@@ -30,15 +30,15 @@ for required_file in "${required_files[@]}"; do
   fi
 done
 
-if ! rg -q '^cask "agents-notch" do$' Casks/agents-notch.rb; then
-  echo "Homebrew cask token must be agents-notch" >&2
+if ! rg -q '^cask "agent-notch" do$' Casks/agent-notch.rb; then
+  echo "Homebrew cask token must be agent-notch" >&2
   exit 1
 fi
-if ! rg -q '^  version "[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?"$' Casks/agents-notch.rb; then
+if ! rg -q '^  version "[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?"$' Casks/agent-notch.rb; then
   echo "Homebrew cask is missing a semantic version stanza" >&2
   exit 1
 fi
-if ! rg -q '^  sha256 "[0-9a-f]{64}"$' Casks/agents-notch.rb; then
+if ! rg -q '^  sha256 "[0-9a-f]{64}"$' Casks/agent-notch.rb; then
   echo "Homebrew cask is missing a 64-character sha256 stanza" >&2
   exit 1
 fi
@@ -52,7 +52,7 @@ for script in script/*.sh; do
 done
 
 for ignored_path in .build dist .firecrawl .grok; do
-  if ! git check-ignore -q "$ignored_path/.agentsnotch-ignore-check"; then
+  if ! git check-ignore -q "$ignored_path/.agentnotch-ignore-check"; then
     echo "generated path is not ignored: $ignored_path" >&2
     exit 1
   fi

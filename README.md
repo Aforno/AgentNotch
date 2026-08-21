@@ -1,6 +1,6 @@
-# Agents Notch
+# Agent Notch
 
-Agents Notch sits on the MacBook notch and shows what your local coding agents
+Agent Notch sits on the MacBook notch and shows what your local coding agents
 are doing. Tool calls, file edits, and completions stay collapsed. Hover to
 expand, or it opens itself when an agent needs a permission or an answer. No
 Dock icon. No menu-bar extra.
@@ -21,14 +21,14 @@ This repository is a Homebrew tap. Install the current GitHub release with:
 
 ```sh
 brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch
-brew install --cask aforno/agentnotch/agents-notch
+brew install --cask aforno/agentnotch/agent-notch
 ```
 
 Homebrew 6 does not trust a third-party tap when you add it. The fully
 qualified name trusts only this cask.
 
 Later cask bumps land on `main`. Update with `brew update` and
-`brew upgrade --cask aforno/agentnotch/agents-notch`.
+`brew upgrade --cask aforno/agentnotch/agent-notch`.
 
 ### Manual
 
@@ -36,10 +36,10 @@ When a release is up, download the ZIP and the matching `.sha256` file from the
 [GitHub releases page](../../releases). Verify it before you open the app:
 
 ```sh
-shasum -a 256 -c Agents-Notch-*-macOS-arm64.zip.sha256
+shasum -a 256 -c Agent-Notch-*-macOS-arm64.zip.sha256
 ```
 
-Unzip the archive, move `Agents Notch.app` to `/Applications`, and open it.
+Unzip the archive, move `Agent Notch.app` to `/Applications`, and open it.
 Production releases are Developer ID signed and notarized. Unsigned previews are
 marked as prereleases and may trip Gatekeeper. Control-click the app, choose
 Open, and read the prompt.
@@ -53,7 +53,7 @@ Source builds need Swift 6.
 ```
 
 That builds both executables in debug, stages an ad-hoc signed
-`dist/Agents Notch.app`, embeds the hook relay, launches the bundle, and checks
+`dist/Agent Notch.app`, embeds the hook relay, launches the bundle, and checks
 that the process and the private event socket stay up. The Codex desktop Run
 action calls the same script.
 
@@ -70,12 +70,12 @@ leave the simulator, the Debug tab, and that wiring out.
 ## Provider integrations
 
 Open Settings → Integrations and install Codex, Claude, Grok, Gemini, OpenCode,
-Cursor, or any mix of them. Agents Notch:
+Cursor, or any mix of them. Agent Notch:
 
-1. copies its small relay to `~/.agentsnotch/bin/agentsnotch-hook`;
+1. copies its small relay to `~/.agentnotch/bin/agentnotch-hook`;
 2. installs an observer-only hook or plugin through the provider's supported
    extension point, without replacing anything already there;
-3. listens on `~/.agentsnotch/agent.sock` with directory mode `0700` and socket
+3. listens on `~/.agentnotch/agent.sock` with directory mode `0700` and socket
    mode `0600`. If Answer from the notch is enabled, the app also binds
    `reply.sock` in that directory.
 
@@ -83,10 +83,10 @@ Config files:
 
 - Codex: `~/.codex/hooks.json`
 - Claude Code: `~/.claude/settings.json`
-- Grok: `~/.grok/hooks/agentsnotch.json`
+- Grok: `~/.grok/hooks/agentnotch.json`
 - Gemini CLI: `~/.gemini/settings.json`
 - Cursor: `~/.cursor/hooks.json`
-- OpenCode: `~/.config/opencode/plugins/agentsnotch.js`
+- OpenCode: `~/.config/opencode/plugins/agentnotch.js`
 
 In providers that have `/hooks`, that command shows the installed entries. Codex
 also requires new command hooks to be trusted.
@@ -97,7 +97,7 @@ and Claude Code permission hooks wait up to 120 seconds for a supported answer.
 Claude's `AskUserQuestion` and `ExitPlanMode` hooks also wait, but unrelated
 `PreToolUse` events remain asynchronous observers. Grok, Gemini, Cursor, and
 OpenCode remain display-only. If the reply socket is unavailable or no answer
-arrives, the provider shows its own prompt and Agents Notch still observes the wait.
+arrives, the provider shows its own prompt and Agent Notch still observes the wait.
 
 They subscribe to each provider's documented session, prompt, tool, permission,
 notification, and stop events. Claude Code observers use the documented
@@ -145,7 +145,7 @@ event details. Open in Codex returns directly to the captured desktop thread.
 Open session follows another provider's URL. Open app activates the captured
 IDE, launching it when needed. Open terminal brings the source emulator
 forward, and selects the tab in Terminal.app or iTerm2 when a TTY or session
-id is present. If no app, session, or terminal destination exists, Agents Notch
+id is present. If no app, session, or terminal destination exists, Agent Notch
 reveals the working directory in Finder for non-Codex providers. Internal Codex
 helpers do not expose an open action because they are not navigable threads.
 Completed-history retention is in Settings.
@@ -244,7 +244,7 @@ connect and write newline-delimited JSON itself.
 Hooks are push-only. Launch-time restorers may read provider-owned files as
 cold-start evidence. They never invent live sessions from disk.
 
-On launch, Agents Notch reconciles restored runners. It does not invent
+On launch, Agent Notch reconciles restored runners. It does not invent
 completion. Dead or recycled origin process IDs complete immediately. Verified
 waiting sessions stay waiting. Other actives enter a short `unknown`
 (Reconnecting) grace period until a live hook arrives or the grace expires.
@@ -254,22 +254,22 @@ telemetry. If update checking is on, the app makes an HTTPS request to GitHub
 Releases at most once a day. Manual checks use the same endpoint. Notifications
 are opt-in and delivered by macOS.
 
-## Remove Agents Notch
+## Remove Agent Notch
 
 Remove each installed provider integration from Settings → Integrations before
-deleting the app. That deletes only Agents Notch hook entries. Other provider
+deleting the app. That deletes only Agent Notch hook entries. Other provider
 config stays.
 
 If you installed with Homebrew:
 
 ```sh
-brew uninstall --cask aforno/agentnotch/agents-notch
+brew uninstall --cask aforno/agentnotch/agent-notch
 ```
 
 After quitting, optional local history and the copied relay live in:
 
-- `~/Library/Application Support/AgentsNotch`
-- `~/.agentsnotch`
+- `~/Library/Application Support/AgentNotch`
+- `~/.agentnotch`
 
 ## Verification and releases
 
@@ -292,4 +292,4 @@ pull-request expectations are in [`CONTRIBUTING.md`](CONTRIBUTING.md). Provider
 icon licensing and trademark notices are in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-Agents Notch is available under the terms in [`LICENSE`](LICENSE).
+Agent Notch is available under the terms in [`LICENSE`](LICENSE).

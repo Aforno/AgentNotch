@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DISPLAY_NAME="Agents Notch"
+DISPLAY_NAME="Agent Notch"
 EXECUTABLE_NAME="AgentsNotch"
-BUNDLE_ID="com.afonsoferreira.AgentsNotch"
+BUNDLE_ID="com.afonsoferreira.AgentNotch"
 MIN_SYSTEM_VERSION="14.0"
 CONFIGURATION="debug"
 BUILD_ARCH=""
@@ -44,13 +44,13 @@ if [[ "$CONFIGURATION" != "debug" && "$CONFIGURATION" != "release" ]]; then
 fi
 
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
-BUILD_NUMBER="${AGENTS_NOTCH_BUILD_NUMBER:-1}"
+BUILD_NUMBER="${AGENT_NOTCH_BUILD_NUMBER:-1}"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   echo "VERSION must contain a semantic version" >&2
   exit 1
 fi
 if [[ ! "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-  echo "AGENTS_NOTCH_BUILD_NUMBER must be a positive integer" >&2
+  echo "AGENT_NOTCH_BUILD_NUMBER must be a positive integer" >&2
   exit 1
 fi
 
@@ -60,7 +60,7 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$EXECUTABLE_NAME"
-HOOK_BINARY="$APP_RESOURCES/bin/agentsnotch-hook"
+HOOK_BINARY="$APP_RESOURCES/bin/agentnotch-hook"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ENTITLEMENTS="$ROOT_DIR/Resources/AgentsNotch.entitlements"
 APP_ICON_SOURCE="$ROOT_DIR/Resources/AppIcon/AppIcon.icns"
@@ -118,7 +118,7 @@ cat >"$INFO_PLIST" <<PLIST
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSAppleEventsUsageDescription</key>
-  <string>Agents Notch uses Apple Events to focus the terminal tab where an agent is running.</string>
+  <string>Agent Notch uses Apple Events to focus the terminal tab where an agent is running.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
 </dict>

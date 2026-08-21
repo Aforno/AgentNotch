@@ -1,7 +1,7 @@
 # Local protocol
 
-Agents Notch receives events over an `AF_UNIX` stream socket at
-`~/.agentsnotch/agent.sock`. Send one UTF-8 JSON object per line, then close the
+Agent Notch receives events over an `AF_UNIX` stream socket at
+`~/.agentnotch/agent.sock`. Send one UTF-8 JSON object per line, then close the
 connection. The directory mode is `0700`, the socket mode is `0600`, and the
 maximum payload is 1 MiB.
 
@@ -37,7 +37,7 @@ An `agent.waiting` event may include `pendingReply`. It carries `replyId`,
 `kind` (`permission`, `question`, `plan`, or `elicitation`), `prompt`, optional
 `detail`, `options`, provider-specific `questions`, and `grants`. Without `pendingReply`, the notch only shows
 the waiting state. The hook that created `replyId` waits on
-`~/.agentsnotch/reply.sock` for a registration ACK and one `AgentReply` line.
+`~/.agentnotch/reply.sock` for a registration ACK and one `AgentReply` line.
 The app tracks simultaneous replies by `replyId`. If the app is unavailable
 or no reply arrives within 120 seconds, the provider shows its own prompt.
 

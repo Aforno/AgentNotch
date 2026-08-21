@@ -21,7 +21,7 @@ final class ActivityCenterWindowController: NSWindowController, NSWindowDelegate
         window.isOpaque = true
         window.contentView = NSHostingView(rootView: root)
         window.minSize = NSSize(width: 760, height: 500)
-        let frameName = "AgentsNotchActivityCenter"
+        let frameName = "AgentNotchActivityCenter"
         let restoredFrame = window.setFrameUsingName(frameName)
         window.setFrameAutosaveName(frameName)
         if !restoredFrame {

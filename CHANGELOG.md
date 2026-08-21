@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Agents Notch will be documented in this file. The format
+All notable changes to Agent Notch will be documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases
 use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -20,10 +20,19 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   not expose a dead open action.
 - Homebrew cask install from this repository:
   `brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch` then
-  `brew install --cask aforno/agentnotch/agents-notch`.
+  `brew install --cask aforno/agentnotch/agent-notch`.
 
 ### Changed
 
+- The product name is now "Agent Notch" (was "Agents Notch"). This rename is
+  breaking for existing installs: the bundle identifier
+  (`com.afonsoferreira.AgentNotch`), the local socket directory
+  (`~/.agentnotch`), the relay binary (`~/.agentnotch/bin/agentnotch-hook`),
+  the Grok hook file (`~/.grok/hooks/agentnotch.json`), the OpenCode plugin
+  (`~/.config/opencode/plugins/agentnotch.js`), and the Homebrew cask token
+  (`agent-notch`) all change. Reinstall hooks from the app and reinstall via
+  `brew install --cask aforno/agentnotch/agent-notch`. Session history moves
+  to `~/Library/Application Support/AgentNotch`.
 - Collapsed notch provider icons drop the hairline ring. Stacked marks still
   sit on a black circle.
 - Expanded notch width follows the active display. Thread detail sizes to its

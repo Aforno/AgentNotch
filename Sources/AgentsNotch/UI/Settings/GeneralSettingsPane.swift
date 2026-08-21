@@ -16,7 +16,7 @@ struct GeneralSettingsPane: View {
             VStack(alignment: .leading, spacing: 28) {
                 SettingsHeading(
                     title: "General",
-                    detail: "Control how Agents Notch starts and presents activity."
+                    detail: "Control how Agent Notch starts and presents activity."
                 )
                 runtimeHealthMessages
                 ApplicationSettingsSection(

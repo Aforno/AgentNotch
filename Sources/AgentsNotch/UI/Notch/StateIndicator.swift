@@ -124,16 +124,16 @@ private final class CompositorSpinnerView: NSView {
         let shouldAnimate = window?.occlusionState.contains(.visible) == true
             && !isHiddenOrHasHiddenAncestor
         if shouldAnimate {
-            guard spinnerLayer.animation(forKey: "agentsnotch.rotation") == nil else { return }
+            guard spinnerLayer.animation(forKey: "agentnotch.rotation") == nil else { return }
             let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
             rotation.fromValue = 0
             rotation.toValue = Double.pi * 2
             rotation.duration = 0.9
             rotation.repeatCount = .infinity
             rotation.isRemovedOnCompletion = false
-            spinnerLayer.add(rotation, forKey: "agentsnotch.rotation")
+            spinnerLayer.add(rotation, forKey: "agentnotch.rotation")
         } else {
-            spinnerLayer.removeAnimation(forKey: "agentsnotch.rotation")
+            spinnerLayer.removeAnimation(forKey: "agentnotch.rotation")
         }
     }
 }

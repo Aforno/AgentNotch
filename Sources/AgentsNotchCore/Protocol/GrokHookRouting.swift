@@ -2,7 +2,7 @@ import Foundation
 
 public enum GrokHookRouting {
     /// Grok also loads Claude- and Cursor-compatible hooks. When the native
-    /// Agents Notch observer is installed, those compatibility callbacks are
+    /// Agent Notch observer is installed, those compatibility callbacks are
     /// duplicates and must remain completely passive.
     public static func shouldSkipClaudeCompatibilityHook(
         grokHookEvent: String?,
@@ -39,7 +39,7 @@ public enum GrokHookRouting {
     private static func containsNativeRelay(_ value: Any) -> Bool {
         if let object = value as? [String: Any] {
             if let command = object["command"] as? String,
-               command.contains("/.agentsnotch/bin/agentsnotch-hook"),
+               command.contains("/.agentnotch/bin/agentnotch-hook"),
                ["--provider 'grok'", "--provider \"grok\"", "--provider grok"]
                 .contains(where: command.contains)
             {

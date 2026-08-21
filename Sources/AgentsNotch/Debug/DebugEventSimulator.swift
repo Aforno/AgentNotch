@@ -86,7 +86,7 @@ final class DebugEventSimulator {
             workingDirectory: "/Users/demo/AgentsNotch",
             workflowUpdate: AgentWorkflowUpdate(
                 id: "release",
-                title: "Release Agents Notch",
+                title: "Release Agent Notch",
                 status: .running,
                 steps: [
                     AgentStep(id: "build", title: "Build universal app", status: .completed),
@@ -138,7 +138,7 @@ final class DebugEventSimulator {
         demoTask = Task { [weak self] in
             guard let self else { return }
             let sessions = [
-                (Self.id("codex"), AgentProvider.codex, "Ship Agents Notch"),
+                (Self.id("codex"), AgentProvider.codex, "Ship Agent Notch"),
                 (Self.id("claude"), AgentProvider.claudeCode, "Review pull request"),
                 (Self.id("gemini"), AgentProvider.geminiCLI, "Investigate test failure"),
             ]

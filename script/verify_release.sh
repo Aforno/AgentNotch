@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_BUNDLE="$ROOT_DIR/dist/Agents Notch.app"
+APP_BUNDLE="$ROOT_DIR/dist/Agent Notch.app"
 REQUIRE_NOTARIZED=false
 
 usage() {
@@ -30,7 +30,7 @@ done
 EXPECTED_VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/AgentsNotch"
-HOOK_BINARY="$APP_BUNDLE/Contents/Resources/bin/agentsnotch-hook"
+HOOK_BINARY="$APP_BUNDLE/Contents/Resources/bin/agentnotch-hook"
 
 for required_path in "$INFO_PLIST" "$APP_BINARY" "$HOOK_BINARY"; do
   if [[ ! -f "$required_path" ]]; then
@@ -77,7 +77,7 @@ fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
-APP_ENTITLEMENTS_PLIST="$(mktemp "${TMPDIR:-/tmp}/agentsnotch-entitlements.XXXXXX")"
+APP_ENTITLEMENTS_PLIST="$(mktemp "${TMPDIR:-/tmp}/agentnotch-entitlements.XXXXXX")"
 trap 'rm -f "$APP_ENTITLEMENTS_PLIST"' EXIT
 codesign --display --entitlements "$APP_ENTITLEMENTS_PLIST" --xml "$APP_BUNDLE" 2>/dev/null
 if [[ "$(

@@ -16,7 +16,7 @@ struct AlertsPrivacySettingsPane: View {
             VStack(alignment: .leading, spacing: 28) {
                 SettingsHeading(
                     title: "Alerts & Privacy",
-                    detail: "Choose when Agents Notch interrupts you and what it retains."
+                    detail: "Choose when Agent Notch interrupts you and what it retains."
                 )
                 AttentionSettingsSection(
                     notificationsEnabled: notificationsEnabled,

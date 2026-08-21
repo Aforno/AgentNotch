@@ -16,7 +16,7 @@ public enum AgentSocketError: LocalizedError {
         case .invalidEvent:
             "The socket received an invalid event."
         case .alreadyInUse:
-            "Another Agents Notch instance is already listening on this socket."
+            "Another Agent Notch instance is already listening on this socket."
         }
     }
 }
@@ -24,7 +24,7 @@ public enum AgentSocketError: LocalizedError {
 public enum AgentSocketLocation {
     public static var defaultURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".agentsnotch", isDirectory: true)
+            .appendingPathComponent(".agentnotch", isDirectory: true)
             .appendingPathComponent("agent.sock")
     }
 }
@@ -42,10 +42,10 @@ public final class UnixSocketServer: @unchecked Sendable {
     private let socketURL: URL
     private let maximumPayloadBytes: Int
     private let eventHandler: EventHandler
-    private let queue = DispatchQueue(label: "com.agentsnotch.socket.listener", qos: .utility)
+    private let queue = DispatchQueue(label: "com.agentnotch.socket.listener", qos: .utility)
     /// Concurrent so one slow client read does not block others for the full timeout.
     private let clientsQueue = DispatchQueue(
-        label: "com.agentsnotch.socket.clients",
+        label: "com.agentnotch.socket.clients",
         qos: .utility,
         attributes: .concurrent
     )

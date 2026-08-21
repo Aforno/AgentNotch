@@ -12,7 +12,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to Agents Notch"
+        window.title = "Welcome to Agent Notch"
         window.identifier = NSUserInterfaceItemIdentifier("onboarding")
         window.backgroundColor = .black
         window.appearance = NSAppearance(named: .darkAqua)

@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/agents-notch-signing.keychain-db"
+          KEYCHAIN_PATH="$RUNNER_TEMP/agent-notch-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
 
           printf '%s' "$CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
@@ -99,14 +99,14 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
-            AGENTS_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+            AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
               ./script/package_release.sh --adhoc
             exit 0
           fi
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
           printf '%s' "$API_PRIVATE_KEY" > "$API_KEY_PATH"
           chmod 0600 "$API_KEY_PATH"
-          AGENTS_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+          AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
             ./script/package_release.sh \
               --identity "$SIGNING_IDENTITY" \
               --notarize \
@@ -122,7 +122,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
-          ARCHIVE="dist/Agents-Notch-$VERSION-macOS-arm64.zip"
+          ARCHIVE="dist/Agent-Notch-$VERSION-macOS-arm64.zip"
           if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
             NOTES_FILE="$RUNNER_TEMP/unsigned-prerelease-notes.md"
             cat > "$NOTES_FILE" <<'EOF'
@@ -136,14 +136,14 @@ jobs:
               --generate-notes \
               --notes-file "$NOTES_FILE" \
               --prerelease \
-              --title "Agents Notch $VERSION (Unsigned Preview)"
+              --title "Agent Notch $VERSION (Unsigned Preview)"
           else
             gh release create "$GITHUB_REF_NAME" \
               "$ARCHIVE" \
               "$ARCHIVE.sha256" \
               --verify-tag \
               --generate-notes \
-              --title "Agents Notch $VERSION"
+              --title "Agent Notch $VERSION"
           fi
 
       - name: Point Homebrew cask at this release
@@ -153,20 +153,20 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
-          CHECKSUM="$GITHUB_WORKSPACE/dist/Agents-Notch-$VERSION-macOS-arm64.zip.sha256"
+          CHECKSUM="$GITHUB_WORKSPACE/dist/Agent-Notch-$VERSION-macOS-arm64.zip.sha256"
           git fetch origin "$DEFAULT_BRANCH"
           git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
           ./script/update_cask.sh --version "$VERSION" --checksum-file "$CHECKSUM"
-          if git diff --quiet -- Casks/agents-notch.rb; then
+          if git diff --quiet -- Casks/agent-notch.rb; then
             echo "Homebrew cask unchanged for $VERSION"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/agents-notch.rb
+          git add Casks/agent-notch.rb
           git commit -m "Point Homebrew cask at ${VERSION}"
           git push origin "$DEFAULT_BRANCH"
 
       - name: Remove temporary signing keychain
         if: always()
-        run: security delete-keychain "$RUNNER_TEMP/agents-notch-signing.keychain-db" || true
+        run: security delete-keychain "$RUNNER_TEMP/agent-notch-signing.keychain-db" || true

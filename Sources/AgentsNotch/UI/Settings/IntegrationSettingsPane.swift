@@ -8,7 +8,7 @@ struct IntegrationSettingsPane: View {
             VStack(alignment: .leading, spacing: NotchWindowMetrics.sectionSpacing) {
                 SettingsHeading(
                     title: "Integrations",
-                    detail: "Connect local coding agents to Agents Notch."
+                    detail: "Connect local coding agents to Agent Notch."
                 )
                 runtimeHealthMessages
                 VStack(spacing: 0) {

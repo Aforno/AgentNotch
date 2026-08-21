@@ -83,7 +83,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
         case .grok:
             homeDirectoryURL
                 .appendingPathComponent(".grok/hooks", isDirectory: true)
-                .appendingPathComponent("agentsnotch.json")
+                .appendingPathComponent("agentnotch.json")
         case .geminiCLI:
             homeDirectoryURL
                 .appendingPathComponent(".gemini", isDirectory: true)
@@ -91,7 +91,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
         case .openCode:
             homeDirectoryURL
                 .appendingPathComponent(".config/opencode/plugins", isDirectory: true)
-                .appendingPathComponent("agentsnotch.js")
+                .appendingPathComponent("agentnotch.js")
         case .cursor:
             homeDirectoryURL
                 .appendingPathComponent(".cursor", isDirectory: true)

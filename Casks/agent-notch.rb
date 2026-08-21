@@ -1,9 +1,9 @@
-cask "agents-notch" do
+cask "agent-notch" do
   version "0.1.1"
   sha256 "72cc1624a84f2d3b80971200a5d343571597c06cc2a0e3fb752a9417caf82199"
 
-  url "https://github.com/Aforno/AgentNotch/releases/download/v#{version}/Agents-Notch-#{version}-macOS-arm64.zip"
-  name "Agents Notch"
+  url "https://github.com/Aforno/AgentNotch/releases/download/v#{version}/Agent-Notch-#{version}-macOS-arm64.zip"
+  name "Agent Notch"
   desc "Notch status surface for local coding agents"
   homepage "https://github.com/Aforno/AgentNotch"
 
@@ -25,12 +25,12 @@ cask "agents-notch" do
   depends_on macos: :sonoma
   depends_on arch: :arm64
 
-  app "Agents Notch.app"
+  app "Agent Notch.app"
 
   zap trash: [
-    "~/.agentsnotch",
-    "~/Library/Application Support/AgentsNotch",
-    "~/Library/Preferences/com.afonsoferreira.AgentsNotch.plist",
+    "~/.agentnotch",
+    "~/Library/Application Support/AgentNotch",
+    "~/Library/Preferences/com.afonsoferreira.AgentNotch.plist",
   ]
 
   caveats <<~EOS

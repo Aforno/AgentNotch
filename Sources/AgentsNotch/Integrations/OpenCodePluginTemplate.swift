@@ -3,12 +3,12 @@ import Foundation
 /// Owns the generated OpenCode bridge source so provider configuration logic
 /// does not also contain a second implementation language inline.
 enum OpenCodePluginTemplate {
-    static let marker = "// Managed by Agents Notch."
+    static let marker = "// Managed by Agent Notch."
 
     static func isOwned(_ data: Data) -> Bool {
         let source = String(decoding: data, as: UTF8.self)
         return source.contains(marker)
-            && source.contains("export const AgentsNotchPlugin")
+            && source.contains("export const AgentNotchPlugin")
     }
 
     static func data(relayURL: URL) -> Data {
@@ -18,7 +18,7 @@ enum OpenCodePluginTemplate {
         let relayLiteral = encodedRelayPath.map { String(decoding: $0, as: UTF8.self) } ?? "\"\""
         let source = """
         \(marker)
-        // Reinstall from Agents Notch instead of editing this generated bridge.
+        // Reinstall from Agent Notch instead of editing this generated bridge.
         const relayPath = \(relayLiteral)
 
         const emit = async (payload) => {
@@ -42,7 +42,7 @@ enum OpenCodePluginTemplate {
 
         const errorMessage = (error) => error?.data?.message ?? error?.message ?? String(error ?? "OpenCode session failed")
 
-        export const AgentsNotchPlugin = async ({ directory }) => ({
+        export const AgentNotchPlugin = async ({ directory }) => ({
           event: async ({ event }) => {
             const properties = event?.properties ?? {}
             const info = properties.info ?? {}

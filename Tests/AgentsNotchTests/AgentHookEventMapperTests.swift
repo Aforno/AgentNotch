@@ -883,7 +883,7 @@ final class AgentHookEventMapperTests: XCTestCase {
 
     private func temporaryTranscript(_ contents: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("agentsnotch-transcript-\(UUID().uuidString).jsonl")
+            .appendingPathComponent("agentnotch-transcript-\(UUID().uuidString).jsonl")
         try Data(contents.utf8).write(to: url, options: .atomic)
         return url
     }

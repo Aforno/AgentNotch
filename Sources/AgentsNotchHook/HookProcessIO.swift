@@ -92,7 +92,7 @@ struct HookProcessInvocation: Sendable {
             return AgentReplySocketLocation.defaultURL
         }()
         let grokNativeConfiguration = homeDirectoryURL
-            .appendingPathComponent(".grok/hooks/agentsnotch.json")
+            .appendingPathComponent(".grok/hooks/agentnotch.json")
         let skipCompatibilityHook = GrokHookRouting.shouldSkipClaudeCompatibilityHook(
             grokHookEvent: grokHookEvent,
             configuredProvider: configuredProvider,

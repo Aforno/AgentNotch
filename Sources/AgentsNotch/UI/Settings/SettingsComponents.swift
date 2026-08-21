@@ -15,7 +15,7 @@ struct ApplicationSettingsSection: View {
         SettingsSection(title: "Application") {
             SettingsToggleRow(
                 title: "Launch at login",
-                detail: "Start Agents Notch automatically when you sign in to this Mac.",
+                detail: "Start Agent Notch automatically when you sign in to this Mac.",
                 isOn: launchAtLogin
             )
             SettingsToggleRow(
@@ -35,7 +35,7 @@ struct ApplicationSettingsSection: View {
             )
             SettingsToggleRow(
                 title: "App update checks",
-                detail: "Automatically check GitHub for newer Agents Notch releases.",
+                detail: "Automatically check GitHub for newer Agent Notch releases.",
                 isOn: automaticallyCheckForUpdates
             )
             SettingsMenuRow(
@@ -62,7 +62,7 @@ struct ApplicationSettingsSection: View {
                 title: "Quit",
                 detail: "Stop the notch and stop listening for local agent events."
             ) {
-                Button("Quit Agents Notch") {
+                Button("Quit Agent Notch") {
                     NSApplication.shared.terminate(nil)
                 }
                 .buttonStyle(NotchPillButtonStyle())
