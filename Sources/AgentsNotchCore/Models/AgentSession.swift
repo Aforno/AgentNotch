@@ -20,6 +20,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var workflows: [AgentWorkflow]
     public var pendingReply: AgentPendingReply?
     public var pendingReplies: [AgentPendingReply]
+    /// Sticky Codex index evidence so Open in Codex does not depend on the 10-event ring.
+    public var hasOfficialSessionTitle: Bool
 
     public init(event: AgentEvent) {
         id = event.sessionId
@@ -47,6 +49,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         workflows = []
         pendingReply = event.resolvedState == .waitingForUser ? event.pendingReply : nil
         pendingReplies = pendingReply.map { [$0] } ?? []
+        hasOfficialSessionTitle = event.hasOfficialSessionTitle
         applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         reconcilePlanWithTerminalState(at: event.timestamp)
     }
@@ -70,6 +73,9 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             mergeNonAdvancingEvent(event)
         }
 
+        if event.hasOfficialSessionTitle {
+            hasOfficialSessionTitle = true
+        }
         recordRecentEvent(event)
         return advancesCurrentState
     }
@@ -451,6 +457,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         case id, provider, task, currentActivity, state, startedAt, updatedAt, completedAt
         case workingDirectory, recentFiles, recentEvents, applicationURL, origin
         case parentSessionId, agentRole, plan, workflows, pendingReply, pendingReplies
+        case hasOfficialSessionTitle
     }
 
     public init(from decoder: Decoder) throws {
@@ -491,6 +498,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             pendingReply = nil
             pendingReplies.removeAll()
         }
+        hasOfficialSessionTitle = try values.decodeIfPresent(Bool.self, forKey: .hasOfficialSessionTitle)
+            ?? recentEvents.contains { $0.hasOfficialSessionTitle }
         reconcilePlanWithTerminalState(at: completedAt ?? updatedAt)
     }
 }

@@ -126,7 +126,7 @@ struct ActivityCenterView: View {
                 isSessionListFocused = true
             },
             onToggleGroup: toggleGroup,
-            onOpen: runtime.open,
+            onOpen: { runtime.open($0, action: $1) },
             onRemove: { runtime.activity.removeSession(id: $0) }
         )
     }
@@ -138,7 +138,7 @@ struct ActivityCenterView: View {
                 session: session,
                 parent: projection.parent(of: session),
                 children: projection.children(of: session.id),
-                onOpen: { runtime.open(session) },
+                onOpen: { runtime.open(session, action: $0) },
                 onOpenFile: runtime.openFile,
                 onSelectSession: { revealAndSelect($0) }
             )

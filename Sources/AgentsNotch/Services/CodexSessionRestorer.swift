@@ -2,7 +2,8 @@ import AgentsNotchCore
 import Foundation
 
 /// Launch-time Codex title evidence from `session_index.jsonl`. Applies titles
-/// to already-restored sessions; does not invent live sessions from disk.
+/// to already-restored sessions and restamps missing index evidence; does not
+/// invent live sessions from disk.
 enum CodexSessionRestorer {
     static func titleEvents(
         in sessions: [AgentSession],
@@ -16,7 +17,7 @@ enum CodexSessionRestorer {
                     forNativeSessionId: threadID,
                     codexHome: codexHome
                   ),
-                  title != session.task
+                  title != session.task || !session.hasOfficialSessionTitle
             else { return nil }
 
             return AgentEvent(

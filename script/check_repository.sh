@@ -17,6 +17,7 @@ required_files=(
   CHANGELOG.md
   THIRD_PARTY_NOTICES.md
   VERSION
+  Resources/AgentsNotch.entitlements
   Casks/agents-notch.rb
   .github/workflows/ci.yml
   .github/workflows/release.yml

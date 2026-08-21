@@ -141,8 +141,13 @@ Displays without a hardware notch can use the virtual notch or Activity Center.
 
 Activity Center keeps local session history. Filter by provider or status,
 search, and inspect plans, workflows, parent/child agents, recent files, and
-event details. Open Origin reactivates the source app the relay captured. If
-that app is gone, Agents Notch reveals the working directory in Finder.
+event details. Open in Codex returns directly to the captured desktop thread.
+Open session follows another provider's URL. Open app activates the captured
+IDE, launching it when needed. Open terminal brings the source emulator
+forward, and selects the tab in Terminal.app or iTerm2 when a TTY or session
+id is present. If no app, session, or terminal destination exists, Agents Notch
+reveals the working directory in Finder for non-Codex providers. Internal Codex
+helpers do not expose an open action because they are not navigable threads.
 Completed-history retention is in Settings.
 
 ## Local event protocol
@@ -209,9 +214,9 @@ can omit them.
 - `workflowUpdate` is a partial lifecycle update keyed by a stable `id`. It can
   set a workflow's `title`, `status`, and ordered `steps` without repeating
   unchanged fields.
-- `origin` is optional launch context from the local relay. The app can
-  reactivate the source terminal or IDE. Missing origin does not invalidate the
-  event.
+- `origin` is optional launch context from the local relay. Open app uses the
+  IDE or provider session. Open terminal uses the emulator, TTY, and session
+  id. Missing origin does not invalidate the event.
 - `pendingReply` is optional on `agent.waiting`. It contains the prompt,
   available actions, and the ID used to match a notch answer to the waiting
   hook.

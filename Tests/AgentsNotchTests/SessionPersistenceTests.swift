@@ -382,6 +382,33 @@ final class SessionPersistenceTests: XCTestCase {
 
         XCTAssertEqual(decoded.origin, origin)
     }
+
+    func testOfficialTitleEvidenceRoundTripsAndIsRecoveredFromRecentEvents() throws {
+        let stamped = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "codex:thr_123",
+            provider: .codex,
+            state: .running,
+            metadata: ["titleSource": "session"]
+        ))
+        let decodedStamped = try JSONDecoder.agentsNotch.decode(
+            AgentSession.self,
+            from: try JSONEncoder.agentsNotch.encode(stamped)
+        )
+        XCTAssertTrue(decodedStamped.hasOfficialSessionTitle)
+
+        var payload = try XCTUnwrap(
+            try JSONSerialization.jsonObject(
+                with: try JSONEncoder.agentsNotch.encode(stamped)
+            ) as? [String: Any]
+        )
+        payload.removeValue(forKey: "hasOfficialSessionTitle")
+        let recovered = try JSONDecoder.agentsNotch.decode(
+            AgentSession.self,
+            from: try JSONSerialization.data(withJSONObject: payload)
+        )
+        XCTAssertTrue(recovered.hasOfficialSessionTitle)
+    }
 }
 
 private enum PersistenceTestError: LocalizedError {

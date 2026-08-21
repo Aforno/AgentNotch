@@ -14,7 +14,7 @@ struct ActivityCenterSidebar: View {
     @FocusState.Binding var isSearchFocused: Bool
     let onSelect: (String) -> Void
     let onToggleGroup: (String) -> Void
-    let onOpen: (AgentSession) -> Void
+    let onOpen: (AgentSession, OriginOpenAction) -> Void
     let onRemove: (String) -> Void
 
     var body: some View {
@@ -118,7 +118,9 @@ struct ActivityCenterSidebar: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Open Origin") { onOpen(session) }
+            ForEach(OriginActivationService.destinations(for: session), id: \.action) { destination in
+                Button(destination.title) { onOpen(session, destination.action) }
+            }
             if !session.isActive {
                 Button("Remove from History", role: .destructive) { onRemove(session.id) }
             }

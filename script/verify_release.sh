@@ -50,6 +50,13 @@ if [[ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
   exit 1
 fi
 
+if ! APPLE_EVENTS_USAGE_DESCRIPTION="$(
+  plutil -extract NSAppleEventsUsageDescription raw "$INFO_PLIST" 2>/dev/null
+)" || [[ -z "$APPLE_EVENTS_USAGE_DESCRIPTION" ]]; then
+  echo "release app must explain why it sends Apple events" >&2
+  exit 1
+fi
+
 APP_FILE_DESCRIPTION="$(file "$APP_BINARY")"
 HOOK_FILE_DESCRIPTION="$(file "$HOOK_BINARY")"
 if [[ "$APP_FILE_DESCRIPTION" != *arm64* ]]; then
@@ -69,6 +76,19 @@ if strings "$APP_BINARY" | grep -F 'Enable debug simulator' >/dev/null; then
 fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+
+APP_ENTITLEMENTS_PLIST="$(mktemp "${TMPDIR:-/tmp}/agentsnotch-entitlements.XXXXXX")"
+trap 'rm -f "$APP_ENTITLEMENTS_PLIST"' EXIT
+codesign --display --entitlements "$APP_ENTITLEMENTS_PLIST" --xml "$APP_BUNDLE" 2>/dev/null
+if [[ "$(
+  /usr/libexec/PlistBuddy \
+    -c 'Print :com.apple.security.automation.apple-events' \
+    "$APP_ENTITLEMENTS_PLIST" \
+    2>/dev/null || true
+)" != "true" ]]; then
+  echo "release app must be signed with the Apple Events automation entitlement" >&2
+  exit 1
+fi
 
 if [[ "$REQUIRE_NOTARIZED" == true ]]; then
   xcrun stapler validate "$APP_BUNDLE"
