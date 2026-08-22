@@ -2,6 +2,7 @@ import AgentsNotchCore
 import AppKit
 import Foundation
 import Observation
+import os
 
 @Observable
 @MainActor
@@ -45,10 +46,16 @@ final class AppRuntime {
     private var replyServer: UnixReplyServer?
     /// Completes sessions still in `.unknown` when no live hook confirms them.
     private var unknownGraceTask: Task<Void, Never>?
+    private var socketRetryTask: Task<Void, Never>?
+    private var replyRetryTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
     private var acceptsEvents = false
     private var isRestoring = false
     private var startupEvents: [AgentEvent] = []
+    private static let logger = Logger(subsystem: "com.afonsoferreira.AgentNotch", category: "runtime")
+    /// Exponential backoff for socket bind retries: 1s, 2s, 4s, 8s, 16s, then capped.
+    private static let socketRetryBaseDelay: Duration = .seconds(1)
+    private static let maxSocketRetryDelay: Duration = .seconds(30)
 
     /// How long restored unverified runners stay in `.unknown` before the app
     /// assumes they ended without a hook. Live events cancel this per session.
@@ -145,7 +152,7 @@ final class AppRuntime {
         return lifecycleGeneration
     }
 
-    private func startSocket(generation: Int) {
+    private func startSocket(generation: Int, retryAttempt: Int = 1) {
         // Bind before any awaited restore work. Hooks emitted during startup are
         // buffered and replayed after the persisted snapshot is installed.
         let server = UnixSocketServer(socketURL: socketURL) { [weak self] event in
@@ -158,14 +165,19 @@ final class AppRuntime {
             socketServer = server
             socketStatus = "Listening"
             socketError = nil
+            let path = socketURL.path
+            Self.logger.info("Event socket listening at \(path)")
         } catch {
+            socketServer = nil
             socketStatus = "Unavailable"
             socketError = error.localizedDescription
+            Self.logger.error("Event socket start failed (attempt \(retryAttempt)): \(String(describing: error))")
+            scheduleSocketRetry(kind: .event, generation: generation, attempt: retryAttempt)
         }
     }
 
     @discardableResult
-    private func startReplySocket() -> Bool {
+    private func startReplySocket(retryAttempt: Int = 1) -> Bool {
         let server = UnixReplyServer(socketURL: replySocketURL) { [weak self] replyIDs in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -178,13 +190,58 @@ final class AppRuntime {
             replyServer = server
             answerModeAvailability.value = true
             replySocketError = nil
+            let path = replySocketURL.path
+            Self.logger.info("Reply socket listening at \(path)")
             return true
         } catch {
             replyServer = nil
             liveReplyIDs = []
             answerModeAvailability.value = false
             replySocketError = "Answer from the notch is unavailable: \(error.localizedDescription)"
+            Self.logger.error("Reply socket start failed (attempt \(retryAttempt)): \(String(describing: error))")
+            scheduleSocketRetry(kind: .reply, generation: lifecycleGeneration, attempt: retryAttempt)
             return false
+        }
+    }
+
+    private enum SocketKind {
+        case event
+        case reply
+    }
+
+    /// One bad launch must not kill event intake forever. Failed binds are
+    /// retried with exponential backoff until the lifecycle ends or the user
+    /// turns the feature off.
+    private func scheduleSocketRetry(kind: SocketKind, generation: Int, attempt: Int) {
+        let backoffExponent = min(attempt - 1, 5)
+        let delay = min(
+            Self.maxSocketRetryDelay,
+            Self.socketRetryBaseDelay * (1 << backoffExponent)
+        )
+        let task = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            self.retrySocket(kind: kind, generation: generation, attempt: attempt)
+        }
+        switch kind {
+        case .event:
+            socketRetryTask?.cancel()
+            socketRetryTask = task
+        case .reply:
+            replyRetryTask?.cancel()
+            replyRetryTask = task
+        }
+    }
+
+    private func retrySocket(kind: SocketKind, generation: Int, attempt: Int) {
+        guard isCurrentLifecycle(generation) else { return }
+        switch kind {
+        case .event:
+            guard socketServer == nil else { return }
+            startSocket(generation: generation, retryAttempt: attempt + 1)
+        case .reply:
+            guard replyServer == nil, answersFromNotch(), !privacyModeEnabled() else { return }
+            startReplySocket(retryAttempt: attempt + 1)
         }
     }
 
@@ -194,6 +251,8 @@ final class AppRuntime {
                 _ = startReplySocket()
             }
         } else {
+            replyRetryTask?.cancel()
+            replyRetryTask = nil
             replyServer?.stop()
             replyServer = nil
             liveReplyIDs = []
@@ -205,6 +264,8 @@ final class AppRuntime {
 
     func applyPrivacyModeEnabled(_ enabled: Bool) {
         if enabled {
+            replyRetryTask?.cancel()
+            replyRetryTask = nil
             replyServer?.stop()
             replyServer = nil
             liveReplyIDs = []
@@ -380,8 +441,12 @@ final class AppRuntime {
         }
         socketServer?.stop()
         socketServer = nil
+        socketRetryTask?.cancel()
+        socketRetryTask = nil
         replyServer?.stop()
         replyServer = nil
+        replyRetryTask?.cancel()
+        replyRetryTask = nil
         liveReplyIDs = []
         answerModeAvailability.value = false
     }
@@ -421,7 +486,9 @@ final class AppRuntime {
             notifications.deliverAttention(for: session, waitingCount: activity.attentionCount)
         } else if session.state == .failed, previousState != .failed, notify {
             notifications.deliverFailure(for: session)
-        } else if previousState == .waitingForUser, session.state != .waitingForUser {
+        } else if previousState == .waitingForUser && session.state != .waitingForUser
+            || previousState == .failed && session.state != .failed
+        {
             notifications.removeNotification(for: session.id)
         }
     }

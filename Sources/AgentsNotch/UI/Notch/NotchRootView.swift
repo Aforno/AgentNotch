@@ -110,7 +110,10 @@ struct NotchRootView: View {
             )
         case .list:
             let contentHeight = DynamicIslandSpacing.expandedTop
-                + AgentListView.rowsHeight(for: visibleSessions)
+                + AgentListView.rowsHeight(
+                    for: visibleSessions,
+                    hiddenGroupCount: snapshot.hiddenActiveGroupCount
+                )
                 + DynamicIslandSpacing.expandedBottom
             return NotchLayout(
                 width: expandedWidth(preferred: NotchLayoutMetrics.listPreferredWidth),
@@ -331,6 +334,7 @@ struct NotchRootView: View {
             AgentListView(
                 sessions: visibleSessions,
                 relatedSessions: snapshot.relatedSessions,
+                hiddenGroupCount: snapshot.hiddenActiveGroupCount,
                 topInset: geometry.notchHeight + DynamicIslandSpacing.expandedTop,
                 menuBarHeight: geometry.notchHeight,
                 onOpenSettings: { runtime.openSettings() },

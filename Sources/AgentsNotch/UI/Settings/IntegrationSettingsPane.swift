@@ -32,11 +32,13 @@ struct IntegrationSettingsPane: View {
         if runtime.socketError != nil
             || runtime.persistenceError != nil
             || runtime.persistenceRecoveryNotice != nil
+            || runtime.activity.protocolMismatchDetected
         {
             RuntimeHealthMessages(
                 socketError: runtime.socketError,
                 persistenceError: runtime.persistenceError,
-                persistenceRecoveryNotice: runtime.persistenceRecoveryNotice
+                persistenceRecoveryNotice: runtime.persistenceRecoveryNotice,
+                protocolMismatchDetected: runtime.activity.protocolMismatchDetected
             )
         }
     }

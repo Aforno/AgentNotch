@@ -30,7 +30,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AgentsNotchTests",
-            dependencies: ["AgentsNotchCore", "AgentsNotch"],
+            dependencies: ["AgentsNotchCore", "AgentsNotch", "AgentsNotchHook"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

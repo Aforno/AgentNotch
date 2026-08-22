@@ -110,6 +110,14 @@ struct SessionIndex {
             .flatMap { sessionsByID[$0.sessionId] }
             ?? attentionSessions.first
 
+        // The expanded list caps at three rows. Surface the active groups that
+        // did not fit so counts stay consistent with the collapsed presentation.
+        let listedRootIDs = Set(listSessions.map(\.id))
+        let hiddenActiveGroupCount = groupRoots.filter { root in
+            !listedRootIDs.contains(root.id)
+                && groupAggregates[root.id]?.isActive == true
+        }.count
+
         return NotchActivitySnapshot(
             activeSessions: activeSessions,
             activeProviders: activeProviders,
@@ -120,7 +128,8 @@ struct SessionIndex {
             relatedSessions: relatedSessions(
                 for: listSessions,
                 includingGroupOf: attentionSession
-            )
+            ),
+            hiddenActiveGroupCount: hiddenActiveGroupCount
         )
     }
 
