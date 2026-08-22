@@ -1,6 +1,6 @@
 cask "agent-notch" do
-  version "0.1.1"
-  sha256 "72cc1624a84f2d3b80971200a5d343571597c06cc2a0e3fb752a9417caf82199"
+  version "0.2.0"
+  sha256 "1f764315c44c477186612e0f81e81ecdd7329caa2d5e16d32658c93d8d815ee6"
 
   url "https://github.com/Aforno/AgentNotch/releases/download/v#{version}/Agent-Notch-#{version}-macOS-arm64.zip"
   name "Agent Notch"
