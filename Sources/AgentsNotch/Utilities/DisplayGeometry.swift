@@ -9,6 +9,18 @@ struct DisplayGeometry: Equatable {
     let centerX: CGFloat
     let hasPhysicalNotch: Bool
 
+    /// Placeholder for the rare no-screen window (clamshell boot, screenless
+    /// launch). The display-change observer replaces it as soon as a screen
+    /// appears, so only rough proportions matter here.
+    static let fallback = DisplayGeometry(
+        screenFrame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+        visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 875),
+        notchWidth: 176,
+        notchHeight: 30,
+        centerX: 720,
+        hasPhysicalNotch: false
+    )
+
     static func detect(on screen: NSScreen) -> DisplayGeometry {
         let leftArea = screen.auxiliaryTopLeftArea
         let rightArea = screen.auxiliaryTopRightArea

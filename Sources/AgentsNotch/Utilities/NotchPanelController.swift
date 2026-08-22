@@ -14,8 +14,9 @@ final class NotchPanelController: NSWindowController {
 
     init(runtime: AppRuntime) {
         self.runtime = runtime
-        let screen = DisplayResolver.preferredScreen() ?? NSScreen.screens[0]
-        geometry = DisplayGeometry.detect(on: screen)
+        // NSScreen.screens can be empty during clamshell boot; never force-index.
+        let screen = DisplayResolver.preferredScreen()
+        geometry = screen.map { DisplayGeometry.detect(on: $0) } ?? .fallback
 
         let panel = NotchPanel(
             contentRect: .zero,

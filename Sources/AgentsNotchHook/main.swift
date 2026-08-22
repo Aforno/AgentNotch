@@ -1,5 +1,8 @@
 import AgentsNotchCore
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.afonsoferreira.AgentNotch", category: "hook")
 
 HookProcessIO.ignoreBrokenPipes()
 
@@ -19,7 +22,12 @@ func stampSelfTest(_ event: inout AgentEvent) {
     event.metadata = metadata
 }
 
-if let payload = try? AgentHookInput.decode(input) {
+if input.isEmpty {
+    logger.error("Received empty hook payload on stdin for provider \(invocation.provider.rawValue, privacy: .public)")
+}
+
+do {
+    let payload = try AgentHookInput.decode(input)
     let enriched = ProviderHookEnricher.enrich(payload, provider: invocation.provider)
     var answered = false
     if var event = AgentHookEventMapper.map(
@@ -63,9 +71,10 @@ if let payload = try? AgentHookInput.decode(input) {
                 id: pending.replyId,
                 socketURL: invocation.replySocketURL,
                 afterRegistration: {
-                    try? UnixSocketClient.send(waitingEvent, to: invocation.socketURL)
+                    HookProcessIO.sendEvent(waitingEvent, to: invocation.socketURL)
                 }
             ) {
+                logger.info("Delivered notch reply \(pending.kind.rawValue, privacy: .public) for session \(event.sessionId, privacy: .private)")
                 HookProcessIO.writeDecision(
                     ProviderDecisionMapper.data(
                         provider: invocation.provider,
@@ -77,19 +86,24 @@ if let payload = try? AgentHookInput.decode(input) {
             } else {
                 // The native provider prompt remains authoritative, but answer
                 // mode must never make the observer signal disappear.
+                logger.info("No notch reply in time; failing open for session \(event.sessionId, privacy: .private)")
                 event.pendingReply = nil
-                try? UnixSocketClient.send(event, to: invocation.socketURL)
+                HookProcessIO.sendEvent(event, to: invocation.socketURL)
             }
         } else {
-            try? UnixSocketClient.send(event, to: invocation.socketURL)
+            HookProcessIO.sendEvent(event, to: invocation.socketURL)
         }
     }
     if var workflowEvent = enriched.workflowEvent {
         stampSelfTest(&workflowEvent)
-        try? UnixSocketClient.send(workflowEvent, to: invocation.socketURL)
+        HookProcessIO.sendEvent(workflowEvent, to: invocation.socketURL)
     }
     if answered {
         exit(EXIT_SUCCESS)
     }
+} catch {
+    logger.error(
+        "Could not decode hook payload (\(input.count) bytes) for provider \(invocation.provider.rawValue, privacy: .public): \(String(describing: error), privacy: .public)"
+    )
 }
 HookProcessIO.writePassiveResponse(for: invocation.provider)

@@ -20,7 +20,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var workflows: [AgentWorkflow]
     public var pendingReply: AgentPendingReply?
     public var pendingReplies: [AgentPendingReply]
-    /// Sticky Codex index evidence so Open in Codex does not depend on the 10-event ring.
+    /// Sticky Codex index evidence so Open in Codex does not depend on the event ring.
     public var hasOfficialSessionTitle: Bool
 
     public init(event: AgentEvent) {
@@ -57,6 +57,11 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var isActive: Bool { state.isActive }
     public var needsAttention: Bool { state.needsAttention }
     public var isSubagent: Bool { parentSessionId != nil }
+
+    /// Ring-buffer size for per-session event history. The Activity Center
+    /// timeline renders from this list, so it bounds how far back the timeline
+    /// can reach. Keep the decode path capped at the same value.
+    public static let recentEventLimit = 50
 
     @discardableResult
     public mutating func apply(_ event: AgentEvent) -> Bool {
@@ -296,7 +301,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     private mutating func recordRecentEvent(_ event: AgentEvent) {
         recentEvents.append(event)
         recentEvents.sort { $0.timestamp > $1.timestamp }
-        recentEvents = Array(recentEvents.prefix(10))
+        recentEvents = Array(recentEvents.prefix(Self.recentEventLimit))
     }
 
     public mutating func complete(as terminalState: AgentState, at timestamp: Date) {
@@ -478,7 +483,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         recentEvents = Array(
             try values.decode([AgentEvent].self, forKey: .recentEvents)
                 .sorted { $0.timestamp > $1.timestamp }
-                .prefix(10)
+                .prefix(Self.recentEventLimit)
         )
         applicationURL = try values.decodeIfPresent(URL.self, forKey: .applicationURL)
         origin = try values.decodeIfPresent(AgentOrigin.self, forKey: .origin)

@@ -1,6 +1,7 @@
 import AgentsNotchCore
 import Foundation
 import Observation
+import os
 import UserNotifications
 
 @Observable
@@ -10,6 +11,10 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     var onOpenSession: ((String) -> Void)?
 
     private let center: UNUserNotificationCenter?
+    private static let logger = Logger(
+        subsystem: "com.afonsoferreira.AgentNotch",
+        category: "notifications"
+    )
     private static let categoryIdentifier = "AGENT_ATTENTION"
     private static let openActionIdentifier = "OPEN_SESSION"
 
@@ -40,51 +45,33 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     }
 
     func deliverAttention(for session: AgentSession, waitingCount: Int) {
-        guard UserDefaults.standard.bool(forKey: "attentionNotificationsEnabled") else { return }
-        guard let center else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = waitingCount > 1
-            ? "\(waitingCount) agents need you"
-            : "\(session.provider.displayName) needs you"
-        content.subtitle = projectName(for: session)
-        content.body = notificationBody(for: session)
-        content.categoryIdentifier = Self.categoryIdentifier
-        content.userInfo = ["sessionID": session.id]
-        if UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled") {
-            content.sound = .default
-        }
-        center.add(UNNotificationRequest(
-            identifier: "agent-attention-\(session.id)",
-            content: content,
-            trigger: nil
-        ))
+        deliver(
+            id: "agent-attention-\(session.id)",
+            title: waitingCount > 1
+                ? "\(waitingCount) agents need you"
+                : "\(session.provider.displayName) needs you",
+            session: session,
+            soundEnabled: UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled")
+        )
     }
 
     func deliverFailure(for session: AgentSession) {
-        guard UserDefaults.standard.bool(forKey: "attentionNotificationsEnabled"),
-              UserDefaults.standard.bool(forKey: "failureNotificationsEnabled"),
-              let center else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = "\(session.provider.displayName) failed"
-        content.subtitle = projectName(for: session)
-        content.body = notificationBody(for: session)
-        content.categoryIdentifier = Self.categoryIdentifier
-        content.userInfo = ["sessionID": session.id]
-        if UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled") {
-            content.sound = .default
-        }
-        center.add(UNNotificationRequest(
-            identifier: "agent-failure-\(session.id)",
-            content: content,
-            trigger: nil
-        ))
+        guard UserDefaults.standard.bool(forKey: "failureNotificationsEnabled") else { return }
+        deliver(
+            id: "agent-failure-\(session.id)",
+            title: "\(session.provider.displayName) failed",
+            session: session,
+            soundEnabled: UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled")
+        )
     }
 
     func removeNotification(for sessionID: String) {
-        center?.removeDeliveredNotifications(withIdentifiers: ["agent-attention-\(sessionID)"])
-        center?.removePendingNotificationRequests(withIdentifiers: ["agent-attention-\(sessionID)"])
+        let identifiers = [
+            "agent-attention-\(sessionID)",
+            "agent-failure-\(sessionID)",
+        ]
+        center?.removeDeliveredNotifications(withIdentifiers: identifiers)
+        center?.removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
     func refreshAuthorizationStatus() {
@@ -134,18 +121,35 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
         ])
     }
 
+    private func deliver(id: String, title: String, session: AgentSession, soundEnabled: Bool) {
+        guard UserDefaults.standard.bool(forKey: "attentionNotificationsEnabled"),
+              let center else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        // Privacy mode must gate every user-derived field, including the
+        // project name in the subtitle.
+        let isPrivate = UserDefaults.standard.bool(forKey: "privacyModeEnabled")
+        content.subtitle = isPrivate
+            ? session.provider.displayName
+            : projectName(for: session)
+        content.body = isPrivate ? session.state.displayName : session.currentActivity
+        content.categoryIdentifier = Self.categoryIdentifier
+        content.userInfo = ["sessionID": session.id]
+        if soundEnabled {
+            content.sound = .default
+        }
+        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
+            if let error {
+                Self.logger.error("Failed to schedule notification \(id): \(error.localizedDescription)")
+            }
+        }
+    }
+
     private func projectName(for session: AgentSession) -> String {
         if let directory = session.workingDirectory {
             return URL(fileURLWithPath: directory).lastPathComponent
         }
-        return UserDefaults.standard.bool(forKey: "privacyModeEnabled")
-            ? session.provider.displayName
-            : session.task
-    }
-
-    private func notificationBody(for session: AgentSession) -> String {
-        UserDefaults.standard.bool(forKey: "privacyModeEnabled")
-            ? session.state.displayName
-            : session.currentActivity
+        return session.task
     }
 }

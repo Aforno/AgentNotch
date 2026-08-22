@@ -4,17 +4,20 @@ import SwiftUI
 struct AgentListView: View {
     let sessions: [AgentSession]
     let relatedSessions: [AgentSession]
+    var hiddenGroupCount: Int = 0
     let topInset: CGFloat
     let menuBarHeight: CGFloat
     let onOpenSettings: () -> Void
     let onOpenActivityCenter: () -> Void
     let onSelect: (String) -> Void
 
-    static func rowsHeight(for sessions: [AgentSession]) -> CGFloat {
+    static func rowsHeight(for sessions: [AgentSession], hiddenGroupCount: Int = 0) -> CGFloat {
         if sessions.isEmpty {
             return DynamicIslandSpacing.rowHeight
         }
-        return CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
+        let sessionRows = CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
+        let overflowRow: CGFloat = hiddenGroupCount > 0 ? DynamicIslandSpacing.rowHeight : 0
+        return sessionRows + overflowRow
     }
 
     static func controlsVerticalOffset(topInset: CGFloat, menuBarHeight: CGFloat) -> CGFloat {
@@ -48,11 +51,27 @@ struct AgentListView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if index < sessions.count - 1 {
+                    if index < sessions.count - 1 || hiddenGroupCount > 0 {
                         Divider()
                             .overlay(.white.opacity(0.08))
                             .padding(.horizontal, 42)
                     }
+                }
+
+                if hiddenGroupCount > 0 {
+                    Button(action: onOpenActivityCenter) {
+                        HStack(spacing: 8) {
+                            Spacer()
+                            Text("+\(hiddenGroupCount) more in Activity Center")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.55))
+                            Spacer()
+                        }
+                        .frame(height: DynamicIslandSpacing.rowHeight)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(hiddenGroupCount) more active agents in Activity Center")
                 }
             }
         }

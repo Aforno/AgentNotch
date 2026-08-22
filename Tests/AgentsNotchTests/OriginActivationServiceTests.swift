@@ -289,7 +289,7 @@ final class OriginActivationServiceTests: XCTestCase {
             timestamp: startedAt,
             metadata: ["titleSource": "session"]
         ))
-        for offset in 1...10 {
+        for offset in 1...AgentSession.recentEventLimit {
             session.apply(AgentEvent(
                 type: .activity,
                 sessionId: session.id,

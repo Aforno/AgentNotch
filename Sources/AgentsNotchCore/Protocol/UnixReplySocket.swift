@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 
 public enum AgentReplySocketLocation {
     public static var defaultURL: URL {
@@ -14,7 +15,6 @@ public enum AgentReplySocketLocation {
 public final class UnixReplyServer: @unchecked Sendable {
     private static let helloTimeout = timeval(tv_sec: 2, tv_usec: 0)
     private static let maximumConcurrentClients = 64
-    private static let startLock = NSLock()
 
     private let socketURL: URL
     private let pendingChanged: @Sendable (Set<UUID>) -> Void
@@ -50,81 +50,27 @@ public final class UnixReplyServer: @unchecked Sendable {
 
     public func start() throws {
         guard lock.withLock({ descriptor == -1 }) else { return }
-        try FileManager.default.createDirectory(
-            at: socketURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
+        let (fd, inode) = try UnixSocketSupport.bindListener(
+            socketURL: socketURL,
+            tightenDirectory: socketURL.standardizedFileURL
+                == AgentReplySocketLocation.defaultURL.standardizedFileURL
         )
-        if socketURL.standardizedFileURL == AgentReplySocketLocation.defaultURL.standardizedFileURL {
-            try FileManager.default.setAttributes(
-                [.posixPermissions: 0o700],
-                ofItemAtPath: socketURL.deletingLastPathComponent().path
-            )
-        }
 
-        Self.startLock.lock()
-        defer { Self.startLock.unlock() }
-
-        let lockPath = socketURL.path + ".lock"
-        let lockFD = Darwin.open(lockPath, O_CREAT | O_RDWR, mode_t(0o600))
-        guard lockFD >= 0 else { throw AgentSocketError.systemCall("open", errno) }
-        var processLock = flock()
-        processLock.l_type = Int16(F_WRLCK)
-        processLock.l_whence = Int16(SEEK_SET)
-        defer {
-            processLock.l_type = Int16(F_UNLCK)
-            _ = Darwin.fcntl(lockFD, F_SETLK, &processLock)
-            Darwin.close(lockFD)
-        }
-        guard Darwin.fcntl(lockFD, F_SETLKW, &processLock) == 0 else {
-            throw AgentSocketError.systemCall("fcntl(F_SETLKW)", errno)
-        }
-
-        if isReplySocketAccepting(at: socketURL.path) {
-            throw AgentSocketError.alreadyInUse
-        }
-        unlink(socketURL.path)
-
-        let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw AgentSocketError.systemCall("socket", errno) }
-
-        do {
-            var address = try makeReplyAddress(path: socketURL.path)
-            let bound = withUnsafePointer(to: &address) { pointer in
-                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    Darwin.bind(fd, $0, replyAddressLength(for: socketURL.path))
-                }
-            }
-            guard bound == 0 else { throw AgentSocketError.systemCall("bind", errno) }
-            guard chmod(socketURL.path, 0o600) == 0 else {
-                throw AgentSocketError.systemCall("chmod", errno)
-            }
-            guard Darwin.listen(fd, 16) == 0 else { throw AgentSocketError.systemCall("listen", errno) }
-            guard let inode = replyInode(of: socketURL.path) else {
-                throw AgentSocketError.systemCall("stat", errno)
-            }
-            var pipeFDs = [Int32](repeating: -1, count: 2)
-            let piped = pipeFDs.withUnsafeMutableBufferPointer { Darwin.pipe($0.baseAddress) }
-            guard piped == 0 else {
-                throw AgentSocketError.systemCall("pipe", errno)
-            }
-            lock.withLock {
-                descriptor = fd
-                ownedInode = inode
-                wakeupRead = pipeFDs[0]
-                wakeupWrite = pipeFDs[1]
-            }
-        } catch {
+        var pipeFDs = [Int32](repeating: -1, count: 2)
+        let piped = pipeFDs.withUnsafeMutableBufferPointer { Darwin.pipe($0.baseAddress) }
+        guard piped == 0 else {
             Darwin.close(fd)
-            lock.withLock {
-                descriptor = -1
-                ownedInode = nil
-                closeWakeupPipeLocked()
-            }
-            if !isReplySocketAccepting(at: socketURL.path) {
+            if !UnixSocketSupport.isPathAccepting(at: socketURL.path) {
                 unlink(socketURL.path)
             }
-            throw error
+            throw AgentSocketError.systemCall("pipe", errno)
+        }
+
+        lock.withLock {
+            descriptor = fd
+            ownedInode = inode
+            wakeupRead = pipeFDs[0]
+            wakeupWrite = pipeFDs[1]
         }
 
         let stopped = DispatchSemaphore(value: 0)
@@ -139,6 +85,8 @@ public final class UnixReplyServer: @unchecked Sendable {
             acceptStopped = stopped
         }
         thread.start()
+        let path = socketURL.path
+        UnixSocketSupport.logger.info("Reply socket listening at \(path)")
     }
 
     public func stop() {
@@ -173,7 +121,7 @@ public final class UnixReplyServer: @unchecked Sendable {
             Darwin.close(client)
         }
         if hadPendingReplies { publishPendingReplies() }
-        if let inode = state.inode, replyInode(of: socketURL.path) == inode {
+        if let inode = state.inode, UnixSocketSupport.inodeOfPath(socketURL.path) == inode {
             unlink(socketURL.path)
         }
     }
@@ -233,22 +181,8 @@ public final class UnixReplyServer: @unchecked Sendable {
                 if errno == EINTR { continue }
                 return
             }
-            var timeout = Self.helloTimeout
-            _ = setsockopt(
-                client,
-                SOL_SOCKET,
-                SO_RCVTIMEO,
-                &timeout,
-                socklen_t(MemoryLayout<timeval>.size)
-            )
-            var nosigpipe: Int32 = 1
-            _ = setsockopt(
-                client,
-                SOL_SOCKET,
-                SO_NOSIGPIPE,
-                &nosigpipe,
-                socklen_t(MemoryLayout<Int32>.size)
-            )
+            UnixSocketSupport.applyTimeout(client, kind: SO_RCVTIMEO, value: Self.helloTimeout)
+            UnixSocketSupport.setNosigpipe(client)
             lock.lock()
             guard clients.count < Self.maximumConcurrentClients else {
                 lock.unlock()
@@ -277,17 +211,12 @@ public final class UnixReplyServer: @unchecked Sendable {
         let line = firstLine(in: data)
         guard let hello = try? JSONDecoder.agentsNotch.decode(AgentReplyHello.self, from: line)
         else {
+            UnixSocketSupport.logger.warning("Rejected malformed reply hello (\(line.count) bytes)")
             closeUnregistered(client)
             return
         }
-        var idle = timeval(tv_sec: AgentReplyPolicy.waitSeconds + 5, tv_usec: 0)
-        _ = setsockopt(
-            client,
-            SOL_SOCKET,
-            SO_RCVTIMEO,
-            &idle,
-            socklen_t(MemoryLayout<timeval>.size)
-        )
+        let idle = timeval(tv_sec: AgentReplyPolicy.waitSeconds + 5, tv_usec: 0)
+        UnixSocketSupport.applyTimeout(client, kind: SO_RCVTIMEO, value: idle)
         lock.lock()
         if let previous = pending.updateValue(client, forKey: hello.replyId) {
             clients.remove(previous)
@@ -355,16 +284,15 @@ public enum UnixReplyClient {
         guard fd >= 0 else { return nil }
         defer { Darwin.close(fd) }
 
-        var nosigpipe: Int32 = 1
-        _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, socklen_t(MemoryLayout<Int32>.size))
-        var connectTimeout = timeval(tv_sec: 2, tv_usec: 0)
-        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &connectTimeout, socklen_t(MemoryLayout<timeval>.size))
-        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &connectTimeout, socklen_t(MemoryLayout<timeval>.size))
+        UnixSocketSupport.setNosigpipe(fd)
+        let connectTimeout = timeval(tv_sec: 2, tv_usec: 0)
+        UnixSocketSupport.applyTimeout(fd, kind: SO_SNDTIMEO, value: connectTimeout)
+        UnixSocketSupport.applyTimeout(fd, kind: SO_RCVTIMEO, value: connectTimeout)
 
-        guard var address = try? makeReplyAddress(path: socketURL.path) else { return nil }
+        guard var address = try? UnixSocketSupport.makeAddress(path: socketURL.path) else { return nil }
         let connected = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(fd, $0, replyAddressLength(for: socketURL.path))
+                Darwin.connect(fd, $0, UnixSocketSupport.addressLength(for: socketURL.path))
             }
         }
         guard connected == 0 else { return nil }
@@ -376,8 +304,8 @@ public enum UnixReplyClient {
         else { return nil }
         afterRegistration?()
 
-        var wait = timeval(tv_sec: max(1, timeoutSeconds), tv_usec: 0)
-        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &wait, socklen_t(MemoryLayout<timeval>.size))
+        let wait = timeval(tv_sec: max(1, timeoutSeconds), tv_usec: 0)
+        UnixSocketSupport.applyTimeout(fd, kind: SO_RCVTIMEO, value: wait)
 
         guard let data = readReplyLine(from: fd, maximumBytes: 8_192) else { return nil }
         return try? JSONDecoder.agentsNotch.decode(AgentReply.self, from: data)
@@ -415,49 +343,4 @@ private func firstLine(in data: Data) -> Data {
         return data.prefix(upTo: index)
     }
     return data
-}
-
-private func isReplySocketAccepting(at path: String) -> Bool {
-    guard FileManager.default.fileExists(atPath: path) else { return false }
-    let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-    guard fd >= 0 else { return false }
-    defer { Darwin.close(fd) }
-    var timeout = timeval(tv_sec: 0, tv_usec: 100_000)
-    _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-    var nosigpipe: Int32 = 1
-    _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, socklen_t(MemoryLayout<Int32>.size))
-    guard var address = try? makeReplyAddress(path: path) else { return false }
-    let result = withUnsafePointer(to: &address) { pointer in
-        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-            Darwin.connect(fd, $0, replyAddressLength(for: path))
-        }
-    }
-    return result == 0
-}
-
-private func replyInode(of path: String) -> ino_t? {
-    var info = stat()
-    guard stat(path, &info) == 0 else { return nil }
-    return info.st_ino
-}
-
-private func makeReplyAddress(path: String) throws -> sockaddr_un {
-    let bytes = Array(path.utf8CString)
-    var address = sockaddr_un()
-    guard bytes.count <= MemoryLayout.size(ofValue: address.sun_path) else {
-        throw AgentSocketError.pathTooLong
-    }
-    address.sun_family = sa_family_t(AF_UNIX)
-    address.sun_len = UInt8(replyAddressLength(for: path))
-    _ = withUnsafeMutablePointer(to: &address.sun_path) { destination in
-        bytes.withUnsafeBytes { source in
-            memcpy(UnsafeMutableRawPointer(destination), source.baseAddress!, bytes.count)
-        }
-    }
-    return address
-}
-
-private func replyAddressLength(for path: String) -> socklen_t {
-    let pathOffset = MemoryLayout<sockaddr_un>.offset(of: \.sun_path) ?? 2
-    return socklen_t(pathOffset + path.utf8.count + 1)
 }
