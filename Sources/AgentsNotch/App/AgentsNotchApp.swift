@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindowController: OnboardingWindowController?
     private var settingsWindowController: SettingsWindowController?
     private var globalShortcutController: GlobalActivityShortcutController?
+    private var recoveryStatusItem: SurfaceRecoveryStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         var defaults: [String: Any] = [
@@ -54,6 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? GlobalActivityShortcut.off.rawValue
         )
         panel.show()
+
+        // The notch surface is the only built-in affordance for reaching this
+        // accessory app. When it is unavailable (notch disabled, non-notch Mac),
+        // keep a menu bar item alive as the recovery entry point.
+        recoveryStatusItem = SurfaceRecoveryStatusItem(runtime: runtime)
+        panel.onSurfaceAvailabilityChanged = { [weak self] isAvailable in
+            self?.recoveryStatusItem?.updateAvailability(isSurfaceAvailable: isAvailable)
+        }
 
         Task { await runtime.start() }
         if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {

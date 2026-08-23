@@ -302,9 +302,17 @@ struct RuntimeHealthMessages: View {
     let socketError: String?
     let persistenceError: String?
     let persistenceRecoveryNotice: String?
+    var protocolMismatchDetected: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if protocolMismatchDetected {
+                SettingsMessage(
+                    text: "Some agent events were ignored because they use an unsupported protocol version. Reinstall the provider integrations below (or update the app) so hooks and app speak the same protocol.",
+                    symbol: "arrow.triangle.branch",
+                    color: .orange
+                )
+            }
             if let socketError {
                 SettingsMessage(
                     text: "Local event relay unavailable: \(socketError)",

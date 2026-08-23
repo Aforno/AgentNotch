@@ -8,14 +8,23 @@ final class NotchPanelController: NSWindowController {
     private nonisolated(unsafe) var screenObserver: NSObjectProtocol?
     private nonisolated(unsafe) var globalPointerObserver: Any?
     private nonisolated(unsafe) var localPointerObserver: Any?
+    private var lastReportedSurfaceAvailability: Bool?
     private lazy var frameScheduler = NotchPanelFrameScheduler { [weak self] size, animated in
         self?.reposition(width: size.width, height: size.height, animated: animated)
     }
 
+    /// Reports whether this controller can currently provide the app's notch
+    /// surface. AppDelegate uses this as the single source of truth for its
+    /// recovery menu item, including pointer-driven display changes.
+    var onSurfaceAvailabilityChanged: ((Bool) -> Void)? {
+        didSet { reportSurfaceAvailability(force: true) }
+    }
+
     init(runtime: AppRuntime) {
         self.runtime = runtime
-        let screen = DisplayResolver.preferredScreen() ?? NSScreen.screens[0]
-        geometry = DisplayGeometry.detect(on: screen)
+        // NSScreen.screens can be empty during clamshell boot; never force-index.
+        let screen = DisplayResolver.preferredScreen()
+        geometry = screen.map { DisplayGeometry.detect(on: $0) } ?? .fallback
 
         let panel = NotchPanel(
             contentRect: .zero,
@@ -55,6 +64,7 @@ final class NotchPanelController: NSWindowController {
     ///   NotchRootView so presentSession / detail re-entry cannot clip expanded
     ///   content back to compact while SwiftUI layout stays on `.detail`.
     func show(resetToCompact: Bool = false) {
+        reportSurfaceAvailability()
         guard isSurfaceEnabled else {
             window?.orderOut(nil)
             return
@@ -79,13 +89,16 @@ final class NotchPanelController: NSWindowController {
     /// to compact dimensions by an unrelated preference write.
     func refreshPreferences() {
         updatePointerDisplayObservation()
-        guard let screen = DisplayResolver.preferredScreen() else { return }
-        let updated = DisplayGeometry.detect(on: screen)
-        let geometryChanged = updated != geometry
-        if geometryChanged {
-            geometry = updated
-            if let panel = window as? NSPanel { installContent(in: panel) }
+        var geometryChanged = false
+        if let screen = DisplayResolver.preferredScreen() {
+            let updated = DisplayGeometry.detect(on: screen)
+            geometryChanged = updated != geometry
+            if geometryChanged {
+                geometry = updated
+                if let panel = window as? NSPanel { installContent(in: panel) }
+            }
         }
+        reportSurfaceAvailability()
         guard isSurfaceEnabled else {
             window?.orderOut(nil)
             return
@@ -203,7 +216,15 @@ final class NotchPanelController: NSWindowController {
             geometry = updated
             if let panel = window as? NSPanel { installContent(in: panel) }
         }
+        reportSurfaceAvailability()
         show(resetToCompact: true)
+    }
+
+    private func reportSurfaceAvailability(force: Bool = false) {
+        let isAvailable = isSurfaceEnabled
+        guard force || isAvailable != lastReportedSurfaceAvailability else { return }
+        lastReportedSurfaceAvailability = isAvailable
+        onSurfaceAvailabilityChanged?(isAvailable)
     }
 
     private func reposition(width: CGFloat, height: CGFloat, animated: Bool = false) {

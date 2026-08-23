@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import Observation
+import os
 
 public struct NotchActivitySnapshot: Equatable, Sendable {
     public let activeSessions: [AgentSession]
@@ -10,6 +11,9 @@ public struct NotchActivitySnapshot: Equatable, Sendable {
     public let attentionSession: AgentSession?
     public let listSessions: [AgentSession]
     public let relatedSessions: [AgentSession]
+    /// Active agent groups beyond the expanded list's presentation cap, so the
+    /// collapsed count and expanded rows never disagree silently.
+    public let hiddenActiveGroupCount: Int
 
     public var attentionCount: Int { attentionSessions.count }
 
@@ -20,7 +24,8 @@ public struct NotchActivitySnapshot: Equatable, Sendable {
         attentionSessions: [],
         attentionSession: nil,
         listSessions: [],
-        relatedSessions: []
+        relatedSessions: [],
+        hiddenActiveGroupCount: 0
     )
 }
 
@@ -37,9 +42,14 @@ public final class AgentActivityService {
     public private(set) var attentionEvent: AgentEvent?
     public private(set) var notchSnapshot: NotchActivitySnapshot
     public private(set) var historyRevision: UInt64
+    /// Set when an event arrived with an unsupported `protocolVersion`. Such
+    /// events are dropped, so this flag is the only user-visible trace — the
+    /// classic stale-relay-after-app-upgrade scenario.
+    public private(set) var protocolMismatchDetected = false
     public var onSessionsChanged: (([AgentSession]) -> Void)?
     private var index: SessionIndex
     private var sessionsByID: [String: Int]
+    private static let logger = Logger(subsystem: "com.afonsoferreira.AgentNotch", category: "activity")
 
     public init(sessions: [AgentSession] = []) {
         self.sessions = sessions
@@ -116,7 +126,13 @@ public final class AgentActivityService {
 
     @discardableResult
     public func ingest(_ event: AgentEvent) -> Bool {
-        guard event.protocolVersion == 1 else { return false }
+        guard event.protocolVersion == 1 else {
+            protocolMismatchDetected = true
+            Self.logger.error(
+                "Dropped event for session \(event.sessionId, privacy: .private): protocol version \(event.protocolVersion) is not supported (expected 1). Reinstall provider integrations or update the app."
+            )
+            return false
+        }
         var event = event
         let now = Date()
         if event.timestamp > now {
@@ -129,6 +145,7 @@ public final class AgentActivityService {
             }
         }
 
+        var createdSession = false
         let advancesCurrentState: Bool
         if let existingIndex = sessionsByID[event.sessionId] {
             advancesCurrentState = sessions[existingIndex].apply(event)
@@ -136,13 +153,14 @@ public final class AgentActivityService {
             sessions.append(AgentSession(event: event))
             sessionsByID[event.sessionId] = sessions.count - 1
             advancesCurrentState = true
+            createdSession = true
         }
 
         // A parent may finish before a concurrently delivered child event. Do
         // not create a permanently active child underneath a terminal parent.
         // Tree edges are unchanged here, so the current SessionIndex is valid
         // for descendant lookup; rebuild once after every mutation.
-        _ = completeSessionIfParentIsTerminal(
+        let completedByParentRule = completeSessionIfParentIsTerminal(
             event.sessionId,
             at: event.timestamp
         )
@@ -160,7 +178,16 @@ public final class AgentActivityService {
             )
         }
 
-        sessions.sort(by: Self.orderSessions)
+        // Only state, recency, or membership changes can affect the array's
+        // order. SessionIndex stores complete AgentSession values, though, so
+        // refresh it even for a non-advancing event that only merged metadata,
+        // workflow state, relationship context, history, or a pending reply.
+        let affectsOrdering = advancesCurrentState
+            || createdSession
+            || completedByParentRule
+        if affectsOrdering {
+            sessions.sort(by: Self.orderSessions)
+        }
         rebuildLookups()
         if advancesCurrentState {
             if cascadedTerminal {
@@ -339,8 +366,24 @@ public final class AgentActivityService {
 
     /// Most recently updated session still waiting for the user, as an event
     /// suitable for the temporary notch presentation.
+    ///
+    /// Scans `sessions` directly instead of reading the presentation index so
+    /// hot-path ingests do not force a full graph rebuild just to re-rank
+    /// attention. Ordering matches SessionIndex.waitingSessions exactly.
     private func latestWaitingAttentionEvent() -> AgentEvent? {
-        index.attentionSessions.first.map(attentionEvent(for:))
+        var newest: AgentSession?
+        for session in sessions where session.state == .waitingForUser {
+            if let current = newest {
+                if session.updatedAt > current.updatedAt
+                    || (session.updatedAt == current.updatedAt && session.id < current.id)
+                {
+                    newest = session
+                }
+            } else {
+                newest = session
+            }
+        }
+        return newest.map(attentionEvent(for:))
     }
 
     private func attentionEvent(for session: AgentSession) -> AgentEvent {

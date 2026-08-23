@@ -87,4 +87,36 @@ final class AgentPendingReplySessionTests: XCTestCase {
         session.retainPendingReplies { $0 == first.replyId }
         XCTAssertEqual(session.pendingReply?.replyId, first.replyId)
     }
+
+    @MainActor
+    func testEqualTimestampWaitingReplyRefreshesIndexedSessionAndNotchSnapshot() {
+        let service = AgentActivityService()
+        let timestamp = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "codex:reply",
+            provider: .codex,
+            state: .waitingForUser,
+            timestamp: timestamp
+        ))
+
+        let reply = AgentPendingReply(
+            replyId: UUID(),
+            kind: .permission,
+            prompt: "Allow this command?",
+            grants: [.deny, .allow]
+        )
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "codex:reply",
+            provider: .codex,
+            state: .waitingForUser,
+            timestamp: timestamp,
+            pendingReply: reply
+        ))
+
+        XCTAssertEqual(service.sessions.first?.pendingReply, reply)
+        XCTAssertEqual(service.session(id: "codex:reply")?.pendingReply, reply)
+        XCTAssertEqual(service.notchSnapshot.attentionSession?.pendingReply, reply)
+    }
 }
