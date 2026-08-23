@@ -11,8 +11,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindowController: SettingsWindowController?
     private var globalShortcutController: GlobalActivityShortcutController?
     private var recoveryStatusItem: SurfaceRecoveryStatusItem?
-    private nonisolated(unsafe) var preferenceObserver: NSObjectProtocol?
-    private nonisolated(unsafe) var screenChangeObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         var defaults: [String: Any] = [
@@ -62,20 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // accessory app. When it is unavailable (notch disabled, non-notch Mac),
         // keep a menu bar item alive as the recovery entry point.
         recoveryStatusItem = SurfaceRecoveryStatusItem(runtime: runtime)
-        refreshRecoveryStatusItem()
-        preferenceObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshRecoveryStatusItem() }
-        }
-        screenChangeObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshRecoveryStatusItem() }
+        panel.onSurfaceAvailabilityChanged = { [weak self] isAvailable in
+            self?.recoveryStatusItem?.updateAvailability(isSurfaceAvailable: isAvailable)
         }
 
         Task { await runtime.start() }
@@ -85,21 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if let preferenceObserver {
-            NotificationCenter.default.removeObserver(preferenceObserver)
-        }
-        if let screenChangeObserver {
-            NotificationCenter.default.removeObserver(screenChangeObserver)
-        }
         runtime.stop()
         ProcessInfo.processInfo.enableAutomaticTermination(
             "Agent Notch monitors local agent activity"
         )
-    }
-
-    private func refreshRecoveryStatusItem() {
-        let surfaceAvailable = panelController?.isSurfaceEnabled ?? true
-        recoveryStatusItem?.updateAvailability(isSurfaceAvailable: surfaceAvailable)
     }
 
     private func showActivityCenter() {

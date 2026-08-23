@@ -178,19 +178,17 @@ public final class AgentActivityService {
             )
         }
 
-        // Ordering and the presentation index only change when state, recency,
-        // membership, parent links, or the task (housekeeping classification)
-        // changed. Late tool/file/workflow echoes on an unchanged session skip
-        // both the sort and the full index rebuild.
-        let affectsPresentationIndex = advancesCurrentState
+        // Only state, recency, or membership changes can affect the array's
+        // order. SessionIndex stores complete AgentSession values, though, so
+        // refresh it even for a non-advancing event that only merged metadata,
+        // workflow state, relationship context, history, or a pending reply.
+        let affectsOrdering = advancesCurrentState
             || createdSession
             || completedByParentRule
-            || event.parentSessionId != nil
-            || event.task != nil
-        if affectsPresentationIndex {
+        if affectsOrdering {
             sessions.sort(by: Self.orderSessions)
-            rebuildLookups()
         }
+        rebuildLookups()
         if advancesCurrentState {
             if cascadedTerminal {
                 // Rebuild attention: a waiting child may have been cascade-completed.

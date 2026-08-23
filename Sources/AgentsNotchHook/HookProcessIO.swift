@@ -78,9 +78,9 @@ struct HookProcessInvocation: Sendable {
     let isSelfTest: Bool
     let skipCompatibilityHook: Bool
 
-    /// Parses relay arguments. Unknown `--provider` values fall back to Codex
-    /// but emit a stderr warning so misconfiguration is diagnosable; hooks'
-    /// stdout stays reserved for the decision contract.
+    /// Parses relay arguments. Unknown `--provider` values are preserved but
+    /// emit a stderr warning so custom integrations remain correctly namespaced
+    /// while likely misconfiguration stays diagnosable.
     static func parse(
         arguments: [String] = CommandLine.arguments,
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -101,10 +101,9 @@ struct HookProcessInvocation: Sendable {
         if let index = arguments.firstIndex(of: "--provider"), arguments.indices.contains(index + 1) {
             let rawValue = arguments[index + 1]
             let parsed = AgentProvider(rawValue: rawValue)
-            if knownProviders.contains(parsed.rawValue) {
-                explicitProvider = parsed
-            } else {
-                warn("unknown --provider '\(rawValue)'; falling back to codex")
+            explicitProvider = parsed
+            if !knownProviders.contains(parsed.rawValue) {
+                warn("unknown --provider '\(rawValue)'; preserving provider ID")
             }
         }
         let configuredProvider = explicitProvider ?? .codex

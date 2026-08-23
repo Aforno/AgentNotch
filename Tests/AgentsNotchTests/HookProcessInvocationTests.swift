@@ -24,14 +24,15 @@ final class HookProcessInvocationTests: XCTestCase {
         XCTAssertEqual(invocation.configuredProvider, .codex)
     }
 
-    func testUnknownProviderWarnsAndFallsBackToCodex() {
+    func testUnknownProviderWarnsAndPreservesProviderID() {
         var warnings: [String] = []
         let invocation = HookProcessInvocation.parse(
             arguments: ["AgentsNotchHook", "--provider", "codxe"],
             environment: [:],
             warn: { warnings.append($0) }
         )
-        XCTAssertEqual(invocation.configuredProvider, .codex)
+        XCTAssertEqual(invocation.configuredProvider, AgentProvider(rawValue: "codxe"))
+        XCTAssertEqual(invocation.provider, AgentProvider(rawValue: "codxe"))
         XCTAssertEqual(warnings.count, 1)
         XCTAssertTrue(warnings[0].contains("codxe"))
     }
