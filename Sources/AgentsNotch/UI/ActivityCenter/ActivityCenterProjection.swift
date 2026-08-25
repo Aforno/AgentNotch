@@ -100,6 +100,15 @@ final class ActivityCenterProjection {
         dateFilter: ActivityDateFilter = .all,
         now: Date = Date()
     ) {
+        var allByID: [String: AgentSession] = [:]
+        allByID.reserveCapacity(sessions.count)
+        for session in sessions {
+            allByID[session.id] = session
+        }
+        let sessions = sessions.filter { session in
+            let root = allByID[Self.rootID(for: session.id, sessionsByID: allByID)] ?? session
+            return AgentTaskTitle.isUserVisible(session, groupRoot: root)
+        }
         var sessionsByID: [String: AgentSession] = [:]
         var childrenByParentID: [String: [AgentSession]] = [:]
         var providers = Set<AgentProvider>()

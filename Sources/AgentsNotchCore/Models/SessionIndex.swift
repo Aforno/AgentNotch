@@ -75,7 +75,11 @@ struct SessionIndex {
             sessionsByID: sessionsByID,
             childrenByParentID: childrenByParentID
         )
-        let activeSessions = sessions.filter(\.isActive)
+        let visibleSessions = sessions.filter { session in
+            let root = groups.rootIDBySessionID[session.id].flatMap { sessionsByID[$0] } ?? session
+            return AgentTaskTitle.isUserVisible(session, groupRoot: root)
+        }
+        let activeSessions = visibleSessions.filter(\.isActive)
 
         self.sessionsByID = sessionsByID
         self.childrenByParentID = childrenByParentID
@@ -86,7 +90,7 @@ struct SessionIndex {
         groupAggregates = groups.aggregates
         self.activeSessions = activeSessions
         activeProviders = Self.uniqueProviders(in: activeSessions)
-        attentionSessions = Self.waitingSessions(in: sessions)
+        attentionSessions = Self.waitingSessions(in: visibleSessions)
     }
 
     func descendantIDs(of sessionID: String) -> Set<String> {
@@ -108,6 +112,7 @@ struct SessionIndex {
         let listSessions = latestGroupRoots()
         let attentionSession = attentionEvent
             .flatMap { sessionsByID[$0.sessionId] }
+            .flatMap { isVisibleForPresentation($0) ? $0 : nil }
             ?? attentionSessions.first
 
         // The expanded list caps at three rows. Surface the active groups that
@@ -115,6 +120,7 @@ struct SessionIndex {
         let listedRootIDs = Set(listSessions.map(\.id))
         let hiddenActiveGroupCount = groupRoots.filter { root in
             !listedRootIDs.contains(root.id)
+                && !root.isInternalHelper
                 && groupAggregates[root.id]?.isActive == true
         }.count
 
@@ -135,7 +141,9 @@ struct SessionIndex {
 
     private var activeGroupCount: Int {
         groupRoots.reduce(into: 0) { count, root in
-            if groupAggregates[root.id]?.isActive == true {
+            if !root.isInternalHelper,
+               groupAggregates[root.id]?.isActive == true
+            {
                 count += 1
             }
         }
@@ -144,7 +152,10 @@ struct SessionIndex {
     private func latestGroupRoots() -> [AgentSession] {
         Array(
             groupRoots
-                .filter { !AgentTaskTitle.isHousekeeping($0.task) }
+                .filter {
+                    !AgentTaskTitle.isHousekeeping($0.task)
+                        && !$0.isInternalHelper
+                }
                 .sorted { lhs, rhs in
                     let lhsUpdatedAt = groupAggregates[lhs.id]?.updatedAt ?? lhs.updatedAt
                     let rhsUpdatedAt = groupAggregates[rhs.id]?.updatedAt ?? rhs.updatedAt
@@ -153,6 +164,11 @@ struct SessionIndex {
                 }
                 .prefix(3)
         )
+    }
+
+    private func isVisibleForPresentation(_ session: AgentSession) -> Bool {
+        let root = groupRootIDBySessionID[session.id].flatMap { sessionsByID[$0] } ?? session
+        return AgentTaskTitle.isUserVisible(session, groupRoot: root)
     }
 
     private func relatedSessions(
@@ -165,6 +181,7 @@ struct SessionIndex {
         func appendGroup(rootID: String, fallback: AgentSession) {
             for session in groupMembersByRootID[rootID] ?? [fallback]
                 where relatedIDs.insert(session.id).inserted
+                    && isVisibleForPresentation(session)
             {
                 relatedSessions.append(session)
             }

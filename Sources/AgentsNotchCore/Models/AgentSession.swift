@@ -22,6 +22,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var pendingReplies: [AgentPendingReply]
     /// Sticky Codex index evidence so Open in Codex does not depend on the event ring.
     public var hasOfficialSessionTitle: Bool
+    /// Sticky helper classification so an official title or the event ring cannot un-hide it.
+    public var isInternalHelper: Bool
 
     public init(event: AgentEvent) {
         id = event.sessionId
@@ -50,6 +52,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         pendingReply = event.resolvedState == .waitingForUser ? event.pendingReply : nil
         pendingReplies = pendingReply.map { [$0] } ?? []
         hasOfficialSessionTitle = event.hasOfficialSessionTitle
+        isInternalHelper = AgentTaskTitle.isInternalHelper(task, provider: provider)
+            || event.task.map { AgentTaskTitle.isInternalHelper($0, provider: event.provider) } == true
         applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         reconcilePlanWithTerminalState(at: event.timestamp)
     }
@@ -80,6 +84,9 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 
         if event.hasOfficialSessionTitle {
             hasOfficialSessionTitle = true
+        }
+        if let incoming = event.task, AgentTaskTitle.isInternalHelper(incoming, provider: event.provider) {
+            isInternalHelper = true
         }
         recordRecentEvent(event)
         return advancesCurrentState
@@ -462,7 +469,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         case id, provider, task, currentActivity, state, startedAt, updatedAt, completedAt
         case workingDirectory, recentFiles, recentEvents, applicationURL, origin
         case parentSessionId, agentRole, plan, workflows, pendingReply, pendingReplies
-        case hasOfficialSessionTitle
+        case hasOfficialSessionTitle, isInternalHelper
     }
 
     public init(from decoder: Decoder) throws {
@@ -505,6 +512,17 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         }
         hasOfficialSessionTitle = try values.decodeIfPresent(Bool.self, forKey: .hasOfficialSessionTitle)
             ?? recentEvents.contains { $0.hasOfficialSessionTitle }
+        if let persistedHelper = try values.decodeIfPresent(Bool.self, forKey: .isInternalHelper) {
+            isInternalHelper = persistedHelper
+        } else {
+            let helperProvider = provider
+            let helperTask = task
+            let matchedRecentEvent = recentEvents.contains { event in
+                event.task.map { AgentTaskTitle.isInternalHelper($0, provider: helperProvider) } == true
+            }
+            isInternalHelper = AgentTaskTitle.isInternalHelper(helperTask, provider: helperProvider)
+                || matchedRecentEvent
+        }
         reconcilePlanWithTerminalState(at: completedAt ?? updatedAt)
     }
 }

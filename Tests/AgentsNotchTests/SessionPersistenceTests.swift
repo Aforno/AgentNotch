@@ -409,6 +409,34 @@ final class SessionPersistenceTests: XCTestCase {
         )
         XCTAssertTrue(recovered.hasOfficialSessionTitle)
     }
+
+    func testInternalHelperEvidenceRoundTripsAndIsRecoveredFromRecentEvents() throws {
+        let helper = AgentSession(event: AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking
+        ))
+        let decoded = try JSONDecoder.agentsNotch.decode(
+            AgentSession.self,
+            from: try JSONEncoder.agentsNotch.encode(helper)
+        )
+        XCTAssertTrue(decoded.isInternalHelper)
+
+        var payload = try XCTUnwrap(
+            try JSONSerialization.jsonObject(
+                with: try JSONEncoder.agentsNotch.encode(helper)
+            ) as? [String: Any]
+        )
+        payload.removeValue(forKey: "isInternalHelper")
+        let recovered = try JSONDecoder.agentsNotch.decode(
+            AgentSession.self,
+            from: try JSONSerialization.data(withJSONObject: payload)
+        )
+        XCTAssertTrue(recovered.isInternalHelper)
+    }
 }
 
 private enum PersistenceTestError: LocalizedError {

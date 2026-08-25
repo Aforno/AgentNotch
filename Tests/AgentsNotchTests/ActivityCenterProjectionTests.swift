@@ -195,6 +195,168 @@ final class ActivityCenterProjectionTests: XCTestCase {
         ])
     }
 
+    func testCommitMessageHelperIsOmitted() {
+        let now = Date(timeIntervalSince1970: 60_000)
+        let helper = makeSession(
+            id: "codex:commit-helper",
+            task: "Using the supplied git context below, generate a git commit message.",
+            timestamp: now,
+            directory: "/tmp/AgentNotch"
+        )
+        let real = makeSession(
+            id: "codex:real",
+            task: "Ship the release",
+            timestamp: now.addingTimeInterval(-1),
+            directory: "/tmp/AgentNotch"
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [helper, real],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(projection.filteredSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(projection.sessionCount, 1)
+    }
+
+    func testCommitMessageHelperStaysOmittedAfterOfficialTitle() {
+        let now = Date(timeIntervalSince1970: 60_000)
+        var helper = makeSession(
+            id: "codex:commit-helper",
+            task: "Using the supplied git context below, generate a git commit message.",
+            timestamp: now,
+            directory: "/tmp/AgentNotch"
+        )
+        helper.apply(AgentEvent(
+            type: .activity,
+            sessionId: helper.id,
+            provider: .codex,
+            task: "Generate commit message",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: now.addingTimeInterval(1),
+            workingDirectory: "/tmp/AgentNotch",
+            metadata: ["titleSource": "session"]
+        ))
+        let real = makeSession(
+            id: "codex:real",
+            task: "Ship the release",
+            timestamp: now.addingTimeInterval(-1),
+            directory: "/tmp/AgentNotch"
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [helper, real],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(helper.task, "Generate commit message")
+        XCTAssertEqual(projection.filteredSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(projection.sessionCount, 1)
+    }
+
+    func testCommitMessageHelperStaysOmittedAfterEventRingEvictsPrompt() {
+        let now = Date(timeIntervalSince1970: 60_000)
+        var helper = makeSession(
+            id: "codex:commit-helper",
+            task: "Using the supplied git context below, generate a git commit message.",
+            timestamp: now,
+            directory: "/tmp/AgentNotch"
+        )
+        helper.apply(AgentEvent(
+            type: .activity,
+            sessionId: helper.id,
+            provider: .codex,
+            task: "Generate commit message",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: now.addingTimeInterval(1),
+            workingDirectory: "/tmp/AgentNotch",
+            metadata: ["titleSource": "session"]
+        ))
+        for offset in 0...AgentSession.recentEventLimit {
+            helper.apply(AgentEvent(
+                type: .activity,
+                sessionId: helper.id,
+                provider: .codex,
+                task: "Generate commit message",
+                activity: "Step \(offset)",
+                state: .thinking,
+                timestamp: now.addingTimeInterval(TimeInterval(offset + 2)),
+                workingDirectory: "/tmp/AgentNotch"
+            ))
+        }
+        let real = makeSession(
+            id: "codex:real",
+            task: "Ship the release",
+            timestamp: now.addingTimeInterval(-1),
+            directory: "/tmp/AgentNotch"
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [helper, real],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(helper.recentEvents.count, AgentSession.recentEventLimit)
+        XCTAssertFalse(helper.recentEvents.contains {
+            ($0.task ?? "").localizedCaseInsensitiveContains("using the supplied git context")
+        })
+        XCTAssertTrue(helper.isInternalHelper)
+        XCTAssertEqual(projection.filteredSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(projection.sessionCount, 1)
+    }
+
+    func testDescendantsOfCommitMessageHelperAreOmitted() {
+        let now = Date(timeIntervalSince1970: 60_000)
+        let helper = makeSession(
+            id: "codex:commit-helper",
+            task: "Using the supplied git context below, generate a git commit message.",
+            timestamp: now,
+            directory: "/tmp/AgentNotch"
+        )
+        let child = makeSession(
+            id: "codex:commit-helper-child",
+            task: "Write the subject line",
+            timestamp: now.addingTimeInterval(1),
+            directory: "/tmp/AgentNotch",
+            parentID: helper.id
+        )
+        let real = makeSession(
+            id: "codex:real",
+            task: "Ship the release",
+            timestamp: now.addingTimeInterval(-1),
+            directory: "/tmp/AgentNotch"
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [helper, child, real],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(projection.filteredSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(projection.sessionCount, 1)
+        XCTAssertEqual(projection.projectGroups.first?.groups.map(\.root.id), ["codex:real"])
+        XCTAssertNil(projection.session(id: child.id))
+        XCTAssertNil(projection.groupID(containing: child.id))
+    }
+
     private func makeSession(
         id: String,
         task: String,

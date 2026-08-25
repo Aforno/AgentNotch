@@ -397,4 +397,254 @@ extension AgentActivityServiceTests {
         XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
         XCTAssertTrue(service.sessions.contains { $0.id == "codex:memory" })
     }
+
+    @MainActor
+    func testCommitMessageHelperIsOmittedFromNotchActivity() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .started,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "AgentNotch",
+            activity: "Session started",
+            state: .starting,
+            timestamp: base,
+            workingDirectory: "/tmp/AgentNotch"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            workingDirectory: "/tmp/AgentNotch"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+
+        XCTAssertEqual(service.activeSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.activeGroupCount, 1)
+        XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:commit-helper" })
+        XCTAssertTrue(service.attentionSessions.isEmpty)
+        XCTAssertNil(service.attentionSession)
+        XCTAssertNil(service.attentionEvent)
+        XCTAssertEqual(service.attentionCount, 0)
+    }
+
+    @MainActor
+    func testCommitMessageHelperStaysOmittedAfterOfficialTitle() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base,
+            workingDirectory: "/tmp/AgentNotch"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Generate commit message",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            workingDirectory: "/tmp/AgentNotch",
+            metadata: ["titleSource": "session"]
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+
+        XCTAssertEqual(service.sessions.first { $0.id == "codex:commit-helper" }?.task, "Generate commit message")
+        XCTAssertEqual(service.activeSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:commit-helper" })
+    }
+
+    @MainActor
+    func testCommitMessageHelperWaitingDoesNotStealAttention() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Generate commit message",
+            activity: "Needs approval",
+            state: .waitingForUser,
+            timestamp: base.addingTimeInterval(2),
+            metadata: ["titleSource": "session"]
+        ))
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Waiting for input",
+            state: .waitingForUser,
+            timestamp: base.addingTimeInterval(1)
+        ))
+
+        XCTAssertEqual(service.attentionSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.attentionSession?.id, "codex:real")
+        XCTAssertEqual(service.attentionEvent?.sessionId, "codex:real")
+        XCTAssertEqual(service.attentionCount, 1)
+        XCTAssertFalse(service.listSessions.contains { $0.id == "codex:commit-helper" })
+    }
+
+    @MainActor
+    func testCommitMessageHelperStaysOmittedAfterEventRingEvictsPrompt() throws {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Generate commit message",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            metadata: ["titleSource": "session"]
+        ))
+        for offset in 0...AgentSession.recentEventLimit {
+            service.ingest(AgentEvent(
+                type: .activity,
+                sessionId: "codex:commit-helper",
+                provider: .codex,
+                task: "Generate commit message",
+                activity: "Step \(offset)",
+                state: .thinking,
+                timestamp: base.addingTimeInterval(TimeInterval(offset + 2))
+            ))
+        }
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+
+        let helper = try XCTUnwrap(service.sessions.first { $0.id == "codex:commit-helper" })
+        XCTAssertEqual(helper.recentEvents.count, AgentSession.recentEventLimit)
+        XCTAssertFalse(helper.recentEvents.contains {
+            ($0.task ?? "").localizedCaseInsensitiveContains("using the supplied git context")
+        })
+        XCTAssertTrue(helper.isInternalHelper)
+        XCTAssertEqual(service.activeSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.activeGroupCount, 1)
+    }
+
+    @MainActor
+    func testDescendantsOfCommitMessageHelperAreOmittedFromNotchActivity() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper-child",
+            provider: .codex,
+            task: "Write the subject line",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            parentSessionId: "codex:commit-helper"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+
+        XCTAssertEqual(service.activeSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.activeGroupCount, 1)
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:commit-helper" })
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:commit-helper-child" })
+        XCTAssertTrue(service.attentionSessions.isEmpty)
+        XCTAssertNil(service.attentionSession)
+    }
+
+    @MainActor
+    func testCommitMessageHelperUnderVisibleRootIsOmittedFromRelatedSessions() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            parentSessionId: "codex:real"
+        ))
+
+        XCTAssertTrue(service.notchSnapshot.relatedSessions.contains { $0.id == "codex:real" })
+        XCTAssertFalse(service.notchSnapshot.relatedSessions.contains { $0.id == "codex:commit-helper" })
+    }
 }
