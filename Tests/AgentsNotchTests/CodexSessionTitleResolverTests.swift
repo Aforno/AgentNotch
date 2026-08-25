@@ -144,6 +144,33 @@ final class CodexSessionTitleResolverTests: XCTestCase {
         XCTAssertEqual(events[0].metadata?["titleSource"], "session")
     }
 
+    @MainActor
+    func testRestorerOfficialTitleDoesNotUnhideCommitHelper() throws {
+        let home = try temporaryCodexHome(index: """
+        {"id":"thr_commit","thread_name":"Generate commit message"}
+        """)
+        let service = AgentActivityService()
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:thr_commit",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking
+        ))
+
+        let events = CodexSessionRestorer.titleEvents(in: service.sessions, codexHome: home)
+        XCTAssertEqual(events.count, 1)
+        for event in events {
+            service.ingest(event)
+        }
+
+        XCTAssertEqual(service.sessions.first?.task, "Generate commit message")
+        XCTAssertTrue(service.listSessions.isEmpty)
+        XCTAssertTrue(service.activeSessions.isEmpty)
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:thr_commit" })
+    }
+
     func testRestorerDoesNotRestampWhenOfficialTitleEvidenceExists() throws {
         let home = try temporaryCodexHome(index: """
         {"id":"thr_123","thread_name":"Review recent changes"}

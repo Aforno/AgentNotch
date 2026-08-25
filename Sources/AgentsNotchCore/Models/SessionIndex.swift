@@ -76,9 +76,10 @@ struct SessionIndex {
             childrenByParentID: childrenByParentID
         )
         let visibleRootIDs = Set(groups.roots.compactMap { root in
-            AgentTaskTitle.isInternalHelper(root.task, provider: root.provider) ? nil : root.id
+            AgentTaskTitle.isInternalHelper(root) ? nil : root.id
         })
         let visibleSessions = sessions.filter { session in
+            if AgentTaskTitle.isInternalHelper(session) { return false }
             guard let rootID = groups.rootIDBySessionID[session.id] else { return true }
             return visibleRootIDs.contains(rootID)
         }
@@ -115,6 +116,7 @@ struct SessionIndex {
         let listSessions = latestGroupRoots()
         let attentionSession = attentionEvent
             .flatMap { sessionsByID[$0.sessionId] }
+            .flatMap { isVisibleForPresentation($0) ? $0 : nil }
             ?? attentionSessions.first
 
         // The expanded list caps at three rows. Surface the active groups that
@@ -122,7 +124,7 @@ struct SessionIndex {
         let listedRootIDs = Set(listSessions.map(\.id))
         let hiddenActiveGroupCount = groupRoots.filter { root in
             !listedRootIDs.contains(root.id)
-                && !AgentTaskTitle.isInternalHelper(root.task, provider: root.provider)
+                && !AgentTaskTitle.isInternalHelper(root)
                 && groupAggregates[root.id]?.isActive == true
         }.count
 
@@ -143,7 +145,7 @@ struct SessionIndex {
 
     private var activeGroupCount: Int {
         groupRoots.reduce(into: 0) { count, root in
-            if !AgentTaskTitle.isInternalHelper(root.task, provider: root.provider),
+            if !AgentTaskTitle.isInternalHelper(root),
                groupAggregates[root.id]?.isActive == true
             {
                 count += 1
@@ -156,7 +158,7 @@ struct SessionIndex {
             groupRoots
                 .filter {
                     !AgentTaskTitle.isHousekeeping($0.task)
-                        && !AgentTaskTitle.isInternalHelper($0.task, provider: $0.provider)
+                        && !AgentTaskTitle.isInternalHelper($0)
                 }
                 .sorted { lhs, rhs in
                     let lhsUpdatedAt = groupAggregates[lhs.id]?.updatedAt ?? lhs.updatedAt
@@ -166,6 +168,14 @@ struct SessionIndex {
                 }
                 .prefix(3)
         )
+    }
+
+    private func isVisibleForPresentation(_ session: AgentSession) -> Bool {
+        if AgentTaskTitle.isInternalHelper(session) { return false }
+        guard let rootID = groupRootIDBySessionID[session.id],
+              let root = sessionsByID[rootID]
+        else { return true }
+        return !AgentTaskTitle.isInternalHelper(root)
     }
 
     private func relatedSessions(

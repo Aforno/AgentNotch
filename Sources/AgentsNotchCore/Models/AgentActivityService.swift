@@ -364,26 +364,11 @@ public final class AgentActivityService {
         }
     }
 
-    /// Most recently updated session still waiting for the user, as an event
-    /// suitable for the temporary notch presentation.
-    ///
-    /// Scans `sessions` directly instead of reading the presentation index so
-    /// hot-path ingests do not force a full graph rebuild just to re-rank
-    /// attention. Ordering matches SessionIndex.waitingSessions exactly.
+    /// Most recently updated visible waiter, as an event for the temporary
+    /// notch. Ranking matches `SessionIndex.attentionSessions`, which already
+    /// omits internal helpers. Callers rebuild the index first.
     private func latestWaitingAttentionEvent() -> AgentEvent? {
-        var newest: AgentSession?
-        for session in sessions where session.state == .waitingForUser {
-            if let current = newest {
-                if session.updatedAt > current.updatedAt
-                    || (session.updatedAt == current.updatedAt && session.id < current.id)
-                {
-                    newest = session
-                }
-            } else {
-                newest = session
-            }
-        }
-        return newest.map(attentionEvent(for:))
+        index.attentionSessions.first.map(attentionEvent(for:))
     }
 
     private func attentionEvent(for session: AgentSession) -> AgentEvent {

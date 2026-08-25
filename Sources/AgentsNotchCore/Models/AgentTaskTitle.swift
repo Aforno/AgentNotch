@@ -38,7 +38,19 @@ public enum AgentTaskTitle {
         provider == .codex
             && task.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-            .hasPrefix("using the supplied git context below, generate a git commit message")
+            .hasPrefix(commitMessageHelperPrefix)
+    }
+
+    /// Official Codex thread titles can replace the helper prompt. Classify
+    /// from any retained task text so the row stays hidden.
+    public static func isInternalHelper(_ session: AgentSession) -> Bool {
+        if isInternalHelper(session.task, provider: session.provider) {
+            return true
+        }
+        return session.recentEvents.contains { event in
+            guard let task = event.task else { return false }
+            return isInternalHelper(task, provider: session.provider)
+        }
     }
 
     /// Keep the first real title. Later prompts may be `[Image #1]` or a short
@@ -58,6 +70,9 @@ public enum AgentTaskTitle {
         if let projectName, current == projectName { return incoming }
         return current
     }
+
+    private static let commitMessageHelperPrefix =
+        "using the supplied git context below, generate a git commit message"
 
     private static func strippingImagePlaceholders(_ text: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: #"\[Image #\d+\]"#) else {
