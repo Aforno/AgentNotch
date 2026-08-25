@@ -181,6 +181,7 @@ struct SessionIndex {
         func appendGroup(rootID: String, fallback: AgentSession) {
             for session in groupMembersByRootID[rootID] ?? [fallback]
                 where relatedIDs.insert(session.id).inserted
+                    && isVisibleForPresentation(session)
             {
                 relatedSessions.append(session)
             }

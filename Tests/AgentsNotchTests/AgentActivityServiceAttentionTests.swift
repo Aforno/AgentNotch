@@ -619,4 +619,32 @@ extension AgentActivityServiceTests {
         XCTAssertTrue(service.attentionSessions.isEmpty)
         XCTAssertNil(service.attentionSession)
     }
+
+    @MainActor
+    func testCommitMessageHelperUnderVisibleRootIsOmittedFromRelatedSessions() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            parentSessionId: "codex:real"
+        ))
+
+        XCTAssertTrue(service.notchSnapshot.relatedSessions.contains { $0.id == "codex:real" })
+        XCTAssertFalse(service.notchSnapshot.relatedSessions.contains { $0.id == "codex:commit-helper" })
+    }
 }
