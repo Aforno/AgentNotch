@@ -32,6 +32,15 @@ public enum AgentTaskTitle {
             || lowered.contains("<in-app-browser-context")
     }
 
+    /// Codex can start short-lived helper sessions for app-owned work. They
+    /// remain in history for diagnostics but should not appear as user tasks.
+    public static func isInternalHelper(_ task: String, provider: AgentProvider) -> Bool {
+        provider == .codex
+            && task.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .hasPrefix("using the supplied git context below, generate a git commit message")
+    }
+
     /// Keep the first real title. Later prompts may be `[Image #1]` or a short
     /// follow-up; SessionStart repo names are placeholders and may be replaced.
     public static func assigned(

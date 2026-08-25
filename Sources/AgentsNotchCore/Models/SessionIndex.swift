@@ -75,7 +75,14 @@ struct SessionIndex {
             sessionsByID: sessionsByID,
             childrenByParentID: childrenByParentID
         )
-        let activeSessions = sessions.filter(\.isActive)
+        let visibleRootIDs = Set(groups.roots.compactMap { root in
+            AgentTaskTitle.isInternalHelper(root.task, provider: root.provider) ? nil : root.id
+        })
+        let visibleSessions = sessions.filter { session in
+            guard let rootID = groups.rootIDBySessionID[session.id] else { return true }
+            return visibleRootIDs.contains(rootID)
+        }
+        let activeSessions = visibleSessions.filter(\.isActive)
 
         self.sessionsByID = sessionsByID
         self.childrenByParentID = childrenByParentID
@@ -86,7 +93,7 @@ struct SessionIndex {
         groupAggregates = groups.aggregates
         self.activeSessions = activeSessions
         activeProviders = Self.uniqueProviders(in: activeSessions)
-        attentionSessions = Self.waitingSessions(in: sessions)
+        attentionSessions = Self.waitingSessions(in: visibleSessions)
     }
 
     func descendantIDs(of sessionID: String) -> Set<String> {
@@ -115,6 +122,7 @@ struct SessionIndex {
         let listedRootIDs = Set(listSessions.map(\.id))
         let hiddenActiveGroupCount = groupRoots.filter { root in
             !listedRootIDs.contains(root.id)
+                && !AgentTaskTitle.isInternalHelper(root.task, provider: root.provider)
                 && groupAggregates[root.id]?.isActive == true
         }.count
 
@@ -135,7 +143,9 @@ struct SessionIndex {
 
     private var activeGroupCount: Int {
         groupRoots.reduce(into: 0) { count, root in
-            if groupAggregates[root.id]?.isActive == true {
+            if !AgentTaskTitle.isInternalHelper(root.task, provider: root.provider),
+               groupAggregates[root.id]?.isActive == true
+            {
                 count += 1
             }
         }
@@ -144,7 +154,10 @@ struct SessionIndex {
     private func latestGroupRoots() -> [AgentSession] {
         Array(
             groupRoots
-                .filter { !AgentTaskTitle.isHousekeeping($0.task) }
+                .filter {
+                    !AgentTaskTitle.isHousekeeping($0.task)
+                        && !AgentTaskTitle.isInternalHelper($0.task, provider: $0.provider)
+                }
                 .sorted { lhs, rhs in
                     let lhsUpdatedAt = groupAggregates[lhs.id]?.updatedAt ?? lhs.updatedAt
                     let rhsUpdatedAt = groupAggregates[rhs.id]?.updatedAt ?? rhs.updatedAt

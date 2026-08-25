@@ -100,6 +100,9 @@ final class ActivityCenterProjection {
         dateFilter: ActivityDateFilter = .all,
         now: Date = Date()
     ) {
+        let sessions = sessions.filter {
+            !AgentTaskTitle.isInternalHelper($0.task, provider: $0.provider)
+        }
         var sessionsByID: [String: AgentSession] = [:]
         var childrenByParentID: [String: [AgentSession]] = [:]
         var providers = Set<AgentProvider>()

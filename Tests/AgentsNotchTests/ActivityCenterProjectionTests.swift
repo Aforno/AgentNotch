@@ -195,6 +195,34 @@ final class ActivityCenterProjectionTests: XCTestCase {
         ])
     }
 
+    func testCommitMessageHelperIsOmitted() {
+        let now = Date(timeIntervalSince1970: 60_000)
+        let helper = makeSession(
+            id: "codex:commit-helper",
+            task: "Using the supplied git context below, generate a git commit message.",
+            timestamp: now,
+            directory: "/tmp/AgentNotch"
+        )
+        let real = makeSession(
+            id: "codex:real",
+            task: "Ship the release",
+            timestamp: now.addingTimeInterval(-1),
+            directory: "/tmp/AgentNotch"
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [helper, real],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(projection.filteredSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(projection.sessionCount, 1)
+    }
+
     private func makeSession(
         id: String,
         task: String,

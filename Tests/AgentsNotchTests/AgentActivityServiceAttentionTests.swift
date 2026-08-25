@@ -397,4 +397,44 @@ extension AgentActivityServiceTests {
         XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
         XCTAssertTrue(service.sessions.contains { $0.id == "codex:memory" })
     }
+
+    @MainActor
+    func testCommitMessageHelperIsOmittedFromNotchActivity() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .started,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "AgentNotch",
+            activity: "Session started",
+            state: .starting,
+            timestamp: base,
+            workingDirectory: "/tmp/AgentNotch"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            workingDirectory: "/tmp/AgentNotch"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+
+        XCTAssertEqual(service.activeSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.activeGroupCount, 1)
+        XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:commit-helper" })
+    }
 }
