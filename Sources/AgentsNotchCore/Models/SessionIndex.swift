@@ -75,13 +75,9 @@ struct SessionIndex {
             sessionsByID: sessionsByID,
             childrenByParentID: childrenByParentID
         )
-        let visibleRootIDs = Set(groups.roots.compactMap { root in
-            AgentTaskTitle.isInternalHelper(root) ? nil : root.id
-        })
         let visibleSessions = sessions.filter { session in
-            if AgentTaskTitle.isInternalHelper(session) { return false }
-            guard let rootID = groups.rootIDBySessionID[session.id] else { return true }
-            return visibleRootIDs.contains(rootID)
+            let root = groups.rootIDBySessionID[session.id].flatMap { sessionsByID[$0] } ?? session
+            return AgentTaskTitle.isUserVisible(session, groupRoot: root)
         }
         let activeSessions = visibleSessions.filter(\.isActive)
 
@@ -124,7 +120,7 @@ struct SessionIndex {
         let listedRootIDs = Set(listSessions.map(\.id))
         let hiddenActiveGroupCount = groupRoots.filter { root in
             !listedRootIDs.contains(root.id)
-                && !AgentTaskTitle.isInternalHelper(root)
+                && !root.isInternalHelper
                 && groupAggregates[root.id]?.isActive == true
         }.count
 
@@ -145,7 +141,7 @@ struct SessionIndex {
 
     private var activeGroupCount: Int {
         groupRoots.reduce(into: 0) { count, root in
-            if !AgentTaskTitle.isInternalHelper(root),
+            if !root.isInternalHelper,
                groupAggregates[root.id]?.isActive == true
             {
                 count += 1
@@ -158,7 +154,7 @@ struct SessionIndex {
             groupRoots
                 .filter {
                     !AgentTaskTitle.isHousekeeping($0.task)
-                        && !AgentTaskTitle.isInternalHelper($0)
+                        && !$0.isInternalHelper
                 }
                 .sorted { lhs, rhs in
                     let lhsUpdatedAt = groupAggregates[lhs.id]?.updatedAt ?? lhs.updatedAt
@@ -171,11 +167,8 @@ struct SessionIndex {
     }
 
     private func isVisibleForPresentation(_ session: AgentSession) -> Bool {
-        if AgentTaskTitle.isInternalHelper(session) { return false }
-        guard let rootID = groupRootIDBySessionID[session.id],
-              let root = sessionsByID[rootID]
-        else { return true }
-        return !AgentTaskTitle.isInternalHelper(root)
+        let root = groupRootIDBySessionID[session.id].flatMap { sessionsByID[$0] } ?? session
+        return AgentTaskTitle.isUserVisible(session, groupRoot: root)
     }
 
     private func relatedSessions(

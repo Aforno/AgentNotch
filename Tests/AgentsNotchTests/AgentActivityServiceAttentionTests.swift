@@ -522,4 +522,101 @@ extension AgentActivityServiceTests {
         XCTAssertEqual(service.attentionCount, 1)
         XCTAssertFalse(service.listSessions.contains { $0.id == "codex:commit-helper" })
     }
+
+    @MainActor
+    func testCommitMessageHelperStaysOmittedAfterEventRingEvictsPrompt() throws {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Generate commit message",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            metadata: ["titleSource": "session"]
+        ))
+        for offset in 0...AgentSession.recentEventLimit {
+            service.ingest(AgentEvent(
+                type: .activity,
+                sessionId: "codex:commit-helper",
+                provider: .codex,
+                task: "Generate commit message",
+                activity: "Step \(offset)",
+                state: .thinking,
+                timestamp: base.addingTimeInterval(TimeInterval(offset + 2))
+            ))
+        }
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+
+        let helper = try XCTUnwrap(service.sessions.first { $0.id == "codex:commit-helper" })
+        XCTAssertEqual(helper.recentEvents.count, AgentSession.recentEventLimit)
+        XCTAssertFalse(helper.recentEvents.contains {
+            ($0.task ?? "").localizedCaseInsensitiveContains("using the supplied git context")
+        })
+        XCTAssertTrue(helper.isInternalHelper)
+        XCTAssertEqual(service.activeSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.activeGroupCount, 1)
+    }
+
+    @MainActor
+    func testDescendantsOfCommitMessageHelperAreOmittedFromNotchActivity() {
+        let service = AgentActivityService()
+        let base = Date(timeIntervalSince1970: 100)
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper",
+            provider: .codex,
+            task: "Using the supplied git context below, generate a git commit message.",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:commit-helper-child",
+            provider: .codex,
+            task: "Write the subject line",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base.addingTimeInterval(1),
+            parentSessionId: "codex:commit-helper"
+        ))
+        service.ingest(AgentEvent(
+            type: .activity,
+            sessionId: "codex:real",
+            provider: .codex,
+            task: "Ship the release",
+            activity: "Thinking",
+            state: .thinking,
+            timestamp: base
+        ))
+
+        XCTAssertEqual(service.activeSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.listSessions.map(\.id), ["codex:real"])
+        XCTAssertEqual(service.activeGroupCount, 1)
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:commit-helper" })
+        XCTAssertTrue(service.sessions.contains { $0.id == "codex:commit-helper-child" })
+        XCTAssertTrue(service.attentionSessions.isEmpty)
+        XCTAssertNil(service.attentionSession)
+    }
 }

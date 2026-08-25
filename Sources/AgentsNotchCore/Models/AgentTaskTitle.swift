@@ -41,16 +41,9 @@ public enum AgentTaskTitle {
             .hasPrefix(commitMessageHelperPrefix)
     }
 
-    /// Official Codex thread titles can replace the helper prompt. Classify
-    /// from any retained task text so the row stays hidden.
-    public static func isInternalHelper(_ session: AgentSession) -> Bool {
-        if isInternalHelper(session.task, provider: session.provider) {
-            return true
-        }
-        return session.recentEvents.contains { event in
-            guard let task = event.task else { return false }
-            return isInternalHelper(task, provider: session.provider)
-        }
+    /// User-facing lists omit the helper row and any session in a helper-rooted group.
+    public static func isUserVisible(_ session: AgentSession, groupRoot: AgentSession) -> Bool {
+        !session.isInternalHelper && !groupRoot.isInternalHelper
     }
 
     /// Keep the first real title. Later prompts may be `[Image #1]` or a short

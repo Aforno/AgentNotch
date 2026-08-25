@@ -482,13 +482,14 @@ final class AppRuntime {
         }
         guard let session = activity.session(id: sessionID) else { return }
 
+        let isInternalHelper = session.isInternalHelper
         if session.state == .waitingForUser,
            previousState != .waitingForUser,
            notify,
-           !AgentTaskTitle.isInternalHelper(session)
+           !isInternalHelper
         {
             notifications.deliverAttention(for: session, waitingCount: activity.attentionCount)
-        } else if session.state == .failed, previousState != .failed, notify {
+        } else if session.state == .failed, previousState != .failed, notify, !isInternalHelper {
             notifications.deliverFailure(for: session)
         } else if previousState == .waitingForUser && session.state != .waitingForUser
             || previousState == .failed && session.state != .failed
