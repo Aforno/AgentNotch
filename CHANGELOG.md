@@ -6,6 +6,29 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-26
+
+### Added
+
+- Recovery menu-bar item when the notch surface is unavailable, with Activity
+  Center, Settings, Setup, and Quit.
+- Structured logging across the hook relay, sockets, runtime, and
+  notifications.
+- Settings and onboarding banner when a hook sends an unsupported protocol
+  version, so a stale relay after upgrade is visible.
+
+### Fixed
+
+- Privacy mode no longer leaks working-directory names into notification
+  subtitles. Failure notifications withdraw when sessions resolve.
+- Launch no longer crashes when no screen is attached (clamshell / no
+  display).
+- Failed event-socket binds retry with backoff instead of staying down.
+- Unknown `--provider` values warn on stderr instead of silently becoming
+  Codex.
+- Codex commit-message helper sessions stay out of the activity list, notch
+  counts, and attention set.
+
 ## [0.2.0] - 2026-08-22
 
 ### Added
