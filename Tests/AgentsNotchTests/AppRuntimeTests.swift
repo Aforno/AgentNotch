@@ -164,7 +164,7 @@ final class AppRuntimeTests: XCTestCase {
     }
 
     @MainActor
-    func testRuntimeEnforcesRetentionAsNewEventsArrive() async throws {
+    func testRuntimeCapsLegacyRetentionAtSevenDaysAsNewEventsArrive() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("an-runtime-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -183,7 +183,7 @@ final class AppRuntimeTests: XCTestCase {
             grokHome: root.appendingPathComponent(".grok", isDirectory: true),
             providerHomeDirectoryURL: root,
             bundledRelayURL: bundledRelayURL,
-            historyRetentionDays: { 7 }
+            historyRetentionDays: { 365 }
         )
         let codexIntegration = try XCTUnwrap(runtime.integration(for: .codex))
         codexIntegration.install()
@@ -198,8 +198,15 @@ final class AppRuntimeTests: XCTestCase {
             state: .completed,
             timestamp: Date().addingTimeInterval(-8 * 24 * 60 * 60)
         ), to: socketURL)
+        try UnixSocketClient.send(AgentEvent(
+            type: .completed,
+            sessionId: "retained-live-event",
+            provider: .codex,
+            state: .completed,
+            timestamp: Date().addingTimeInterval(-6 * 24 * 60 * 60)
+        ), to: socketURL)
 
-        for _ in 0..<30 where runtime.lastEventReceivedAt[.codex] == nil {
+        for _ in 0..<30 where runtime.activity.session(id: "retained-live-event") == nil {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTAssertNotNil(runtime.lastEventReceivedAt[.codex])
@@ -207,7 +214,47 @@ final class AppRuntimeTests: XCTestCase {
             codexIntegration.hasReceivedEvent,
             "genuine events must mark the Codex integration as verified"
         )
-        XCTAssertFalse(runtime.activity.sessions.contains { $0.id == "codex:expired-live-event" })
+        XCTAssertNil(runtime.activity.session(id: "expired-live-event"))
+        XCTAssertNotNil(runtime.activity.session(id: "retained-live-event"))
+    }
+
+    @MainActor
+    func testRuntimeCapsLegacyRetentionAtSevenDaysDuringRestore() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("an-retention-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let persistence = SessionPersistence(fileURL: root.appendingPathComponent("sessions.json"))
+        let now = Date()
+        let sessions = [
+            AgentSession(event: AgentEvent(
+                type: .completed,
+                sessionId: "expired-restored-session",
+                provider: .codex,
+                state: .completed,
+                timestamp: now.addingTimeInterval(-8 * 24 * 60 * 60)
+            )),
+            AgentSession(event: AgentEvent(
+                type: .completed,
+                sessionId: "retained-restored-session",
+                provider: .codex,
+                state: .completed,
+                timestamp: now.addingTimeInterval(-6 * 24 * 60 * 60)
+            )),
+        ]
+        let saveError = await persistence.save(sessions)
+        XCTAssertNil(saveError)
+        let runtime = AppRuntime(
+            persistence: persistence,
+            socketURL: root.appendingPathComponent("agent.sock"),
+            monitorProviders: false,
+            historyRetentionDays: { 365 }
+        )
+
+        await runtime.start()
+        defer { runtime.stop() }
+
+        XCTAssertNil(runtime.activity.session(id: "codex:expired-restored-session"))
+        XCTAssertNotNil(runtime.activity.session(id: "codex:retained-restored-session"))
     }
 
     @MainActor

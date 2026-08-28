@@ -8,7 +8,6 @@ struct SettingsView: View {
     @AppStorage("attentionNotificationsEnabled") private var attentionNotificationsEnabled = false
     @AppStorage("attentionNotificationSoundEnabled") private var attentionNotificationSoundEnabled = false
     @AppStorage("failureNotificationsEnabled") private var failureNotificationsEnabled = false
-    @AppStorage("historyRetentionDays") private var historyRetentionDays = 30
     @AppStorage("notchEnabled") private var notchEnabled = true
     @AppStorage("showVirtualNotch") private var showVirtualNotch = false
     @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = false
@@ -35,7 +34,6 @@ struct SettingsView: View {
         .frame(minWidth: 520, idealWidth: 580, minHeight: 480, idealHeight: 560)
         .deepBlackWindowSurface()
         .onAppear { launchAtLogin = LaunchAtLoginService.isEnabled }
-        .onChange(of: historyRetentionDays) { _, days in runtime.applyHistoryRetention(days: days) }
         .onChange(of: automaticallyCheckForUpdates) { _, enabled in
             if enabled { runtime.updates.checkAutomaticallyIfNeeded() }
         }
@@ -79,7 +77,6 @@ struct SettingsView: View {
                 failureNotificationsEnabled: $failureNotificationsEnabled,
                 answerFromNotchEnabled: $answerFromNotchEnabled,
                 privacyModeEnabled: $privacyModeEnabled,
-                retentionDays: $historyRetentionDays,
                 notificationError: notificationError,
                 requestClearHistory: { confirmsClearHistory = true }
             )

@@ -7,7 +7,6 @@ struct AlertsPrivacySettingsPane: View {
     let failureNotificationsEnabled: Binding<Bool>
     let answerFromNotchEnabled: Binding<Bool>
     let privacyModeEnabled: Binding<Bool>
-    let retentionDays: Binding<Int>
     let notificationError: String?
     let requestClearHistory: () -> Void
 
@@ -26,7 +25,6 @@ struct AlertsPrivacySettingsPane: View {
                 )
                 PrivacySettingsSection(privacyModeEnabled: privacyModeEnabled)
                 HistorySettingsSection(
-                    retentionDays: retentionDays,
                     hasCompletedSessions: !runtime.activity.recentSessions.isEmpty,
                     openActivityCenter: runtime.openActivityCenter,
                     openOnboarding: runtime.openOnboarding,

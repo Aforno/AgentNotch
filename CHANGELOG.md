@@ -15,6 +15,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Completed sessions remain in Activity Center for no more than seven days.
 - Git worktrees show the main repository as the project, not the worktree
   folder.
 - Long project names in the agent row truncate instead of overflowing the

@@ -122,7 +122,6 @@ struct PrivacySettingsSection: View {
 }
 
 struct HistorySettingsSection: View {
-    let retentionDays: Binding<Int>
     let hasCompletedSessions: Bool
     let openActivityCenter: () -> Void
     let openOnboarding: () -> Void
@@ -130,17 +129,14 @@ struct HistorySettingsSection: View {
 
     var body: some View {
         SettingsSection(title: "Local History") {
-            SettingsMenuRow(
-                title: "Keep completed sessions",
-                detail: "How long finished sessions remain in Activity Center.",
-                selection: retentionDays,
-                options: [
-                    (7, "7 days"),
-                    (30, "30 days"),
-                    (90, "90 days"),
-                    (365, "1 year"),
-                ]
-            )
+            SettingsControlRow(
+                title: "Completed sessions",
+                detail: "Finished sessions remain in Activity Center for up to 7 days."
+            ) {
+                Text("7 days")
+                    .font(NotchWindowFont.control)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
+            }
             SettingsControlRow(
                 title: "History actions",
                 detail: "Open related windows or clear completed local sessions."
