@@ -61,6 +61,11 @@ struct NotchRootView: View {
     @State private var detailContentHeight = NotchLayoutMetrics.minimumDetailContentHeight
     @State private var waitingContentHeight: CGFloat = 96
     @AppStorage("animationsEnabled") private var animationsEnabled = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The in-app toggle is an override, not the whole story: the system
+    /// Reduce Motion setting has to suppress the morph too.
+    private var motionEnabled: Bool { animationsEnabled && !reduceMotion }
 
     private var activity: AgentActivityService { runtime.activity }
     private var snapshot: NotchActivitySnapshot { activity.notchSnapshot }
@@ -246,7 +251,7 @@ struct NotchRootView: View {
         sizeGeneration += 1
         let generation = sizeGeneration
 
-        if animationsEnabled {
+        if motionEnabled {
             // Room for the entire morph up front — otherwise the panel would
             // clip the growing height before SwiftUI can draw it.
             let container = CGSize(
@@ -402,7 +407,7 @@ struct NotchRootView: View {
     /// Presentation is derived state, so the swap between content subtrees
     /// only animates when the state driving it changes inside a transaction.
     private func withPresentationAnimation(_ change: () -> Void) {
-        if animationsEnabled {
+        if motionEnabled {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.85), change)
         } else {
             var transaction = Transaction()

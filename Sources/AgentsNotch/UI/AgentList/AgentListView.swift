@@ -16,7 +16,7 @@ struct AgentListView: View {
             return DynamicIslandSpacing.rowHeight
         }
         let sessionRows = CGFloat(sessions.count) * DynamicIslandSpacing.rowHeight
-        let overflowRow: CGFloat = hiddenGroupCount > 0 ? DynamicIslandSpacing.rowHeight : 0
+        let overflowRow: CGFloat = hiddenGroupCount > 0 ? DynamicIslandSpacing.overflowRowHeight : 0
         return sessionRows + overflowRow
     }
 
@@ -49,28 +49,33 @@ struct AgentListView: View {
                             subagents: descendantSessions(of: session)
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NotchRowButtonStyle())
 
                     if index < sessions.count - 1 || hiddenGroupCount > 0 {
                         Divider()
-                            .overlay(.white.opacity(0.08))
+                            .overlay(NotchWindowPalette.hairline)
                             .padding(.horizontal, 42)
                     }
                 }
 
                 if hiddenGroupCount > 0 {
                     Button(action: onOpenActivityCenter) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: DynamicIslandSpacing.tight) {
                             Spacer()
                             Text("+\(hiddenGroupCount) more in Activity Center")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.55))
+                                .font(NotchWindowFont.footnoteEmphasis)
+                                .foregroundStyle(NotchWindowPalette.tertiaryText)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(NotchWindowPalette.quaternaryText)
                             Spacer()
                         }
-                        .frame(height: DynamicIslandSpacing.rowHeight)
+                        // A compact footer: the overflow hint should not cost
+                        // as much vertical space as a real session row.
+                        .frame(height: DynamicIslandSpacing.overflowRowHeight)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NotchRowButtonStyle())
                     .accessibilityLabel("\(hiddenGroupCount) more active agents in Activity Center")
                 }
             }
@@ -80,12 +85,7 @@ struct AgentListView: View {
     private var chromeRow: some View {
         HStack(spacing: DynamicIslandSpacing.related) {
             if sessions.isEmpty {
-                Circle()
-                    .fill(.white.opacity(0.18))
-                    .frame(width: 6, height: 6)
-                Text("No active agents")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
+                emptyState
             }
 
             Spacer(minLength: 0)
@@ -93,21 +93,19 @@ struct AgentListView: View {
             HStack(spacing: DynamicIslandSpacing.related) {
                 Button(action: onOpenActivityCenter) {
                     Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.58))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
+                        .font(NotchWindowFont.control)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
+                .buttonStyle(NotchGlyphButtonStyle())
                 .help("Activity Center")
                 .accessibilityLabel("Open Activity Center")
 
                 Button(action: onOpenSettings) {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.58))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
+                        .font(NotchWindowFont.control)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
+                .buttonStyle(NotchGlyphButtonStyle())
                 .help("Settings")
                 .accessibilityLabel("Open Settings")
             }
@@ -116,13 +114,35 @@ struct AgentListView: View {
                 menuBarHeight: menuBarHeight
             ))
         }
-        .buttonStyle(.plain)
         .padding(.horizontal, DynamicIslandSpacing.outer)
         .frame(
             height: sessions.isEmpty
                 ? DynamicIslandSpacing.rowHeight
                 : DynamicIslandSpacing.chromeHeight
         )
+    }
+
+    /// Hovering with nothing running used to be a dead end. The idle row now
+    /// routes to the one place that still has something to show.
+    private var emptyState: some View {
+        Button(action: onOpenActivityCenter) {
+            HStack(spacing: DynamicIslandSpacing.related) {
+                Circle()
+                    .fill(NotchWindowPalette.quaternaryText)
+                    .frame(width: 6, height: 6)
+                Text("No active agents")
+                    .font(NotchWindowFont.bodyEmphasis)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
+                Text("Browse recent")
+                    .font(NotchWindowFont.footnote)
+                    .foregroundStyle(NotchWindowPalette.quaternaryText)
+            }
+            .padding(.horizontal, 6)
+            .frame(height: DynamicIslandSpacing.chromeHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(NotchRowButtonStyle(inset: 0))
+        .accessibilityLabel("No active agents. Open Activity Center to browse recent sessions.")
     }
 
     static func descendantSessions(of session: AgentSession, in sessions: [AgentSession]) -> [AgentSession] {

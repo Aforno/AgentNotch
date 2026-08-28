@@ -11,14 +11,15 @@ struct WaitingReplyView: View {
     let onIdealHeightChange: (CGFloat) -> Void
 
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
             header
             if privacyModeEnabled {
                 Text("Approve in the source app")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.62))
+                    .font(NotchWindowFont.bodyEmphasis)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
             } else {
                 promptBlock
                 actions
@@ -36,6 +37,11 @@ struct WaitingReplyView: View {
             }
         }
         .focusable()
+        .focused($isFocused)
+        // The prompt advertises Return/Escape/digit shortcuts, so it has to
+        // actually hold focus when it appears — otherwise the hints are a lie.
+        .onAppear { isFocused = true }
+        .onChange(of: pending?.replyId) { _, _ in isFocused = true }
         .onKeyPress { press in
             guard canAnswer, !privacyModeEnabled else { return .ignored }
             switch press.key {
@@ -76,37 +82,37 @@ struct WaitingReplyView: View {
         HStack(spacing: DynamicIslandSpacing.related) {
             StateIndicator(state: session.state, size: 8)
             ProviderIconView(provider: session.provider, size: 14)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(NotchWindowPalette.primaryText)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: DynamicIslandSpacing.tight) {
                     Text(session.provider.displayName)
-                        .fontWeight(.semibold)
+                        .font(NotchWindowFont.captionEmphasis)
+                        .foregroundStyle(NotchWindowPalette.primaryText)
                     Text("·")
-                        .foregroundStyle(.white.opacity(0.32))
+                        .foregroundStyle(NotchWindowPalette.quaternaryText)
                     Text(projectName)
-                        .foregroundStyle(.white.opacity(0.66))
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
-                .font(.system(size: 11))
                 .lineLimit(1)
                 Text(session.currentActivity)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(NotchWindowFont.caption)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
             if waitingCount > 1 {
                 Text("\(waitingCount) waiting")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(NotchWindowFont.footnoteEmphasis)
                     .foregroundStyle(.orange)
             }
             Button(action: onOpenDetail) {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                    .font(NotchWindowFont.captionEmphasis)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(NotchGlyphButtonStyle())
+            .help("Open details")
             .accessibilityLabel("Open details")
         }
     }
@@ -115,16 +121,16 @@ struct WaitingReplyView: View {
     private var promptBlock: some View {
         if let pending {
             Text(pending.prompt)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .font(NotchWindowFont.subtitle)
+                .foregroundStyle(NotchWindowPalette.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
             if let detail = pending.detail, pending.kind != .question {
                 Text(detail)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.72))
+                    .font(NotchWindowFont.monoCaption)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(NotchWindowPalette.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .lineLimit(4)
             }
         }
@@ -133,8 +139,12 @@ struct WaitingReplyView: View {
     @ViewBuilder
     private var actions: some View {
         if canAnswer, let pending {
-            WaitingReplyActions(pending: pending, onAnswer: onAnswer)
-                .id(pending.replyId)
+            WaitingReplyActions(
+                pending: pending,
+                showsKeyboardHints: true,
+                onAnswer: onAnswer
+            )
+            .id(pending.replyId)
         }
     }
 
@@ -148,6 +158,9 @@ struct WaitingReplyView: View {
 
 struct WaitingReplyActions: View {
     let pending: AgentPendingReply
+    /// Only the notch prompt installs the key handler, so only it may advertise
+    /// the shortcuts. The same actions rendered in the detail pane do not.
+    var showsKeyboardHints = false
     let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     @State private var selections: [String: Set<String>] = [:]
 
@@ -157,18 +170,20 @@ struct WaitingReplyActions: View {
                 ForEach(questions) { question in
                     if questions.count > 1 {
                         Text(question.header ?? question.text)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.72))
+                            .font(NotchWindowFont.captionEmphasis)
+                            .foregroundStyle(NotchWindowPalette.secondaryText)
                     }
                     LazyVGrid(
                         columns: [GridItem(.adaptive(minimum: 92), spacing: 6)],
                         spacing: 6
                     ) {
-                        ForEach(question.options) { option in
-                            let kind: ReplyButtonKind = isSelected(option, for: question)
-                                ? .allow
-                                : .choice
-                            replyButton(option.label, kind: kind) {
+                        ForEach(Array(question.options.enumerated()), id: \.element.id) { index, option in
+                            let selected = isSelected(option, for: question)
+                            replyButton(
+                                option.label,
+                                emphasis: selected ? .primary : .neutral,
+                                shortcut: digitShortcut(for: index, in: questions, question: question)
+                            ) {
                                 select(option, for: question)
                                 if questions.count == 1, !question.allowsMultiple {
                                     onAnswer(.option, option.id, [question.text: [option.label]])
@@ -178,7 +193,7 @@ struct WaitingReplyActions: View {
                     }
                 }
                 if questions.count > 1 || questions.contains(where: \.allowsMultiple) {
-                    replyButton("Submit answers", kind: .allow) {
+                    replyButton("Submit answers", emphasis: .primary) {
                         onAnswer(.option, nil, selectedAnswers(for: questions))
                     }
                     .disabled(!hasCompleteAnswers(for: questions))
@@ -187,22 +202,50 @@ struct WaitingReplyActions: View {
         } else {
             HStack(spacing: DynamicIslandSpacing.related) {
                 if pending.allowsDeny {
-                    replyButton(pending.kind == .plan ? "Keep planning" : "Deny", kind: .deny) {
+                    replyButton(
+                        pending.kind == .plan ? "Keep planning" : "Deny",
+                        emphasis: .neutral,
+                        // Escape resolves to cancel when both are offered.
+                        shortcut: pending.allowsCancel ? nil : hint("esc")
+                    ) {
                         onAnswer(.deny, nil, nil)
                     }
                 }
-                if pending.allowsAllow {
-                    replyButton(pending.kind == .plan ? "Start coding" : "Allow", kind: .allow) {
-                        onAnswer(.allow, nil, nil)
+                if pending.allowsCancel {
+                    replyButton("Cancel", emphasis: .neutral, shortcut: hint("esc")) {
+                        onAnswer(.cancel, nil, nil)
                     }
                 }
-                if pending.allowsCancel {
-                    replyButton("Cancel", kind: .deny) {
-                        onAnswer(.cancel, nil, nil)
+                if pending.allowsAllow {
+                    replyButton(
+                        pending.kind == .plan ? "Start coding" : "Allow",
+                        emphasis: .primary,
+                        shortcut: hint("⏎")
+                    ) {
+                        onAnswer(.allow, nil, nil)
                     }
                 }
             }
         }
+    }
+
+    private func hint(_ label: String) -> String? {
+        showsKeyboardHints ? label : nil
+    }
+
+    /// Digits only pick an option when a single-select question is the whole
+    /// prompt, which mirrors the key handler exactly.
+    private func digitShortcut(
+        for index: Int,
+        in questions: [AgentPromptQuestion],
+        question: AgentPromptQuestion
+    ) -> String? {
+        guard showsKeyboardHints,
+              questions.count == 1,
+              !question.allowsMultiple,
+              index < 9
+        else { return nil }
+        return "\(index + 1)"
     }
 
     private func isSelected(_ option: AgentPromptOption, for question: AgentPromptQuestion) -> Bool {
@@ -232,29 +275,23 @@ struct WaitingReplyActions: View {
         questions.allSatisfy { selections[$0.text]?.isEmpty == false }
     }
 
-    private func replyButton(_ title: String, kind: ReplyButtonKind, action: @escaping () -> Void) -> some View {
+    private func replyButton(
+        _ title: String,
+        emphasis: NotchActionEmphasis,
+        shortcut: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .background(kind.color, in: Capsule())
+            HStack(spacing: 6) {
+                Text(title)
+                    .lineLimit(1)
+                if let shortcut {
+                    NotchKeyCap(label: shortcut)
+                }
+            }
         }
-        .buttonStyle(.plain)
-    }
-}
-
-private enum ReplyButtonKind {
-    case deny, allow, choice
-
-    var color: Color {
-        switch self {
-        case .deny, .choice:
-            Color.white.opacity(0.12)
-        case .allow:
-            Color.orange.opacity(0.85)
-        }
+        .buttonStyle(NotchActionButtonStyle(emphasis: emphasis))
+        .accessibilityLabel(title)
     }
 }
 
