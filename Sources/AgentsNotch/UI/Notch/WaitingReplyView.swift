@@ -1,4 +1,5 @@
 import AgentsNotchCore
+import AppKit
 import SwiftUI
 
 /// Shows a waiting prompt and the actions available from the notch.
@@ -13,6 +14,12 @@ struct WaitingReplyView: View {
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
     @FocusState private var isFocused: Bool
     @State private var isPointerInside = false
+    @State private var requestsShortcutFocus = false
+    @State private var isWindowKey = false
+
+    private var shortcutsActive: Bool {
+        requestsShortcutFocus && isPointerInside && isWindowKey && isFocused
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
@@ -40,15 +47,35 @@ struct WaitingReplyView: View {
         .focusable()
         .focused($isFocused)
         .focusEffectDisabled()
+        .contentShape(Rectangle())
+        .background(NotchWindowKeyBridge(
+            wantsKeyWindow: requestsShortcutFocus,
+            isKeyWindow: $isWindowKey
+        ))
         .onHover { hovering in
             isPointerInside = hovering
-            isFocused = hovering
+            if !hovering {
+                requestsShortcutFocus = false
+                isFocused = false
+            }
+        }
+        .simultaneousGesture(TapGesture().onEnded {
+            guard isPointerInside else { return }
+            isFocused = true
+            requestsShortcutFocus = true
+        })
+        .onChange(of: isWindowKey) { _, keyWindow in
+            isFocused = keyWindow && requestsShortcutFocus && isPointerInside
         }
         .onChange(of: pending?.replyId) { _, _ in
-            isFocused = isPointerInside
+            isFocused = isWindowKey && requestsShortcutFocus && isPointerInside
+        }
+        .onDisappear {
+            requestsShortcutFocus = false
+            isFocused = false
         }
         .onKeyPress { press in
-            guard canAnswer, !privacyModeEnabled else { return .ignored }
+            guard shortcutsActive, canAnswer, !privacyModeEnabled else { return .ignored }
             switch press.key {
             case .escape:
                 guard let pending else { return .ignored }
@@ -146,7 +173,7 @@ struct WaitingReplyView: View {
         if canAnswer, let pending {
             WaitingReplyActions(
                 pending: pending,
-                showsKeyboardHints: isFocused,
+                showsKeyboardHints: shortcutsActive,
                 onAnswer: onAnswer
             )
             .id(pending.replyId)
@@ -158,6 +185,101 @@ struct WaitingReplyView: View {
             return session.task
         }
         return URL(fileURLWithPath: directory).lastPathComponent
+    }
+}
+
+/// Observes key-window ownership from a deliberate click and releases it when
+/// shortcut focus ends. SwiftUI focus alone does not key a nonactivating panel.
+private struct NotchWindowKeyBridge: NSViewRepresentable {
+    let wantsKeyWindow: Bool
+    @Binding var isKeyWindow: Bool
+
+    func makeNSView(context: Context) -> NotchWindowKeyBridgeView {
+        let view = NotchWindowKeyBridgeView()
+        configure(view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NotchWindowKeyBridgeView, context: Context) {
+        configure(nsView)
+    }
+
+    private func configure(_ view: NotchWindowKeyBridgeView) {
+        let keyWindow = $isKeyWindow
+        view.onKeyWindowChange = { value in
+            DispatchQueue.main.async {
+                guard keyWindow.wrappedValue != value else { return }
+                keyWindow.wrappedValue = value
+            }
+        }
+        view.update(wantsKeyWindow: wantsKeyWindow)
+    }
+}
+
+@MainActor
+private final class NotchWindowKeyBridgeView: NSView {
+    var onKeyWindowChange: ((Bool) -> Void)?
+
+    private var wantsKeyWindow = false
+    private weak var observedWindow: NSWindow?
+    private nonisolated(unsafe) var observations: [NSObjectProtocol] = []
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow !== window {
+            if newWindow == nil, wantsKeyWindow, window?.isKeyWindow == true {
+                window?.resignKey()
+            }
+            stopObservingWindow()
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        observeWindow()
+        publishKeyWindowState()
+    }
+
+    deinit {
+        observations.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    func update(wantsKeyWindow: Bool) {
+        let didEndRequest = self.wantsKeyWindow && !wantsKeyWindow
+        self.wantsKeyWindow = wantsKeyWindow
+        if didEndRequest, window?.isKeyWindow == true {
+            window?.resignKey()
+        }
+        publishKeyWindowState()
+    }
+
+    private func observeWindow() {
+        guard let window, observedWindow !== window else { return }
+        stopObservingWindow()
+        observedWindow = window
+        let center = NotificationCenter.default
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            observations.append(center.addObserver(
+                forName: name,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.publishKeyWindowState()
+                }
+            })
+        }
+    }
+
+    private func stopObservingWindow() {
+        observations.forEach(NotificationCenter.default.removeObserver)
+        observations.removeAll()
+        observedWindow = nil
+    }
+
+    private func publishKeyWindowState() {
+        onKeyWindowChange?(window?.isKeyWindow == true)
     }
 }
 

@@ -8,8 +8,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Notch controls show hover and press, and waiting-prompt shortcuts only
-  while the pointer is over the prompt.
+- Notch controls show hover and press. Waiting-prompt shortcuts activate after
+  a click and remain active only while the pointer is over the prompt.
 - Primary actions pick black or white text from the system accent so light
   yellow, green, and orange fills stay readable.
 

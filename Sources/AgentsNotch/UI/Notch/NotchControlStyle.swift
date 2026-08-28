@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Interactive vocabulary for the notch surface.
@@ -75,10 +76,28 @@ enum NotchActionEmphasis {
         }
     }
 
-    var foreground: Color {
+    func foreground(
+        isEnabled: Bool,
+        isPressed: Bool,
+        isHovering: Bool,
+        accent: NSColor = .controlAccentColor
+    ) -> Color {
+        guard isEnabled else { return NotchWindowPalette.tertiaryText }
         switch self {
-        case .primary: NotchAccentContrast.foreground(for: .controlAccentColor)
-        case .neutral: NotchWindowPalette.primaryText
+        case .primary:
+            let fillOpacity: CGFloat = if isPressed {
+                0.72
+            } else if isHovering {
+                1
+            } else {
+                NotchAccentContrast.primaryFillOpacity
+            }
+            return NotchAccentContrast.foreground(
+                for: accent,
+                fillOpacity: fillOpacity
+            )
+        case .neutral:
+            return NotchWindowPalette.primaryText
         }
     }
 }
@@ -117,15 +136,28 @@ private struct NotchActionSurface<Label: View>: View {
     var body: some View {
         label
             .font(NotchWindowFont.bodyEmphasis)
-            .foregroundStyle(emphasis.foreground.opacity(isEnabled ? 1 : 0.4))
+            .foregroundStyle(emphasis.foreground(
+                isEnabled: isEnabled,
+                isPressed: isPressed,
+                isHovering: isHovering
+            ))
             .padding(.horizontal, 12)
             .frame(maxWidth: expands ? .infinity : nil)
             .frame(height: 28)
-            .background(fill, in: shape)
+            .background {
+                shape
+                    .fill(fill)
+                    .animation(
+                        reduceMotion ? nil : .easeOut(duration: 0.12),
+                        value: isHovering
+                    )
+                    .animation(
+                        reduceMotion ? nil : .easeOut(duration: 0.08),
+                        value: isPressed
+                    )
+            }
             .contentShape(shape)
             .onHover { isHovering = $0 }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovering)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: isPressed)
     }
 
     private var shape: AnyShape {
@@ -168,13 +200,16 @@ struct NotchKeyCap: View {
     let label: String
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
+
         Text(label)
             .font(NotchWindowFont.footnoteEmphasis)
-            .foregroundStyle(NotchWindowPalette.primaryText)
+            .foregroundStyle(.white)
             .frame(minWidth: 14)
             .padding(.horizontal, 3)
             .padding(.vertical, 1)
-            .background(NotchWindowPalette.raisedPressed, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .background(NotchWindowPalette.background.opacity(0.72), in: shape)
+            .overlay(shape.stroke(NotchWindowPalette.hairline, lineWidth: 0.6))
             .accessibilityHidden(true)
     }
 }

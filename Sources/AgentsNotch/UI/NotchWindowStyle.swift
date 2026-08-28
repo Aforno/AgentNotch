@@ -29,20 +29,18 @@ enum NotchWindowPalette {
     static let quaternaryText = Color.white.opacity(0.32)
 }
 
-/// Foreground for accent-filled notch actions. Blends the accent at the
-/// primary fill opacity over the notch's black surface and picks black or
-/// white from relative luminance so yellow, green, and orange stay readable.
+/// Foreground for accent-filled notch actions. Each interaction fill is
+/// blended over black, then uses whichever of black or white has more contrast.
 enum NotchAccentContrast {
     static let primaryFillOpacity: CGFloat = 0.9
-    /// Luminance at or above this value uses black text. Tuned so yellow,
-    /// green, and orange get dark foreground; blue, pink, and red stay white.
-    static let darkForegroundThreshold: CGFloat = 0.3
 
     static func usesDarkForeground(
         for accent: NSColor,
         fillOpacity: CGFloat = primaryFillOpacity
     ) -> Bool {
-        blendedRelativeLuminance(of: accent, fillOpacity: fillOpacity) >= darkForegroundThreshold
+        let background = blendedRelativeLuminance(of: accent, fillOpacity: fillOpacity)
+        return contrastRatio(foreground: 0, background: background)
+            >= contrastRatio(foreground: 1, background: background)
     }
 
     static func foreground(
@@ -66,6 +64,21 @@ enum NotchAccentContrast {
 
     static func relativeLuminance(red: CGFloat, green: CGFloat, blue: CGFloat) -> CGFloat {
         0.2126 * linearize(red) + 0.7152 * linearize(green) + 0.0722 * linearize(blue)
+    }
+
+    static func preferredContrastRatio(
+        for accent: NSColor,
+        fillOpacity: CGFloat = primaryFillOpacity
+    ) -> CGFloat {
+        let background = blendedRelativeLuminance(of: accent, fillOpacity: fillOpacity)
+        return max(
+            contrastRatio(foreground: 0, background: background),
+            contrastRatio(foreground: 1, background: background)
+        )
+    }
+
+    static func contrastRatio(foreground: CGFloat, background: CGFloat) -> CGFloat {
+        (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
     }
 
     static func sRGBComponents(of color: NSColor) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {

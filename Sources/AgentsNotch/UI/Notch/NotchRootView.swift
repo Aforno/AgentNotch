@@ -79,6 +79,11 @@ struct NotchRootView: View {
            snapshot.relatedSessions.contains(where: { $0.id == selectedSessionID }) {
             return .detail(selectedSessionID)
         }
+        if let session = snapshot.attentionSession,
+           session.pendingReply != nil,
+           runtime.canAnswer(session) {
+            return .temporary(session.id)
+        }
         if isHovering { return .list }
         if let session = snapshot.attentionSession {
             return .temporary(session.id)

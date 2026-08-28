@@ -3,39 +3,60 @@ import AppKit
 import XCTest
 
 final class NotchAccentContrastTests: XCTestCase {
-    func testBlueAccentKeepsWhiteForeground() {
+    func testEveryAccentAndInteractionFillMeetsSmallTextContrast() {
+        let accents: [(String, NSColor)] = [
+            ("blue", NSColor(srgbRed: 0, green: 0.478, blue: 1, alpha: 1)),
+            ("pink", NSColor(srgbRed: 1, green: 0.176, blue: 0.333, alpha: 1)),
+            ("red", NSColor(srgbRed: 1, green: 0.231, blue: 0.188, alpha: 1)),
+            ("yellow", NSColor(srgbRed: 1, green: 0.8, blue: 0, alpha: 1)),
+            ("green", NSColor(srgbRed: 0.204, green: 0.780, blue: 0.349, alpha: 1)),
+            ("orange", NSColor(srgbRed: 1, green: 0.584, blue: 0, alpha: 1)),
+        ]
+        let fillOpacities: [(String, CGFloat)] = [
+            ("rest", NotchAccentContrast.primaryFillOpacity),
+            ("hover", 1),
+            ("pressed", 0.72),
+        ]
+
+        for (accentName, accent) in accents {
+            for (stateName, fillOpacity) in fillOpacities {
+                XCTAssertGreaterThanOrEqual(
+                    NotchAccentContrast.preferredContrastRatio(
+                        for: accent,
+                        fillOpacity: fillOpacity
+                    ),
+                    4.5,
+                    "\(accentName) \(stateName)"
+                )
+            }
+        }
+    }
+
+    func testForegroundTracksTheCurrentFillInsteadOfOnlyTheRestingFill() {
         let blue = NSColor(srgbRed: 0, green: 0.478, blue: 1, alpha: 1)
-        XCTAssertFalse(NotchAccentContrast.usesDarkForeground(for: blue))
-        XCTAssertEqual(NotchAccentContrast.foreground(for: blue), .white)
+
+        XCTAssertEqual(
+            NotchAccentContrast.foreground(for: blue, fillOpacity: 0.9),
+            .white
+        )
+        XCTAssertEqual(
+            NotchAccentContrast.foreground(for: blue, fillOpacity: 1),
+            .black
+        )
     }
 
-    func testPinkAccentKeepsWhiteForeground() {
-        let pink = NSColor(srgbRed: 1, green: 0.176, blue: 0.333, alpha: 1)
-        XCTAssertFalse(NotchAccentContrast.usesDarkForeground(for: pink))
-        XCTAssertEqual(NotchAccentContrast.foreground(for: pink), .white)
-    }
-
-    func testRedAccentKeepsWhiteForeground() {
-        let red = NSColor(srgbRed: 1, green: 0.231, blue: 0.188, alpha: 1)
-        XCTAssertFalse(NotchAccentContrast.usesDarkForeground(for: red))
-    }
-
-    func testYellowAccentUsesBlackForeground() {
+    func testDisabledPrimaryActionUsesReadablePaletteText() {
         let yellow = NSColor(srgbRed: 1, green: 0.8, blue: 0, alpha: 1)
-        XCTAssertTrue(NotchAccentContrast.usesDarkForeground(for: yellow))
-        XCTAssertEqual(NotchAccentContrast.foreground(for: yellow), .black)
-    }
 
-    func testGreenAccentUsesBlackForeground() {
-        let green = NSColor(srgbRed: 0.204, green: 0.780, blue: 0.349, alpha: 1)
-        XCTAssertTrue(NotchAccentContrast.usesDarkForeground(for: green))
-        XCTAssertEqual(NotchAccentContrast.foreground(for: green), .black)
-    }
-
-    func testOrangeAccentUsesBlackForeground() {
-        let orange = NSColor(srgbRed: 1, green: 0.584, blue: 0, alpha: 1)
-        XCTAssertTrue(NotchAccentContrast.usesDarkForeground(for: orange))
-        XCTAssertEqual(NotchAccentContrast.foreground(for: orange), .black)
+        XCTAssertEqual(
+            NotchActionEmphasis.primary.foreground(
+                isEnabled: false,
+                isPressed: false,
+                isHovering: false,
+                accent: yellow
+            ),
+            NotchWindowPalette.tertiaryText
+        )
     }
 
     func testBlendedLuminanceIsSourceTimesFillOpacityOverBlack() {
