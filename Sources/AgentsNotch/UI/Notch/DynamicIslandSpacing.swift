@@ -11,6 +11,9 @@ enum DynamicIslandSpacing {
     static let expandedTop: CGFloat = 8
     static let expandedBottom: CGFloat = 12
     static let rowHeight: CGFloat = 44
+    /// The "+N more" footer is a hint, not a session, so it costs less than a
+    /// full row of vertical space.
+    static let overflowRowHeight: CGFloat = 30
     /// Hover-list chrome for Activity Center and Settings, kept off session rows.
     static let chromeHeight: CGFloat = 28
     static let compactInset: CGFloat = 8

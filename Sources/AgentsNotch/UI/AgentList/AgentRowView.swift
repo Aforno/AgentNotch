@@ -10,32 +10,33 @@ struct AgentRowView: View {
         HStack(spacing: DynamicIslandSpacing.standard) {
             if session.isSubagent {
                 Image(systemName: "arrow.turn.down.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .font(NotchWindowFont.footnoteEmphasis)
+                    .foregroundStyle(NotchWindowPalette.quaternaryText)
                     .frame(width: 10)
             }
 
             ProviderIconView(provider: session.provider, size: 14)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(NotchWindowPalette.primaryText)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: DynamicIslandSpacing.related) {
                     if session.isSubagent {
-                        Text(subagentLabel)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.5))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(.white.opacity(0.08), in: Capsule())
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
+                        RowChip(text: subagentLabel)
                     }
 
-                    if !headline.isEmpty {
-                        Text(headline)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
+                    if !taskTitle.isEmpty {
+                        Text(taskTitle)
+                            .font(NotchWindowFont.rowTitle)
+                            .foregroundStyle(NotchWindowPalette.primaryText)
                             .lineLimit(1)
+                    }
+
+                    // The project is the disambiguator when several agents run
+                    // in similar repos, so it holds its width and lets the task
+                    // title truncate instead.
+                    if let projectChip {
+                        RowChip(text: projectChip)
+                            .layoutPriority(1)
                     }
                 }
 
@@ -58,6 +59,14 @@ struct AgentRowView: View {
 
     private var headline: String {
         AgentRowPresentation.headline(for: session, privacyModeEnabled: privacyModeEnabled)
+    }
+
+    private var taskTitle: String {
+        AgentRowPresentation.taskTitle(for: session, privacyModeEnabled: privacyModeEnabled)
+    }
+
+    private var projectChip: String? {
+        AgentRowPresentation.projectChip(for: session, privacyModeEnabled: privacyModeEnabled)
     }
 
     private var subagentLabel: String {
@@ -83,8 +92,8 @@ struct AgentRowView: View {
             )
         } else {
             Text(session.currentActivity)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.white.opacity(0.68))
+                .font(NotchWindowFont.body)
+                .foregroundStyle(NotchWindowPalette.secondaryText)
                 .lineLimit(1)
         }
     }
@@ -146,6 +155,23 @@ struct AgentRowView: View {
     }
 }
 
+/// Compact label pill shared by the subagent role and the project name.
+private struct RowChip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(NotchWindowFont.footnoteEmphasis)
+            .foregroundStyle(NotchWindowPalette.secondaryText)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(NotchWindowPalette.raisedStrong, in: Capsule())
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: 132, alignment: .leading)
+    }
+}
+
 private struct AttentionInlineSummary: View {
     let session: AgentSession
 
@@ -155,7 +181,7 @@ private struct AttentionInlineSummary: View {
             Text(label)
                 .lineLimit(1)
         }
-        .font(.system(size: 12, weight: .medium))
+        .font(NotchWindowFont.bodyEmphasis)
         .foregroundStyle(.orange)
     }
 
@@ -176,8 +202,8 @@ private struct SubagentActivityInlineSummary: View {
 
             ActiveAgentCountView(count: activeSubagentCount)
         }
-        .font(.system(size: 12, weight: .regular))
-        .foregroundStyle(.white.opacity(0.68))
+        .font(NotchWindowFont.body)
+        .foregroundStyle(NotchWindowPalette.secondaryText)
         .lineLimit(1)
     }
 }
@@ -191,8 +217,8 @@ private struct PlanInlineSummary: View {
             Text(plan.rowStage)
                 .lineLimit(1)
         }
-        .font(.system(size: 12, weight: .regular))
-        .foregroundStyle(.white.opacity(0.68))
+        .font(NotchWindowFont.body)
+        .foregroundStyle(NotchWindowPalette.secondaryText)
         .lineLimit(1)
     }
 }
@@ -205,6 +231,7 @@ private struct ExecutionInlineSummary: View {
     var body: some View {
         HStack(spacing: DynamicIslandSpacing.related) {
             Text(progress)
+                .monospacedDigit()
                 .fixedSize(horizontal: true, vertical: false)
             Text(stage)
                 .lineLimit(1)
@@ -213,8 +240,8 @@ private struct ExecutionInlineSummary: View {
                 ActiveAgentCountView(count: activeAgentCount)
             }
         }
-        .font(.system(size: 12, weight: .regular))
-        .foregroundStyle(.white.opacity(0.68))
+        .font(NotchWindowFont.body)
+        .foregroundStyle(NotchWindowPalette.secondaryText)
         .lineLimit(1)
     }
 }
@@ -227,7 +254,7 @@ private struct ActiveAgentCountView: View {
             Image(systemName: "arrow.triangle.branch")
             Text("\(count) active")
         }
-        .foregroundStyle(.white.opacity(0.46))
+        .foregroundStyle(NotchWindowPalette.tertiaryText)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(1)
     }
@@ -251,6 +278,8 @@ enum AgentRowPresentation {
             .capitalized
     }
 
+    /// Combined single-line description. Still the source for accessibility and
+    /// for deciding whether the activity line would just repeat the title.
     static func headline(for session: AgentSession, privacyModeEnabled: Bool) -> String {
         let project = projectName(for: session)
         if privacyModeEnabled {
@@ -272,6 +301,29 @@ enum AgentRowPresentation {
         case (nil, nil):
             return session.currentActivity
         }
+    }
+
+    /// The truncating half of the row title.
+    static func taskTitle(for session: AgentSession, privacyModeEnabled: Bool) -> String {
+        let project = projectName(for: session)
+        if privacyModeEnabled {
+            return project ?? "Private activity"
+        }
+
+        let task = AgentTaskTitle.displayable(session.task)
+        if session.isSubagent {
+            return task ?? ""
+        }
+        return task ?? project ?? session.currentActivity
+    }
+
+    /// The project pill, shown only when it adds information the task title does
+    /// not already carry. Subagents inherit their parent's project.
+    static func projectChip(for session: AgentSession, privacyModeEnabled: Bool) -> String? {
+        guard !privacyModeEnabled, !session.isSubagent else { return nil }
+        guard let project = projectName(for: session) else { return nil }
+        guard let task = AgentTaskTitle.displayable(session.task), task != project else { return nil }
+        return project
     }
 
     static func currentStep(in steps: [AgentStep]) -> AgentStep? {
@@ -332,20 +384,10 @@ private struct StepStatusStrip: View {
         HStack(spacing: 2) {
             ForEach(AgentRowPresentation.visibleSteps(in: steps)) { step in
                 Capsule()
-                    .fill(color(for: step.status))
-                    .frame(width: 8, height: 3)
+                    .fill(StepStatusStyle.color(for: step.status))
+                    .frame(width: 10, height: 4)
             }
         }
         .accessibilityHidden(true)
-    }
-
-    private func color(for status: AgentStepStatus) -> Color {
-        switch status {
-        case .pending: .white.opacity(0.18)
-        case .inProgress: .blue
-        case .completed: .green
-        case .failed: .red
-        case .blocked: .orange
-        }
     }
 }

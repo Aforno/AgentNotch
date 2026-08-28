@@ -11,23 +11,25 @@ struct TemporaryActivityView: View {
             StateIndicator(state: session.state, size: 8)
 
             ProviderIconView(provider: session.provider, size: 14)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(NotchWindowPalette.primaryText)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: DynamicIslandSpacing.tight) {
                     Text(session.provider.displayName)
-                        .fontWeight(.semibold)
+                        .font(NotchWindowFont.captionEmphasis)
+                        .foregroundStyle(NotchWindowPalette.primaryText)
                     Text("·")
-                        .foregroundStyle(.white.opacity(0.32))
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.quaternaryText)
                     Text(projectName)
-                        .foregroundStyle(.white.opacity(0.66))
+                        .font(NotchWindowFont.caption)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
-                .font(.system(size: 11))
                 .lineLimit(1)
 
                 Text(privacyModeEnabled ? session.state.displayName : session.currentActivity)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.82))
+                    .font(NotchWindowFont.bodyEmphasis)
+                    .foregroundStyle(NotchWindowPalette.primaryText)
                     .lineLimit(1)
             }
 
@@ -35,11 +37,11 @@ struct TemporaryActivityView: View {
 
             if waitingCount > 1 {
                 Text("\(waitingCount) waiting")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(NotchWindowFont.footnoteEmphasis)
                     .foregroundStyle(.orange)
             } else {
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(NotchWindowFont.footnoteEmphasis)
                     .foregroundStyle(.orange)
             }
         }

@@ -31,7 +31,7 @@ struct CollapsedNotchView: View {
                         .fill(.black)
 
                     ProviderIconView(provider: provider, size: 13)
-                        .foregroundStyle(.white.opacity(0.94))
+                        .foregroundStyle(NotchWindowPalette.primaryText)
                 }
                 .frame(
                     width: DynamicIslandSpacing.compactProviderMarkSize,
@@ -62,8 +62,9 @@ struct CollapsedNotchView: View {
         HStack(spacing: DynamicIslandSpacing.related) {
             StateIndicator(state: .running, size: 7)
             Text("\(activeCount)")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.92))
+                .font(NotchWindowFont.counter)
+                .monospacedDigit()
+                .foregroundStyle(NotchWindowPalette.primaryText)
         }
         .fixedSize()
     }

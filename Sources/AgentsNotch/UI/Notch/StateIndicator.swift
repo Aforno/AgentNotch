@@ -6,38 +6,41 @@ struct StateIndicator: View {
     let state: AgentState
     var size: CGFloat = 12
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Group {
-            if state.showsSpinner {
-                StateSpinner(color: color, size: size)
+            if presentation.showsSpinner {
+                StateSpinner(color: presentation.color, size: size, isAnimated: !reduceMotion)
             } else {
-                Image(systemName: state.systemImage)
+                Image(systemName: presentation.systemImage)
                     .font(.system(size: size, weight: .bold))
-                    .foregroundStyle(color)
+                    .foregroundStyle(presentation.color)
             }
         }
         .frame(width: size, height: size)
-        .shadow(color: color.opacity(state.needsAttention ? 0.7 : 0), radius: 4)
+        .shadow(color: presentation.color.opacity(state.needsAttention ? 0.7 : 0), radius: 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(state.displayName)
         .accessibilityRemoveTraits(.isSelected)
     }
 
-    private var color: Color { agentStateColor(for: state) }
+    private var presentation: AgentStatePresentation { agentStatePresentation(for: state) }
 }
 
 private struct StateSpinner: NSViewRepresentable {
     let color: Color
     let size: CGFloat
+    let isAnimated: Bool
 
     func makeNSView(context: Context) -> CompositorSpinnerView {
         let view = CompositorSpinnerView()
-        view.update(color: NSColor(color), size: size)
+        view.update(color: NSColor(color), size: size, isAnimated: isAnimated)
         return view
     }
 
     func updateNSView(_ nsView: CompositorSpinnerView, context: Context) {
-        nsView.update(color: NSColor(color), size: size)
+        nsView.update(color: NSColor(color), size: size, isAnimated: isAnimated)
     }
 }
 
@@ -45,6 +48,9 @@ private final class CompositorSpinnerView: NSView {
     private let spinnerLayer = CAShapeLayer()
     private nonisolated(unsafe) var occlusionObserver: NSObjectProtocol?
     private var spinnerSize: CGFloat = 12
+    /// Reduce Motion replaces the rotation with a static ring rather than
+    /// hiding the indicator entirely.
+    private var isAnimated = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -112,8 +118,9 @@ private final class CompositorSpinnerView: NSView {
         updateAnimationState()
     }
 
-    func update(color: NSColor, size: CGFloat) {
+    func update(color: NSColor, size: CGFloat, isAnimated: Bool) {
         spinnerSize = size
+        self.isAnimated = isAnimated
         spinnerLayer.strokeColor = color.cgColor
         invalidateIntrinsicContentSize()
         needsLayout = true
@@ -121,7 +128,8 @@ private final class CompositorSpinnerView: NSView {
     }
 
     private func updateAnimationState() {
-        let shouldAnimate = window?.occlusionState.contains(.visible) == true
+        let shouldAnimate = isAnimated
+            && window?.occlusionState.contains(.visible) == true
             && !isHiddenOrHasHiddenAncestor
         if shouldAnimate {
             guard spinnerLayer.animation(forKey: "agentnotch.rotation") == nil else { return }
@@ -134,27 +142,6 @@ private final class CompositorSpinnerView: NSView {
             spinnerLayer.add(rotation, forKey: "agentnotch.rotation")
         } else {
             spinnerLayer.removeAnimation(forKey: "agentnotch.rotation")
-        }
-    }
-}
-
-private extension AgentState {
-    var showsSpinner: Bool {
-        switch self {
-        case .starting, .running, .executingTool, .unknown: true
-        case .idle, .thinking, .editing, .waitingForUser, .completed, .failed: false
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .idle: "minus"
-        case .thinking: "ellipsis"
-        case .editing: "pencil"
-        case .waitingForUser: "questionmark"
-        case .completed: "checkmark"
-        case .failed: "xmark"
-        case .starting, .running, .executingTool, .unknown: ""
         }
     }
 }

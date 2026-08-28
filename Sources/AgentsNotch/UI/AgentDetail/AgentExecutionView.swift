@@ -14,23 +14,24 @@ struct AgentPlanProgressView: View {
             } label: {
                 HStack(spacing: DynamicIslandSpacing.related) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.42))
+                        .font(NotchWindowFont.footnoteEmphasis)
+                        .foregroundStyle(NotchWindowPalette.tertiaryText)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .frame(width: 10)
 
                     PlanStatusStrip(steps: plan.steps)
 
                     Text(headline)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.82))
+                        .font(NotchWindowFont.captionEmphasis)
+                        .foregroundStyle(NotchWindowPalette.primaryText)
                         .lineLimit(1)
 
                     Spacer(minLength: DynamicIslandSpacing.tight)
 
                     Text("\(plan.completedStepCount)/\(plan.steps.count)")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.34))
+                        .font(NotchWindowFont.mono)
+                        .monospacedDigit()
+                        .foregroundStyle(NotchWindowPalette.tertiaryText)
                 }
                 .contentShape(Rectangle())
             }
@@ -71,26 +72,16 @@ private struct PlanStatusStrip: View {
         HStack(spacing: 3) {
             ForEach(steps) { step in
                 Capsule()
-                    .fill(color(for: step.status))
+                    .fill(StepStatusStyle.color(for: step.status))
                     .frame(maxWidth: .infinity)
             }
         }
-        .frame(width: stripWidth, height: 4)
+        .frame(width: stripWidth, height: 5)
         .accessibilityHidden(true)
     }
 
     private var stripWidth: CGFloat {
         min(max(CGFloat(steps.count) * 18, 18), 64)
-    }
-
-    private func color(for status: AgentStepStatus) -> Color {
-        switch status {
-        case .pending: .white.opacity(0.18)
-        case .inProgress: .blue
-        case .completed: .green
-        case .failed: .red
-        case .blocked: .orange
-        }
     }
 }
 
@@ -103,12 +94,12 @@ struct AgentWorkflowsView: View {
                 VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
                     HStack {
                         Label(workflow.title, systemImage: "point.3.connected.trianglepath.dotted")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.76))
+                            .font(NotchWindowFont.captionEmphasis)
+                            .foregroundStyle(NotchWindowPalette.primaryText)
                             .lineLimit(1)
                         Spacer()
                         Text(workflow.status.displayName)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(NotchWindowFont.footnoteEmphasis)
                             .foregroundStyle(workflowStatusColor(workflow.status))
                     }
 
@@ -126,7 +117,7 @@ struct AgentWorkflowsView: View {
         case .completed: .green
         case .failed: .red
         case .blocked, .waiting: .orange
-        case .pending, .running: .white.opacity(0.46)
+        case .pending, .running: NotchWindowPalette.tertiaryText
         }
     }
 }
@@ -138,7 +129,7 @@ struct AgentRelationshipsView: View {
 
     var body: some View {
         if parent != nil || !children.isEmpty {
-            VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
+            VStack(alignment: .leading, spacing: DynamicIslandSpacing.tight) {
                 if let parent {
                     relationshipButton(
                         session: parent,
@@ -149,11 +140,7 @@ struct AgentRelationshipsView: View {
                 ForEach(children) { child in
                     relationshipButton(
                         session: child,
-                        label: child.agentRole?
-                            .replacingOccurrences(of: "_", with: " ")
-                            .replacingOccurrences(of: "-", with: " ")
-                            .replacingOccurrences(of: ":", with: " ")
-                            .capitalized ?? "Subagent",
+                        label: AgentRowPresentation.formattedRole(child.agentRole),
                         systemImage: "arrow.turn.down.right"
                     )
                 }
@@ -172,26 +159,27 @@ struct AgentRelationshipsView: View {
         } label: {
             HStack(spacing: DynamicIslandSpacing.related) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.34))
+                    .font(NotchWindowFont.footnoteEmphasis)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(NotchWindowFont.footnoteEmphasis)
+                        .foregroundStyle(NotchWindowPalette.secondaryText)
                     Text(session.currentActivity)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .font(NotchWindowFont.footnote)
+                        .foregroundStyle(NotchWindowPalette.tertiaryText)
                         .lineLimit(1)
                 }
                 Spacer()
-                StateIndicator(state: session.state, size: 6)
+                StateIndicator(state: session.state, size: 7)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.24))
+                    .foregroundStyle(NotchWindowPalette.quaternaryText)
             }
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NotchRowButtonStyle(inset: -6))
     }
 }
 
@@ -200,38 +188,22 @@ private struct AgentStepRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DynamicIslandSpacing.related) {
-            Image(systemName: iconName)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(iconColor)
+            Image(systemName: StepStatusStyle.systemImage(for: step.status))
+                .font(NotchWindowFont.footnoteEmphasis)
+                .foregroundStyle(StepStatusStyle.color(for: step.status))
                 .frame(width: 12)
             Text(step.title)
-                .font(.system(size: 10))
-                .foregroundStyle(step.status == .completed ? .white.opacity(0.36) : .white.opacity(0.64))
+                .font(NotchWindowFont.footnote)
+                .foregroundStyle(
+                    step.status == .completed
+                        ? NotchWindowPalette.tertiaryText
+                        : NotchWindowPalette.secondaryText
+                )
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(step.title), \(step.status.displayName)")
-    }
-
-    private var iconName: String {
-        switch step.status {
-        case .pending: "circle"
-        case .inProgress: "circle.fill"
-        case .completed: "checkmark"
-        case .failed: "xmark"
-        case .blocked: "exclamationmark"
-        }
-    }
-
-    private var iconColor: Color {
-        switch step.status {
-        case .pending: .white.opacity(0.24)
-        case .inProgress: .blue
-        case .completed: .green
-        case .failed: .red
-        case .blocked: .orange
-        }
     }
 }
 
