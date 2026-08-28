@@ -12,6 +12,7 @@ struct WaitingReplyView: View {
 
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
     @FocusState private var isFocused: Bool
+    @State private var isPointerInside = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
@@ -38,10 +39,14 @@ struct WaitingReplyView: View {
         }
         .focusable()
         .focused($isFocused)
-        // The prompt advertises Return/Escape/digit shortcuts, so it has to
-        // actually hold focus when it appears — otherwise the hints are a lie.
-        .onAppear { isFocused = true }
-        .onChange(of: pending?.replyId) { _, _ in isFocused = true }
+        .focusEffectDisabled()
+        .onHover { hovering in
+            isPointerInside = hovering
+            isFocused = hovering
+        }
+        .onChange(of: pending?.replyId) { _, _ in
+            isFocused = isPointerInside
+        }
         .onKeyPress { press in
             guard canAnswer, !privacyModeEnabled else { return .ignored }
             switch press.key {
@@ -141,7 +146,7 @@ struct WaitingReplyView: View {
         if canAnswer, let pending {
             WaitingReplyActions(
                 pending: pending,
-                showsKeyboardHints: true,
+                showsKeyboardHints: isFocused,
                 onAnswer: onAnswer
             )
             .id(pending.replyId)

@@ -168,8 +168,7 @@ private struct RowChip: View {
             .background(NotchWindowPalette.raisedStrong, in: Capsule())
             .lineLimit(1)
             .truncationMode(.middle)
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(maxWidth: 132)
+            .frame(maxWidth: 132, alignment: .leading)
     }
 }
 
