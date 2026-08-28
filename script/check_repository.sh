@@ -18,6 +18,8 @@ required_files=(
   THIRD_PARTY_NOTICES.md
   VERSION
   Resources/AgentsNotch.entitlements
+  Resources/SparklePublicEDKey
+  Package.resolved
   Casks/agent-notch.rb
   .github/workflows/ci.yml
   .github/workflows/release.yml
@@ -42,6 +44,18 @@ if ! rg -q '^  sha256 "[0-9a-f]{64}"$' Casks/agent-notch.rb; then
   echo "Homebrew cask is missing a 64-character sha256 stanza" >&2
   exit 1
 fi
+if ! rg -q '^  auto_updates true$' Casks/agent-notch.rb; then
+  echo "Homebrew cask must declare auto_updates because the app self-updates" >&2
+  exit 1
+fi
+python3 - <<'PY'
+import base64
+from pathlib import Path
+key = Path("Resources/SparklePublicEDKey").read_text().strip()
+decoded = base64.b64decode(key)
+if len(decoded) != 32:
+    raise SystemExit("Resources/SparklePublicEDKey must decode to 32 bytes")
+PY
 
 for script in script/*.sh; do
   bash -n "$script"
@@ -76,6 +90,7 @@ fi
 
 local_path_matches="$(
   rg -n --hidden \
+    -g '!.git' \
     -g '!.git/**' \
     -g '!.build/**' \
     -g '!dist/**' \

@@ -57,6 +57,26 @@ if ! APPLE_EVENTS_USAGE_DESCRIPTION="$(
   exit 1
 fi
 
+EXPECTED_SPARKLE_KEY="$(tr -d '[:space:]' < "$ROOT_DIR/Resources/SparklePublicEDKey")"
+ACTUAL_SPARKLE_KEY="$(plutil -extract SUPublicEDKey raw "$INFO_PLIST")"
+ACTUAL_SPARKLE_FEED="$(plutil -extract SUFeedURL raw "$INFO_PLIST")"
+if [[ "$ACTUAL_SPARKLE_KEY" != "$EXPECTED_SPARKLE_KEY" ]]; then
+  echo "bundle Sparkle public key does not match Resources/SparklePublicEDKey" >&2
+  exit 1
+fi
+if [[ "$ACTUAL_SPARKLE_FEED" != "https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml" ]]; then
+  echo "bundle Sparkle feed URL is not the GitHub latest appcast" >&2
+  exit 1
+fi
+if [[ "$(plutil -extract SUAutomaticallyUpdate raw "$INFO_PLIST")" != "false" ]]; then
+  echo "release app must not download and install updates silently" >&2
+  exit 1
+fi
+if [[ ! -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]]; then
+  echo "release app must embed Sparkle.framework" >&2
+  exit 1
+fi
+
 APP_FILE_DESCRIPTION="$(file "$APP_BINARY")"
 HOOK_FILE_DESCRIPTION="$(file "$HOOK_BINARY")"
 if [[ "$APP_FILE_DESCRIPTION" != *arm64* ]]; then

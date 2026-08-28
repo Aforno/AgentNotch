@@ -33,6 +33,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           ./script/validate_version.sh "$GITHUB_REF_NAME"
@@ -46,9 +47,10 @@ jobs:
               "$MACOS_SIGNING_IDENTITY" \
               "$APPLE_API_KEY_ID" \
               "$APPLE_API_ISSUER_ID" \
-              "$APPLE_API_PRIVATE_KEY"; do
+              "$APPLE_API_PRIVATE_KEY" \
+              "$SPARKLE_ED_PRIVATE_KEY"; do
               if [[ -z "$value" ]]; then
-                echo "signed releases require all documented signing and notarization secrets" >&2
+                echo "signed releases require all documented signing, notarization, and Sparkle secrets" >&2
                 exit 1
               fi
             done
@@ -96,6 +98,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
@@ -114,6 +117,7 @@ jobs:
               --api-key-id "$API_KEY_ID" \
               --api-issuer-id "$API_ISSUER_ID"
           rm -f "$API_KEY_PATH"
+          ./script/generate_appcast.sh
 
       - name: Publish GitHub release
         env:
@@ -141,6 +145,7 @@ jobs:
             gh release create "$GITHUB_REF_NAME" \
               "$ARCHIVE" \
               "$ARCHIVE.sha256" \
+              "dist/appcast.xml" \
               --verify-tag \
               --generate-notes \
               --title "Agent Notch $VERSION"

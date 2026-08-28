@@ -12,6 +12,9 @@ let package = Package(
         .executable(name: "AgentsNotch", targets: ["AgentsNotch"]),
         .executable(name: "AgentsNotchHook", targets: ["AgentsNotchHook"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.6"),
+    ],
     targets: [
         .target(
             name: "AgentsNotchCore",
@@ -19,7 +22,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "AgentsNotch",
-            dependencies: ["AgentsNotchCore"],
+            dependencies: [
+                "AgentsNotchCore",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

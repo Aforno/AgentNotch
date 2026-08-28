@@ -123,6 +123,9 @@ final class AppRuntime {
         #if DEBUG
         simulator = DebugEventSimulator(activity: activity)
         #endif
+        updates.willInstall = { [weak self] in
+            self?.stop()
+        }
         notifications.onOpenSession = { [weak self] sessionID in
             self?.presentSession(sessionID)
         }
@@ -137,7 +140,7 @@ final class AppRuntime {
         guard await restorePersistedState(generation: generation) else { return }
         completeRestoration(generation: generation)
         guard await startProviderMonitoring(generation: generation) else { return }
-        updates.checkAutomaticallyIfNeeded()
+        updates.start()
     }
 
     private func beginStartup() -> Int? {

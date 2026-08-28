@@ -1,96 +1,184 @@
-import AppKit
 import Foundation
 import Observation
+import os
+import Sparkle
 
 @Observable
 @MainActor
 final class UpdateService {
-    enum State: Equatable {
-        case idle
-        case checking
-        case upToDate
-        case noRelease
-        case available(version: String)
-        case failed(String)
-    }
+    static let automaticChecksDefaultsKey = "automaticallyCheckForUpdates"
+    static let packagedOnlyMessage = "Automatic updates are only available in packaged production builds."
 
-    private(set) var state: State = .idle
+    private(set) var state: UpdateState = .idle
+    private(set) var lastError: String?
 
-    private let latestReleaseURL = URL(string: "https://api.github.com/repos/Aforno/AgentNotch/releases/latest")!
-    private let releasePageURL = URL(string: "https://github.com/Aforno/AgentNotch/releases/latest")!
-    private let openURL: (URL) -> Void
+    /// Called just before Sparkle quits the process to swap in the new app.
+    var willInstall: (() -> Void)?
 
-    init(openURL: @escaping (URL) -> Void = { _ = NSWorkspace.shared.open($0) }) {
-        self.openURL = openURL
-    }
-
-    func checkAutomaticallyIfNeeded() {
-        guard UserDefaults.standard.bool(forKey: "automaticallyCheckForUpdates") else { return }
-        let lastCheck = UserDefaults.standard.object(forKey: "lastUpdateCheck") as? Date ?? .distantPast
-        guard Date().timeIntervalSince(lastCheck) >= 24 * 60 * 60 else { return }
-        Task { await check() }
-    }
-
-    func check() async {
-        guard state != .checking else { return }
-        state = .checking
-        do {
-            var request = URLRequest(url: latestReleaseURL)
-            request.timeoutInterval = 10
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            request.setValue("AgentNotch/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.waitsForConnectivity = false
-            let (data, response) = try await URLSession(configuration: configuration).data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw UpdateError.invalidResponse
-            }
-            if http.statusCode == 404 {
-                state = .noRelease
-                UserDefaults.standard.set(Date(), forKey: "lastUpdateCheck")
-                return
-            }
-            guard (200..<300).contains(http.statusCode) else {
-                throw UpdateError.http(http.statusCode)
-            }
-            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
-            let version = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-            if version.compare(currentVersion, options: .numeric) == .orderedDescending {
-                state = .available(version: version)
-            } else {
-                state = .upToDate
-            }
-            UserDefaults.standard.set(Date(), forKey: "lastUpdateCheck")
-        } catch {
-            state = .failed(error.localizedDescription)
-        }
-    }
-
-    func openAvailableRelease() {
-        openURL(releasePageURL)
-    }
+    private var updater: SPUUpdater?
+    private var driver: SparkleUpdateDriver?
+    private var foundReply: ((SPUUserUpdateChoice) -> Void)?
+    private var installReply: ((SPUUserUpdateChoice) -> Void)?
+    private var started = false
+    private static let logger = Logger(subsystem: "com.afonsoferreira.AgentNotch", category: "updates")
 
     var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     }
 
-    private struct GitHubRelease: Decodable {
-        let tagName: String
+    static var hostCanUseSparkle: Bool {
+        let bundle = Bundle.main
+        guard bundle.bundleIdentifier == "com.afonsoferreira.AgentNotch" else { return false }
+        guard bundle.bundlePath.hasSuffix(".app") else { return false }
+        guard bundle.object(forInfoDictionaryKey: "SUFeedURL") is String else { return false }
+        guard bundle.object(forInfoDictionaryKey: "SUPublicEDKey") is String else { return false }
+        return FileManager.default.fileExists(
+            atPath: bundle.privateFrameworksPath.map { "\($0)/Sparkle.framework" } ?? ""
+        )
+    }
 
-        private enum CodingKeys: String, CodingKey {
-            case tagName = "tag_name"
+    func start() {
+        guard !started else { return }
+        started = true
+        guard Self.hostCanUseSparkle else {
+            state = .unavailable(Self.packagedOnlyMessage)
+            return
+        }
+
+        let driver = SparkleUpdateDriver()
+        driver.service = self
+        let updater = SPUUpdater(
+            hostBundle: .main,
+            applicationBundle: .main,
+            userDriver: driver,
+            delegate: nil
+        )
+        updater.automaticallyDownloadsUpdates = false
+        updater.sendsSystemProfile = false
+        do {
+            try updater.start()
+            updater.automaticallyChecksForUpdates = UserDefaults.standard.bool(
+                forKey: Self.automaticChecksDefaultsKey
+            )
+            self.driver = driver
+            self.updater = updater
+            if updater.automaticallyChecksForUpdates {
+                updater.checkForUpdatesInBackground()
+            }
+        } catch {
+            Self.logger.error("Sparkle failed to start: \(error.localizedDescription, privacy: .public)")
+            state = .failed(error.localizedDescription)
+            lastError = error.localizedDescription
         }
     }
 
-    private enum UpdateError: LocalizedError {
-        case invalidResponse
-        case http(Int)
-
-        var errorDescription: String? {
-            switch self {
-            case .invalidResponse: "GitHub returned an invalid update response."
-            case let .http(code): "GitHub update check failed with HTTP \(code)."
-            }
+    func setAutomaticChecksEnabled(_ enabled: Bool) {
+        start()
+        updater?.automaticallyChecksForUpdates = enabled
+        if enabled {
+            updater?.checkForUpdatesInBackground()
         }
+    }
+
+    func check() {
+        start()
+        guard let updater else { return }
+        lastError = nil
+        updater.checkForUpdates()
+    }
+
+    func download() {
+        lastError = nil
+        guard let reply = foundReply else { return }
+        foundReply = nil
+        apply(.downloadStarted)
+        reply(.install)
+    }
+
+    func install() {
+        lastError = nil
+        guard let reply = installReply else { return }
+        installReply = nil
+        willInstall?()
+        apply(.installStarted)
+        reply(.install)
+    }
+
+    func noteUserInitiatedCheck() {
+        apply(.checkStarted)
+    }
+
+    func noteUpdateAvailable(
+        version: String,
+        download: @escaping (SPUUserUpdateChoice) -> Void
+    ) {
+        foundReply = download
+        apply(.updateAvailable(version: version))
+    }
+
+    func noteDownloaded(
+        version: String,
+        install: @escaping (SPUUserUpdateChoice) -> Void
+    ) {
+        installReply = install
+        apply(.updateAvailable(version: version))
+        apply(.downloadComplete)
+    }
+
+    func noteNoUpdate() {
+        apply(.noUpdate)
+    }
+
+    func noteCheckFailed(_ message: String) {
+        lastError = message
+        apply(.checkFailed(message))
+    }
+
+    func noteUpdaterError(_ message: String) {
+        lastError = message
+        switch state {
+        case .downloading:
+            apply(.downloadFailed(message))
+        case .installing, .downloaded:
+            apply(.installFailed(message))
+        default:
+            apply(.checkFailed(message))
+        }
+    }
+
+    func noteDownloadStarted() {
+        apply(.downloadStarted)
+    }
+
+    func noteDownloadProgress(_ percent: Double) {
+        apply(.downloadProgress(percent))
+    }
+
+    func noteReadyToInstall(install: @escaping (SPUUserUpdateChoice) -> Void) {
+        installReply = install
+        apply(.downloadComplete)
+    }
+
+    func noteInstalling(install: ((SPUUserUpdateChoice) -> Void)? = nil) {
+        if let install {
+            willInstall?()
+            install(.install)
+        }
+        apply(.installStarted)
+    }
+
+    func noteSessionEnded() {
+        switch state {
+        case .available, .downloaded, .installing:
+            return
+        default:
+            foundReply = nil
+            installReply = nil
+            apply(.sessionEnded)
+        }
+    }
+
+    private func apply(_ event: UpdateEvent) {
+        state = reduceUpdateState(state, event)
     }
 }

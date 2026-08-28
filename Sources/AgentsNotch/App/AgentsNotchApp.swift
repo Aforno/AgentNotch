@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "notchEnabled": true,
             "showVirtualNotch": false,
             "hasCompletedOnboarding": false,
-            "automaticallyCheckForUpdates": false,
+            "automaticallyCheckForUpdates": true,
             "privacyModeEnabled": false,
             "answerFromNotchEnabled": false,
             "globalActivityShortcut": GlobalActivityShortcut.off.rawValue,
@@ -116,6 +116,11 @@ struct AgentsNotchApp: App {
                     appDelegate.runtime.openSettings()
                 }
                 .keyboardShortcut(",", modifiers: [.command])
+            }
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    appDelegate.runtime.updates.check()
+                }
             }
 
             CommandMenu("Agents") {

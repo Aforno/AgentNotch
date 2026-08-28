@@ -11,7 +11,7 @@ struct SettingsView: View {
     @AppStorage("historyRetentionDays") private var historyRetentionDays = 30
     @AppStorage("notchEnabled") private var notchEnabled = true
     @AppStorage("showVirtualNotch") private var showVirtualNotch = false
-    @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = false
+    @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = true
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
     @AppStorage("answerFromNotchEnabled") private var answerFromNotchEnabled = false
     @AppStorage("globalActivityShortcut") private var globalActivityShortcut = GlobalActivityShortcut.off.rawValue
@@ -37,7 +37,7 @@ struct SettingsView: View {
         .onAppear { launchAtLogin = LaunchAtLoginService.isEnabled }
         .onChange(of: historyRetentionDays) { _, days in runtime.applyHistoryRetention(days: days) }
         .onChange(of: automaticallyCheckForUpdates) { _, enabled in
-            if enabled { runtime.updates.checkAutomaticallyIfNeeded() }
+            runtime.updates.setAutomaticChecksEnabled(enabled)
         }
         .onChange(of: displayPreference) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: notchEnabled) { _, _ in runtime.refreshNotchSurface() }

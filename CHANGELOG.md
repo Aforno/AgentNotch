@@ -6,8 +6,17 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- In-app updates download and install from GitHub Releases. Check, Download,
+  then Restart to Update, the same two-step flow as T3 Code. Homebrew marks
+  the cask as self-updating.
+
 ### Changed
 
+- Update checks use the Sparkle appcast instead of opening the GitHub releases
+  page. Automatic checks default on, run at launch and once a day, and never
+  download or install until you ask.
 - Notch controls show hover and press. Waiting-prompt shortcuts activate after
   a click and remain active only while the pointer is over the prompt.
 - Primary actions pick black or white text from the system accent so light

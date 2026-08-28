@@ -39,10 +39,22 @@ AGENT_NOTCH_BUILD_NUMBER=1 ./script/package_release.sh \
   --keychain-profile agent-notch-notary
 ```
 
-The script builds the release configuration for arm64, signs nested code and
-the app with hardened runtime, verifies the bundle, notarizes and staples it,
-re-verifies Gatekeeper acceptance, and writes the ZIP plus `.sha256` file under
-`dist/`.
+The script builds the release configuration for arm64, signs nested code
+(including Sparkle) and the app with hardened runtime, verifies the bundle,
+notarizes and staples it, re-verifies Gatekeeper acceptance, and writes the ZIP
+plus `.sha256` file under `dist/`.
+
+Signed releases also publish a Sparkle `appcast.xml`. Generate it from the ZIP
+with the EdDSA private key that matches `Resources/SparklePublicEDKey`:
+
+```sh
+SPARKLE_ED_PRIVATE_KEY="$(cat /path/to/sparkle-ed-private-key)" \
+  ./script/generate_appcast.sh
+```
+
+The private key is the 32-byte EdDSA seed, base64-encoded. Never commit it. The
+appcast enclosure URL is the GitHub release asset for that ZIP. In-app updates
+read `https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml`.
 
 ## GitHub release workflow
 
@@ -54,15 +66,20 @@ The `Release` workflow requires these repository Actions secrets:
 - `APPLE_API_KEY_ID`: App Store Connect API key ID
 - `APPLE_API_ISSUER_ID`: App Store Connect issuer ID
 - `APPLE_API_PRIVATE_KEY`: complete `.p8` private-key contents
+- `SPARKLE_ED_PRIVATE_KEY`: base64 EdDSA seed that matches
+  `Resources/SparklePublicEDKey`
 
 Push a signed `vX.Y.Z` tag only after CI passes. All tags share one `release`
 concurrency group, so one GitHub release runs at a time. The workflow validates
 that the tag matches `VERSION`, imports the temporary certificate, builds and
-notarizes the app, creates the checksum, and publishes both files to the GitHub
-release. After the GitHub files are up, it points `Casks/agent-notch.rb` at
-that ZIP and checksum and pushes the cask bump to the default branch unless the
-cask already names a newer version. Homebrew users on this tap pick that up
-with `brew update`.
+notarizes the app, creates the checksum, signs a Sparkle appcast, and publishes
+the ZIP, checksum, and `appcast.xml` to the GitHub release. After the GitHub
+files are up, it points `Casks/agent-notch.rb` at that ZIP and checksum and
+pushes the cask bump to the default branch unless the cask already names a
+newer version. Homebrew users on this tap pick that up with `brew update`.
+Packaged apps check the appcast on launch and once a day, then wait for the
+user to download and restart. The cask sets `auto_updates true` so Homebrew
+does not fight the in-app updater.
 
 If the cask commit cannot push, update it locally from the published checksum:
 

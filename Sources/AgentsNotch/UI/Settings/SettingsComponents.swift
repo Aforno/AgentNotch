@@ -35,7 +35,7 @@ struct ApplicationSettingsSection: View {
             )
             SettingsToggleRow(
                 title: "App update checks",
-                detail: "Automatically check GitHub for newer Agent Notch releases.",
+                detail: "Check for Agent Notch updates in the background. Downloads and installs only when you ask.",
                 isOn: automaticallyCheckForUpdates
             )
             SettingsMenuRow(
@@ -166,7 +166,7 @@ struct SettingsUpdateControl: View {
     var body: some View {
         switch updates.state {
         case .idle:
-            Button("Check for Updates") { Task { await updates.check() } }
+            Button("Check for Updates") { updates.check() }
                 .buttonStyle(NotchPillButtonStyle())
         case .checking:
             ProgressView().controlSize(.small)
@@ -174,16 +174,39 @@ struct SettingsUpdateControl: View {
             Label("Up to date", systemImage: "checkmark.circle.fill")
                 .font(.caption)
                 .foregroundStyle(.green)
-        case .noRelease:
-            Label("No releases yet", systemImage: "shippingbox")
+        case let .available(version):
+            Button("Download \(version)") { updates.download() }
+                .buttonStyle(NotchPillButtonStyle())
+                .help(updates.lastError ?? "Download this update, then restart to install it.")
+        case let .downloading(_, percent):
+            HStack(spacing: 8) {
+                ProgressView(value: percent)
+                    .frame(width: 72)
+                    .controlSize(.small)
+                Text("\(Int((percent * 100).rounded()))%")
+                    .font(NotchWindowFont.caption)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
+                    .monospacedDigit()
+            }
+        case let .downloaded(version):
+            Button("Restart to Update") { updates.install() }
+                .buttonStyle(NotchPillButtonStyle())
+                .help(updates.lastError ?? "Install \(version) and relaunch Agent Notch.")
+        case .installing:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Installing")
+                    .font(NotchWindowFont.caption)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
+            }
+        case let .failed(message):
+            Button("Retry") { updates.check() }
+                .buttonStyle(NotchPillButtonStyle())
+                .help(message)
+        case let .unavailable(message):
+            Text("Packaged builds only")
                 .font(NotchWindowFont.caption)
                 .foregroundStyle(NotchWindowPalette.secondaryText)
-        case let .available(version):
-            Button("Download \(version)") { updates.openAvailableRelease() }
-                .buttonStyle(NotchPillButtonStyle())
-        case let .failed(message):
-            Button("Retry") { Task { await updates.check() } }
-                .buttonStyle(NotchPillButtonStyle())
                 .help(message)
         }
     }
