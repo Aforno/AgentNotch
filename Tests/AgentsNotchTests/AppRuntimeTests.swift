@@ -244,6 +244,24 @@ final class AppRuntimeTests: XCTestCase {
             "self-test traffic must not promote integration health"
         )
     }
+
+    @MainActor
+    func testCheckForUpdatesOpensGeneralSettings() {
+        let runtime = AppRuntime(monitorProviders: false)
+        var requested: SettingsPane?
+        runtime.openSettingsHandler = { requested = $0 }
+        runtime.updates.check()
+        XCTAssertEqual(requested, .general)
+    }
+
+    @MainActor
+    func testOpenSettingsWithoutPaneLeavesSelectionToTheWindow() {
+        let runtime = AppRuntime(monitorProviders: false)
+        var requested: SettingsPane? = .integrations
+        runtime.openSettingsHandler = { requested = $0 }
+        runtime.openSettings()
+        XCTAssertNil(requested)
+    }
 }
 
 private final class LockedReplyBox: @unchecked Sendable {

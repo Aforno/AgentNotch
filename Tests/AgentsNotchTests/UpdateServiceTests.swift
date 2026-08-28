@@ -1,4 +1,5 @@
 @testable import AgentsNotch
+import Sparkle
 import XCTest
 
 final class UpdateStateMachineTests: XCTestCase {
@@ -76,4 +77,149 @@ final class UpdateServiceTests: XCTestCase {
         service.install()
         XCTAssertEqual(service.state, .unavailable(UpdateService.packagedOnlyMessage))
     }
+
+    @MainActor
+    func testCheckPresentsStatusSurface() {
+        let service = UpdateService()
+        var presented = false
+        service.presentStatus = { presented = true }
+        service.check()
+        XCTAssertTrue(presented)
+        XCTAssertEqual(service.state, .unavailable(UpdateService.packagedOnlyMessage))
+    }
+
+    @MainActor
+    func testDriverTreatsLatestVersionAsUpToDate() {
+        let service = UpdateService()
+        let driver = SparkleUpdateDriver()
+        driver.service = service
+        var acknowledged = false
+        driver.showUpdateNotFoundWithError(sparkleNoUpdateError(reason: .onLatestVersion)) {
+            acknowledged = true
+        }
+        XCTAssertTrue(acknowledged)
+        XCTAssertEqual(service.state, .upToDate)
+    }
+
+    @MainActor
+    func testDriverSurfacesIneligibleUpdate() {
+        let service = UpdateService()
+        let driver = SparkleUpdateDriver()
+        driver.service = service
+        driver.showUpdateNotFoundWithError(
+            sparkleNoUpdateError(
+                reason: .systemIsTooOld,
+                recovery: "0.3.0 is available but your macOS version is too old to install it."
+            )
+        ) {}
+        XCTAssertEqual(
+            service.state,
+            .failed("0.3.0 is available but your macOS version is too old to install it.")
+        )
+        XCTAssertEqual(
+            service.lastError,
+            "0.3.0 is available but your macOS version is too old to install it."
+        )
+    }
+
+    @MainActor
+    func testShowUpdateInFocusPresentsStatusSurface() {
+        let service = UpdateService()
+        let driver = SparkleUpdateDriver()
+        driver.service = service
+        var presented = false
+        service.presentStatus = { presented = true }
+        driver.showUpdateInFocus()
+        XCTAssertTrue(presented)
+    }
+}
+
+final class SparkleNoUpdateOutcomeTests: XCTestCase {
+    func testOnLatestVersionIsCurrent() {
+        XCTAssertEqual(
+            sparkleNoUpdateOutcome(sparkleNoUpdateError(reason: .onLatestVersion)),
+            .currentVersion
+        )
+    }
+
+    func testNewerThanLatestIsCurrent() {
+        XCTAssertEqual(
+            sparkleNoUpdateOutcome(sparkleNoUpdateError(reason: .onNewerThanLatestVersion)),
+            .currentVersion
+        )
+    }
+
+    func testSystemTooOldSurfacesSparkleMessage() {
+        let error = sparkleNoUpdateError(
+            reason: .systemIsTooOld,
+            description: "No update found.",
+            recovery: "0.3.0 is available but your macOS version is too old to install it."
+        )
+        XCTAssertEqual(
+            sparkleNoUpdateOutcome(error),
+            .unavailable("0.3.0 is available but your macOS version is too old to install it.")
+        )
+    }
+
+    func testSystemTooNewSurfacesSparkleMessage() {
+        XCTAssertEqual(
+            sparkleNoUpdateOutcome(
+                sparkleNoUpdateError(
+                    reason: .systemIsTooNew,
+                    recovery: "This update only supports up to macOS 14."
+                )
+            ),
+            .unavailable("This update only supports up to macOS 14.")
+        )
+    }
+
+    func testUnknownReasonIsNotUpToDate() {
+        XCTAssertEqual(
+            sparkleNoUpdateOutcome(
+                sparkleNoUpdateError(reason: .unknown, description: "No valid update information could be loaded.")
+            ),
+            .unavailable("No valid update information could be loaded.")
+        )
+    }
+
+    func testMissingReasonIsNotUpToDate() {
+        XCTAssertEqual(
+            sparkleNoUpdateOutcome(
+                sparkleNoUpdateError(reason: nil, description: "You're up to date!")
+            ),
+            .unavailable("You're up to date!")
+        )
+    }
+
+    func testRecoverySuggestionBeatsDescription() {
+        XCTAssertEqual(
+            sparkleNoUpdateOutcome(
+                sparkleNoUpdateError(
+                    reason: .hardwareDoesNotSupportARM64,
+                    description: "Update Error!",
+                    recovery: "0.3.0 is available but this update requires a new Apple silicon Mac."
+                )
+            ),
+            .unavailable("0.3.0 is available but this update requires a new Apple silicon Mac.")
+        )
+    }
+}
+
+private func sparkleNoUpdateError(
+    reason: SPUNoUpdateFoundReason?,
+    description: String = "No update available.",
+    recovery: String? = nil
+) -> NSError {
+    var userInfo: [String: Any] = [NSLocalizedDescriptionKey: description]
+    if let reason {
+        userInfo[SPUNoUpdateFoundReasonKey] = NSNumber(value: reason.rawValue)
+    }
+    if let recovery {
+        userInfo[NSLocalizedRecoverySuggestionErrorKey] = recovery
+    }
+    return NSError(
+        domain: SUSparkleErrorDomain,
+        code: Int(SUError.noUpdateError.rawValue),
+        userInfo: userInfo
+    )
 }

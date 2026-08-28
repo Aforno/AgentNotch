@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let runtime: AppRuntime
+    @Bindable var presentation: SettingsPresentation
 
     @AppStorage("animationsEnabled") private var animationsEnabled = true
     @AppStorage("displayPreference") private var displayPreference = DisplayPreference.primary.rawValue
@@ -22,11 +23,10 @@ struct SettingsView: View {
     @State private var launchError: String?
     @State private var notificationError: String?
     @State private var confirmsClearHistory = false
-    @State private var pane = SettingsPane.general
 
     var body: some View {
         VStack(spacing: 0) {
-            SettingsPaneSelector(selection: $pane)
+            SettingsPaneSelector(selection: $presentation.pane)
             NotchHairline()
             selectedPane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -58,7 +58,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var selectedPane: some View {
-        switch pane {
+        switch presentation.pane {
         case .general:
             GeneralSettingsPane(
                 runtime: runtime,
@@ -139,6 +139,12 @@ struct SettingsView: View {
         )
     }
     #endif
+}
+
+@Observable
+@MainActor
+final class SettingsPresentation {
+    var pane = SettingsPane.general
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {

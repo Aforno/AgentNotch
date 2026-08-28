@@ -36,7 +36,12 @@ let package = Package(
         ),
         .testTarget(
             name: "AgentsNotchTests",
-            dependencies: ["AgentsNotchCore", "AgentsNotch", "AgentsNotchHook"],
+            dependencies: [
+                "AgentsNotchCore",
+                "AgentsNotch",
+                "AgentsNotchHook",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

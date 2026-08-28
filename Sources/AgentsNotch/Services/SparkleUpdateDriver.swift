@@ -53,7 +53,12 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
 
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
-        service?.noteNoUpdate()
+        switch sparkleNoUpdateOutcome(error) {
+        case .currentVersion:
+            service?.noteNoUpdate()
+        case let .unavailable(message):
+            service?.noteCheckFailed(message)
+        }
         acknowledgement()
     }
 
@@ -110,11 +115,56 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
         service?.noteSessionEnded()
     }
 
-    func showUpdateInFocus() {}
+    func showUpdateInFocus() {
+        service?.presentStatusSurface()
+    }
 
     private func reportDownloadProgress() {
         guard expectedContentLength > 0 else { return }
         let percent = Double(receivedContentLength) / Double(expectedContentLength)
         service?.noteDownloadProgress(percent)
     }
+}
+
+enum SparkleNoUpdateOutcome: Equatable {
+    case currentVersion
+    case unavailable(String)
+}
+
+/// Sparkle's "no update" callback is not "you are on the latest version".
+/// An update may exist and still be ineligible (older macOS, Intel Mac, etc.).
+func sparkleNoUpdateOutcome(_ error: Error) -> SparkleNoUpdateOutcome {
+    let nsError = error as NSError
+    if let reason = sparkleNoUpdateReason(from: nsError) {
+        switch reason {
+        case .onLatestVersion, .onNewerThanLatestVersion:
+            return .currentVersion
+        case .unknown, .systemIsTooOld, .systemIsTooNew, .hardwareDoesNotSupportARM64:
+            return .unavailable(sparklePresentedMessage(nsError))
+        @unknown default:
+            return .unavailable(sparklePresentedMessage(nsError))
+        }
+    }
+    return .unavailable(sparklePresentedMessage(nsError))
+}
+
+private func sparkleNoUpdateReason(from error: NSError) -> SPUNoUpdateFoundReason? {
+    let value = error.userInfo[SPUNoUpdateFoundReasonKey]
+    if let reason = value as? SPUNoUpdateFoundReason {
+        return reason
+    }
+    if let number = value as? NSNumber {
+        return SPUNoUpdateFoundReason(rawValue: number.int32Value)
+    }
+    return nil
+}
+
+private func sparklePresentedMessage(_ error: NSError) -> String {
+    let suggestion = error.localizedRecoverySuggestion?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    if let suggestion, !suggestion.isEmpty {
+        return suggestion
+    }
+    let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+    return description.isEmpty ? "A new update is not available." : description
 }

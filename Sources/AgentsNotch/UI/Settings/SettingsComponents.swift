@@ -203,6 +203,7 @@ struct SettingsUpdateControl: View {
             Button("Retry") { updates.check() }
                 .buttonStyle(NotchPillButtonStyle())
                 .help(message)
+                .accessibilityHint(message)
         case let .unavailable(message):
             Text("Packaged builds only")
                 .font(NotchWindowFont.caption)

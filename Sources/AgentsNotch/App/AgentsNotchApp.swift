@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runtime.panelController = panel
         runtime.openActivityCenterHandler = { [weak self] in self?.showActivityCenter() }
         runtime.openOnboardingHandler = { [weak self] in self?.showOnboarding() }
-        runtime.openSettingsHandler = { [weak self] in self?.showSettings() }
+        runtime.openSettingsHandler = { [weak self] pane in self?.showSettings(pane: pane) }
         let shortcutController = GlobalActivityShortcutController { [weak self] in
             self?.runtime.openActivityCenter()
         }
@@ -91,11 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.show()
     }
 
-    private func showSettings() {
+    private func showSettings(pane: SettingsPane? = nil) {
         let controller = settingsWindowController ?? SettingsWindowController(runtime: runtime)
         controller.onClose = { [weak self] in self?.settingsWindowController = nil }
         settingsWindowController = controller
-        controller.show()
+        controller.show(pane: pane)
     }
 }
 

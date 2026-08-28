@@ -24,6 +24,12 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Retry after a Sparkle startup failure starts the updater again instead of
+  doing nothing until relaunch.
+- An ineligible update (newer macOS required, and similar Sparkle reasons) no
+  longer shows as "Up to date".
+- Check for Updates from the app menu opens Settings → General so the result
+  is visible.
 - Long project names in the agent row truncate instead of overflowing the
   status indicator.
 - Thread-detail scroll fade clears when the scroller is at the bottom.

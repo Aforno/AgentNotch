@@ -14,6 +14,8 @@ final class UpdateService {
 
     /// Called just before Sparkle quits the process to swap in the new app.
     var willInstall: (() -> Void)?
+    /// Opens Settings → General so a user-initiated check has a visible result.
+    var presentStatus: (() -> Void)?
 
     private var updater: SPUUpdater?
     private var driver: SparkleUpdateDriver?
@@ -39,8 +41,8 @@ final class UpdateService {
 
     func start() {
         guard !started else { return }
-        started = true
         guard Self.hostCanUseSparkle else {
+            started = true
             state = .unavailable(Self.packagedOnlyMessage)
             return
         }
@@ -57,6 +59,8 @@ final class UpdateService {
         updater.sendsSystemProfile = false
         do {
             try updater.start()
+            // Only latch after Sparkle accepts the session so Retry can start() again.
+            started = true
             updater.automaticallyChecksForUpdates = UserDefaults.standard.bool(
                 forKey: Self.automaticChecksDefaultsKey
             )
@@ -81,10 +85,15 @@ final class UpdateService {
     }
 
     func check() {
+        presentStatusSurface()
         start()
         guard let updater else { return }
         lastError = nil
         updater.checkForUpdates()
+    }
+
+    func presentStatusSurface() {
+        presentStatus?()
     }
 
     func download() {
