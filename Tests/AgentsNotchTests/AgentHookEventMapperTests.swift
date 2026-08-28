@@ -446,6 +446,24 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.activity, "Tool failed: Tests failed")
     }
 
+    func testSessionStartUsesMainRepositoryNameForGitWorktrees() throws {
+        let fixture = try LinkedGitWorktree.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let payload = try decode("""
+        {
+          "session_id": "worktree-session",
+          "cwd": "\(fixture.worktree.path)",
+          "hook_event_name": "SessionStart"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
+        XCTAssertEqual(event.type, .started)
+        XCTAssertEqual(event.task, "AgentNotch")
+        XCTAssertEqual(event.workingDirectory, fixture.worktree.path)
+    }
+
     func testGrokSessionStartWithoutAgentTurnIsIgnored() throws {
         let payload = try decode("""
         {

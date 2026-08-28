@@ -357,6 +357,30 @@ final class ActivityCenterProjectionTests: XCTestCase {
         XCTAssertNil(projection.groupID(containing: child.id))
     }
 
+    func testWorktreeSessionsUseMainRepositoryProjectTitle() throws {
+        let fixture = try LinkedGitWorktree.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let now = Date(timeIntervalSince1970: 70_000)
+        let session = makeSession(
+            id: "codex:worktree",
+            task: "Fix project identity",
+            timestamp: now,
+            directory: fixture.worktree.path
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [session],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(projection.availableProjects.map(\.title), ["AgentNotch"])
+        XCTAssertEqual(projection.projectGroups.map(\.title), ["AgentNotch"])
+    }
+
     private func makeSession(
         id: String,
         task: String,

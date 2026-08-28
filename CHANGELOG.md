@@ -30,6 +30,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   longer shows as "Up to date".
 - Check for Updates from the app menu opens Settings → General so the result
   is visible.
+- Completed sessions can remain in Activity Center for three or seven days,
+  but never longer than seven.
+- Git worktrees show the main repository as the project, not the worktree
+  folder.
 - Long project names in the agent row truncate instead of overflowing the
   status indicator.
 - Thread-detail scroll fade clears when the scroller is at the bottom.

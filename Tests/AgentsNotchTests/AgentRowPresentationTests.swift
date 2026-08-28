@@ -166,6 +166,27 @@ final class AgentRowPresentationTests: XCTestCase {
         )
     }
 
+    func testProjectChipUsesMainRepositoryNameForGitWorktrees() throws {
+        let fixture = try LinkedGitWorktree.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let session = session(
+            id: "root",
+            state: .running,
+            task: "Fix authentication",
+            workingDirectory: fixture.worktree.path
+        )
+
+        XCTAssertEqual(
+            AgentRowPresentation.projectChip(for: session, privacyModeEnabled: false),
+            "AgentNotch"
+        )
+        XCTAssertEqual(
+            AgentRowPresentation.taskTitle(for: session, privacyModeEnabled: false),
+            "Fix authentication"
+        )
+    }
+
     func testProjectChipIsOmittedWhenItWouldRepeatTheTitle() {
         let noTask = session(id: "a", state: .running, workingDirectory: "/Users/me/AgentNotch")
         let taskOnly = session(id: "b", state: .running, task: "Fix authentication")

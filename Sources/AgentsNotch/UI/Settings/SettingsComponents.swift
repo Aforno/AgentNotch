@@ -135,10 +135,8 @@ struct HistorySettingsSection: View {
                 detail: "How long finished sessions remain in Activity Center.",
                 selection: retentionDays,
                 options: [
+                    (3, "3 days"),
                     (7, "7 days"),
-                    (30, "30 days"),
-                    (90, "90 days"),
-                    (365, "1 year"),
                 ]
             )
             SettingsControlRow(

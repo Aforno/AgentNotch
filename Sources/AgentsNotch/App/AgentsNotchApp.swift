@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "attentionNotificationsEnabled": false,
             "attentionNotificationSoundEnabled": false,
             "failureNotificationsEnabled": false,
-            "historyRetentionDays": 30,
+            "historyRetentionDays": SessionHistoryPolicy.maximumCompletedSessionRetentionDays,
             "notchEnabled": true,
             "showVirtualNotch": false,
             "hasCompletedOnboarding": false,

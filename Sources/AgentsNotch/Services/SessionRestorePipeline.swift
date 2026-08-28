@@ -100,8 +100,9 @@ enum SessionRestorePipeline {
         activity: AgentActivityService,
         historyRetentionDays: () -> Int?
     ) {
-        guard let configuredDays = historyRetentionDays(), configuredDays > 0 else { return }
-        let days = max(1, configuredDays)
-        activity.pruneCompleted(olderThan: TimeInterval(days * 24 * 60 * 60))
+        guard let age = SessionHistoryPolicy.completedSessionRetentionAge(
+            configuredDays: historyRetentionDays()
+        ) else { return }
+        activity.pruneCompleted(olderThan: age)
     }
 }

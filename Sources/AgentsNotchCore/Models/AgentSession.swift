@@ -10,6 +10,9 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var updatedAt: Date
     public var completedAt: Date?
     public var workingDirectory: String?
+    /// Display name for the working copy. Linked git worktrees keep the main
+    /// repository name even after their on-disk metadata is removed.
+    public private(set) var projectName: String?
     public var recentFiles: [String]
     public var recentEvents: [AgentEvent]
     public var applicationURL: URL?
@@ -28,12 +31,11 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public init(event: AgentEvent) {
         id = event.sessionId
         provider = event.provider
+        let initialProjectName = Self.projectName(from: event.workingDirectory)
         task = Self.resolvedTask(
             current: AgentTaskTitle.untitled,
             event: event,
-            projectName: event.workingDirectory.flatMap {
-                URL(fileURLWithPath: $0).lastPathComponent.nonEmpty
-            }
+            projectName: initialProjectName
         )
         currentActivity = event.activity?.nonEmpty ?? event.resolvedState.displayName
         state = event.resolvedState
@@ -41,6 +43,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         updatedAt = event.timestamp
         completedAt = state == .completed || state == .failed ? event.timestamp : nil
         workingDirectory = event.workingDirectory?.nonEmpty
+        projectName = initialProjectName
         recentFiles = event.file?.nonEmpty.map { [$0] } ?? []
         recentEvents = [event]
         applicationURL = event.applicationURL
@@ -186,7 +189,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 
     private mutating func applyAdvancingEvent(_ event: AgentEvent) {
         provider = event.provider
-        applyTask(from: event)
+        let eventProjectName = resolvedProjectName(for: event.workingDirectory)
+        applyTask(from: event, projectName: eventProjectName)
         if let activity = event.activity?.nonEmpty { currentActivity = activity }
         state = event.resolvedState
         // Keep session clocks monotonic when an older terminal overrides active.
@@ -195,6 +199,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         // wipe a previously stored absolute path.
         if let directory = event.workingDirectory?.nonEmpty {
             workingDirectory = directory
+            projectName = eventProjectName
         }
         applicationURL = event.applicationURL ?? applicationURL
         mergeRelationshipContext(from: event)
@@ -221,8 +226,12 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         // Non-advancing events may still carry relationship context discovered
         // during reconciliation. Merge it without changing state or recency.
         mergeRelationshipContext(from: event)
+        let eventProjectName = resolvedProjectName(for: event.workingDirectory)
         if let directory = event.workingDirectory?.nonEmpty {
-            workingDirectory = workingDirectory ?? directory
+            if workingDirectory == nil {
+                workingDirectory = directory
+                projectName = eventProjectName
+            }
         }
         applicationURL = applicationURL ?? event.applicationURL
         // Plan/workflow only at equal-or-newer timestamps so a reordered stale
@@ -231,7 +240,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             mergePlan(from: event)
             applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         }
-        applyTask(from: event)
+        applyTask(from: event, projectName: eventProjectName)
         if event.resolvedState == .waitingForUser, let pending = event.pendingReply {
             mergePendingReply(pending)
         }
@@ -259,13 +268,11 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         pendingReply = pendingReplies.last
     }
 
-    private mutating func applyTask(from event: AgentEvent) {
+    private mutating func applyTask(from event: AgentEvent, projectName: String?) {
         task = Self.resolvedTask(
             current: task,
             event: event,
-            projectName: workingDirectory.flatMap {
-                URL(fileURLWithPath: $0).lastPathComponent.nonEmpty
-            }
+            projectName: projectName
         )
     }
 
@@ -284,6 +291,22 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             incoming: event.task,
             projectName: projectName
         )
+    }
+
+    private static func projectName(from directory: String?) -> String? {
+        directory.flatMap(ProjectIdentity.name(fromWorkingDirectory:))
+    }
+
+    /// Reuse the stored name while an event remains in the same working copy.
+    /// Worktree metadata is often deleted before its completed session expires.
+    private func resolvedProjectName(for eventDirectory: String?) -> String? {
+        guard let directory = eventDirectory?.nonEmpty ?? workingDirectory else {
+            return projectName
+        }
+        if directory == workingDirectory, let projectName {
+            return projectName
+        }
+        return Self.projectName(from: directory)
     }
 
     private mutating func mergeRelationshipContext(from event: AgentEvent) {
@@ -467,7 +490,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, provider, task, currentActivity, state, startedAt, updatedAt, completedAt
-        case workingDirectory, recentFiles, recentEvents, applicationURL, origin
+        case workingDirectory, projectName, recentFiles, recentEvents, applicationURL, origin
         case parentSessionId, agentRole, plan, workflows, pendingReply, pendingReplies
         case hasOfficialSessionTitle, isInternalHelper
     }
@@ -486,6 +509,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         updatedAt = try values.decode(Date.self, forKey: .updatedAt)
         completedAt = try values.decodeIfPresent(Date.self, forKey: .completedAt)
         workingDirectory = try values.decodeIfPresent(String.self, forKey: .workingDirectory)
+        projectName = try values.decodeIfPresent(String.self, forKey: .projectName)?.nonEmpty
+            ?? Self.projectName(from: workingDirectory)
         recentFiles = Array(try values.decode([String].self, forKey: .recentFiles).prefix(6))
         recentEvents = Array(
             try values.decode([AgentEvent].self, forKey: .recentEvents)
