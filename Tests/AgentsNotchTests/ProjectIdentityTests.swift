@@ -118,4 +118,54 @@ final class ProjectIdentityTests: XCTestCase {
         XCTAssertEqual(session.task, "Fix worktree project names")
         XCTAssertEqual(session.projectName, "AgentNotch")
     }
+
+    func testSessionPersistsRepositoryNameAfterWorktreeRemoval() throws {
+        let fixture = try LinkedGitWorktree.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let session = AgentSession(event: AgentEvent(
+            type: .completed,
+            sessionId: "codex:removed-worktree",
+            provider: .codex,
+            task: "Fix worktree project names",
+            state: .completed,
+            workingDirectory: fixture.worktree.path
+        ))
+        let data = try JSONEncoder().encode(session)
+
+        try FileManager.default.removeItem(at: fixture.root)
+
+        var restored = try JSONDecoder().decode(AgentSession.self, from: data)
+        XCTAssertEqual(restored.projectName, "AgentNotch")
+
+        restored.apply(AgentEvent(
+            type: .completed,
+            sessionId: restored.id,
+            provider: .codex,
+            state: .completed,
+            timestamp: restored.updatedAt.addingTimeInterval(1),
+            workingDirectory: fixture.worktree.path
+        ))
+        XCTAssertEqual(restored.projectName, "AgentNotch")
+    }
+
+    func testLegacySessionDerivesMissingProjectName() throws {
+        let session = AgentSession(event: AgentEvent(
+            type: .completed,
+            sessionId: "codex:legacy",
+            provider: .codex,
+            task: "Legacy session",
+            state: .completed,
+            workingDirectory: "/Users/me/AgentNotch"
+        ))
+        let data = try JSONEncoder().encode(session)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object.removeValue(forKey: "projectName")
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let restored = try JSONDecoder().decode(AgentSession.self, from: legacyData)
+
+        XCTAssertEqual(restored.projectName, "AgentNotch")
+    }
 }
