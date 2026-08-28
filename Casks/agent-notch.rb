@@ -9,19 +9,10 @@ cask "agent-notch" do
 
   livecheck do
     url :url
-    regex(/^v?(\d+(?:\.\d+)+)$/i)
-    strategy :github_releases do |json, regex|
-      json.map do |release|
-        next if release["draft"]
-
-        match = release["tag_name"]&.match(regex)
-        next if match.blank?
-
-        match[1]
-      end
-    end
+    strategy :github_latest
   end
 
+  auto_updates true
   depends_on macos: :sonoma
   depends_on arch: :arm64
 

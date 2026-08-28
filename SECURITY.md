@@ -56,6 +56,10 @@ It modifies only its own entries in supported provider hook configuration.
   source, or send analytics or telemetry. The one Codex exception is a
   fail-open 4 MiB tail read used only to decide whether a PermissionRequest
   is waiting on a person; missing context stays visible.
+- Update checks fetch only the GitHub Releases Sparkle appcast. The ZIP is
+  downloaded after the user chooses Download. Sparkle verifies the EdDSA
+  signature against the baked-in public key and the Developer ID signature
+  before replacing the running app. System profile data is not sent.
 - Integration changes are atomic and idempotent, preserve unrelated settings,
   preserve restrictive file permissions and symlinked dotfiles, and remove
   only Agent Notch entries.

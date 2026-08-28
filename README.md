@@ -27,8 +27,10 @@ brew install --cask aforno/agentnotch/agent-notch
 Homebrew 6 does not trust a third-party tap when you add it. The fully
 qualified name trusts only this cask.
 
-Later cask bumps land on `main`. Update with `brew update` and
-`brew upgrade --cask aforno/agentnotch/agent-notch`.
+Later cask bumps land on `main`. Packaged builds also update themselves:
+Settings → General → Check for Updates, then Download, then Restart to Update.
+Homebrew knows the app self-updates (`auto_updates true`). `brew upgrade --cask`
+is still available if you prefer it.
 
 ### Manual
 
@@ -250,9 +252,10 @@ waiting sessions stay waiting. Other actives enter a short `unknown`
 (Reconnecting) grace period until a live hook arrives or the grace expires.
 
 Session history stays on the machine. No analytics, no source upload, no remote
-telemetry. If update checking is on, the app makes an HTTPS request to GitHub
-Releases at most once a day. Manual checks use the same endpoint. Notifications
-are opt-in and delivered by macOS.
+telemetry. If update checking is on, the app fetches the Sparkle appcast from
+GitHub Releases at launch and at most once a day. Choosing Download fetches
+that release ZIP. Sparkle verifies the EdDSA signature and Developer ID before
+replacing the app. Notifications are opt-in and delivered by macOS.
 
 ## Remove Agent Notch
 
@@ -282,8 +285,8 @@ swift test -c release
 
 The ad-hoc package checks release configuration and bundle structure. Do not
 distribute it. Maintainers follow [`docs/RELEASING.md`](docs/RELEASING.md) for
-Developer ID signing, notarization, stapling, checksums, and GitHub release
-automation.
+Developer ID signing, notarization, stapling, checksums, Sparkle appcast
+signing, and GitHub release automation.
 
 ## Security and contributing
 

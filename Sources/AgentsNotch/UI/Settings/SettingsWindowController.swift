@@ -4,9 +4,10 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
+    private let presentation = SettingsPresentation()
 
     init(runtime: AppRuntime) {
-        let root = SettingsView(runtime: runtime)
+        let root = SettingsView(runtime: runtime, presentation: presentation)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 580, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -36,7 +37,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func show() {
+    func show(pane: SettingsPane? = nil) {
+        if let pane {
+            presentation.pane = pane
+        }
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)

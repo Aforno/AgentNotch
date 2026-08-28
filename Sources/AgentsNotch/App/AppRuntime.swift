@@ -26,7 +26,7 @@ final class AppRuntime {
     private(set) var activitySearchRequest: UInt64 = 0
     var openActivityCenterHandler: (() -> Void)?
     var openOnboardingHandler: (() -> Void)?
-    var openSettingsHandler: (() -> Void)?
+    var openSettingsHandler: ((SettingsPane?) -> Void)?
     var updateGlobalShortcutHandler: ((String) -> Void)?
     weak var panelController: NotchPanelController?
 
@@ -124,6 +124,12 @@ final class AppRuntime {
         #if DEBUG
         simulator = DebugEventSimulator(activity: activity)
         #endif
+        updates.willInstall = { [weak self] in
+            self?.stop()
+        }
+        updates.presentStatus = { [weak self] in
+            self?.openSettings(pane: .general)
+        }
         notifications.onOpenSession = { [weak self] sessionID in
             self?.presentSession(sessionID)
         }
@@ -138,7 +144,7 @@ final class AppRuntime {
         guard await restorePersistedState(generation: generation) else { return }
         completeRestoration(generation: generation)
         guard await startProviderMonitoring(generation: generation) else { return }
-        updates.checkAutomaticallyIfNeeded()
+        updates.start()
     }
 
     private func beginStartup() -> Int? {
@@ -590,8 +596,8 @@ final class AppRuntime {
         openOnboardingHandler?()
     }
 
-    func openSettings() {
-        openSettingsHandler?()
+    func openSettings(pane: SettingsPane? = nil) {
+        openSettingsHandler?(pane)
     }
 
     func updateGlobalShortcut(_ rawValue: String) {

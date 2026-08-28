@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let runtime: AppRuntime
+    @Bindable var presentation: SettingsPresentation
 
     @AppStorage("animationsEnabled") private var animationsEnabled = true
     @AppStorage("displayPreference") private var displayPreference = DisplayPreference.primary.rawValue
@@ -11,7 +12,7 @@ struct SettingsView: View {
     @AppStorage("historyRetentionDays") private var historyRetentionDays = 7
     @AppStorage("notchEnabled") private var notchEnabled = true
     @AppStorage("showVirtualNotch") private var showVirtualNotch = false
-    @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = false
+    @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = true
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
     @AppStorage("answerFromNotchEnabled") private var answerFromNotchEnabled = false
     @AppStorage("globalActivityShortcut") private var globalActivityShortcut = GlobalActivityShortcut.off.rawValue
@@ -22,11 +23,10 @@ struct SettingsView: View {
     @State private var launchError: String?
     @State private var notificationError: String?
     @State private var confirmsClearHistory = false
-    @State private var pane = SettingsPane.general
 
     var body: some View {
         VStack(spacing: 0) {
-            SettingsPaneSelector(selection: $pane)
+            SettingsPaneSelector(selection: $presentation.pane)
             NotchHairline()
             selectedPane
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -42,7 +42,7 @@ struct SettingsView: View {
         }
         .onChange(of: historyRetentionDays) { _, days in runtime.applyHistoryRetention(days: days) }
         .onChange(of: automaticallyCheckForUpdates) { _, enabled in
-            if enabled { runtime.updates.checkAutomaticallyIfNeeded() }
+            runtime.updates.setAutomaticChecksEnabled(enabled)
         }
         .onChange(of: displayPreference) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: notchEnabled) { _, _ in runtime.refreshNotchSurface() }
@@ -63,7 +63,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var selectedPane: some View {
-        switch pane {
+        switch presentation.pane {
         case .general:
             GeneralSettingsPane(
                 runtime: runtime,
@@ -144,6 +144,12 @@ struct SettingsView: View {
         )
     }
     #endif
+}
+
+@Observable
+@MainActor
+final class SettingsPresentation {
+    var pane = SettingsPane.general
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
