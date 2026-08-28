@@ -31,9 +31,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         task = Self.resolvedTask(
             current: AgentTaskTitle.untitled,
             event: event,
-            projectName: event.workingDirectory.flatMap {
-                URL(fileURLWithPath: $0).lastPathComponent.nonEmpty
-            }
+            projectName: Self.projectName(from: event.workingDirectory)
         )
         currentActivity = event.activity?.nonEmpty ?? event.resolvedState.displayName
         state = event.resolvedState
@@ -61,6 +59,12 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var isActive: Bool { state.isActive }
     public var needsAttention: Bool { state.needsAttention }
     public var isSubagent: Bool { parentSessionId != nil }
+
+    /// Display name for the working copy. Linked git worktrees use the main
+    /// repository folder, not the worktree folder.
+    public var projectName: String? {
+        Self.projectName(from: workingDirectory)
+    }
 
     /// Ring-buffer size for per-session event history. The Activity Center
     /// timeline renders from this list, so it bounds how far back the timeline
@@ -263,9 +267,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         task = Self.resolvedTask(
             current: task,
             event: event,
-            projectName: workingDirectory.flatMap {
-                URL(fileURLWithPath: $0).lastPathComponent.nonEmpty
-            }
+            projectName: Self.projectName(from: event.workingDirectory?.nonEmpty ?? workingDirectory)
         )
     }
 
@@ -284,6 +286,10 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             incoming: event.task,
             projectName: projectName
         )
+    }
+
+    private static func projectName(from directory: String?) -> String? {
+        directory.flatMap(ProjectIdentity.name(fromWorkingDirectory:))
     }
 
     private mutating func mergeRelationshipContext(from event: AgentEvent) {

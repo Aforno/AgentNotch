@@ -127,7 +127,7 @@ final class ActivityCenterProjection {
         })
         let projectTitles = Dictionary(grouping: sessions, by: { projectKeyBySessionID[$0.id] ?? "provider:\($0.provider.rawValue)" })
             .mapValues { candidates in
-                candidates.compactMap(\.workingDirectory).first.map { URL(fileURLWithPath: $0).lastPathComponent }
+                candidates.compactMap(\.projectName).first
                     ?? candidates.first?.provider.displayName ?? "Unknown project"
             }
         let projectOptions: [ActivityProjectOption] = projectTitles.map {

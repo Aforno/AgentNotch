@@ -15,6 +15,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Git worktrees show the main repository as the project, not the worktree
+  folder.
 - Long project names in the agent row truncate instead of overflowing the
   status indicator.
 - Thread-detail scroll fade clears when the scroller is at the bottom.

@@ -263,9 +263,7 @@ private struct ActiveAgentCountView: View {
 enum AgentRowPresentation {
     static let maximumVisibleSteps = 6
     static func projectName(for session: AgentSession) -> String? {
-        session.workingDirectory
-            .map { URL(fileURLWithPath: $0).lastPathComponent }
-            .flatMap { $0.isEmpty ? nil : $0 }
+        session.projectName
     }
 
     static func formattedRole(_ role: String?) -> String {

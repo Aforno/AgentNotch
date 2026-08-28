@@ -214,7 +214,7 @@ public enum AgentHookEventMapper {
         ) else { return nil }
         return context.event(
             type: .started,
-            task: repositoryName(from: payload.cwd, provider: context.provider),
+            task: repositoryName(from: context.workingDirectory, provider: context.provider),
             activity: "Session started",
             state: .starting
         )
@@ -319,8 +319,9 @@ public enum AgentHookEventMapper {
         return ProviderEventPolicy.concise(message, limit: 90)
     }
 
-    private static func repositoryName(from cwd: String, provider: AgentProvider) -> String {
-        URL(fileURLWithPath: cwd).lastPathComponent.nonEmpty ?? "\(provider.displayName) session"
+    private static func repositoryName(from cwd: String?, provider: AgentProvider) -> String {
+        cwd.flatMap(ProjectIdentity.name(fromWorkingDirectory:))
+            ?? "\(provider.displayName) session"
     }
 
     private static func visiblePrompt(_ prompt: String, provider: AgentProvider) -> String {
