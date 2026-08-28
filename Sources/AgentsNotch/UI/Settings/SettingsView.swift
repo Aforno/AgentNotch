@@ -8,7 +8,7 @@ struct SettingsView: View {
     @AppStorage("attentionNotificationsEnabled") private var attentionNotificationsEnabled = false
     @AppStorage("attentionNotificationSoundEnabled") private var attentionNotificationSoundEnabled = false
     @AppStorage("failureNotificationsEnabled") private var failureNotificationsEnabled = false
-    @AppStorage("historyRetentionDays") private var historyRetentionDays = 30
+    @AppStorage("historyRetentionDays") private var historyRetentionDays = 7
     @AppStorage("notchEnabled") private var notchEnabled = true
     @AppStorage("showVirtualNotch") private var showVirtualNotch = false
     @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = false
@@ -34,7 +34,12 @@ struct SettingsView: View {
         .foregroundStyle(NotchWindowPalette.primaryText)
         .frame(minWidth: 520, idealWidth: 580, minHeight: 480, idealHeight: 560)
         .deepBlackWindowSurface()
-        .onAppear { launchAtLogin = LaunchAtLoginService.isEnabled }
+        .onAppear {
+            launchAtLogin = LaunchAtLoginService.isEnabled
+            if historyRetentionDays != 3, historyRetentionDays != 7 {
+                historyRetentionDays = 7
+            }
+        }
         .onChange(of: historyRetentionDays) { _, days in runtime.applyHistoryRetention(days: days) }
         .onChange(of: automaticallyCheckForUpdates) { _, enabled in
             if enabled { runtime.updates.checkAutomaticallyIfNeeded() }

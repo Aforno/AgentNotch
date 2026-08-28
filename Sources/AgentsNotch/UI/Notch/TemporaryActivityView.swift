@@ -49,9 +49,9 @@ struct TemporaryActivityView: View {
     }
 
     private var projectName: String {
-        guard let directory = session.workingDirectory else {
+        guard let project = session.projectName else {
             return privacyModeEnabled ? session.provider.displayName : session.task
         }
-        return URL(fileURLWithPath: directory).lastPathComponent
+        return project
     }
 }

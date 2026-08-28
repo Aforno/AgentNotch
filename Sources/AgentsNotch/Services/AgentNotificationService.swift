@@ -147,9 +147,6 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     }
 
     private func projectName(for session: AgentSession) -> String {
-        if let directory = session.workingDirectory {
-            return URL(fileURLWithPath: directory).lastPathComponent
-        }
-        return session.task
+        session.projectName ?? session.task
     }
 }

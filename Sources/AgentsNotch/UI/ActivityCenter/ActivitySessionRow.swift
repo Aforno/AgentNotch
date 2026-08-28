@@ -85,7 +85,7 @@ struct ActivitySessionRow: View {
     }
 
     private var rowDetail: String {
-        let project = session.workingDirectory.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let project = session.projectName
         return [project, session.currentActivity].compactMap { $0 }.joined(separator: " · ")
     }
 }

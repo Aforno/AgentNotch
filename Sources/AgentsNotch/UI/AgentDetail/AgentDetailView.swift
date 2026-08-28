@@ -76,8 +76,8 @@ struct AgentDetailView: View {
                         .lineLimit(2)
                 }
 
-                if let directory = session.workingDirectory {
-                    Label(URL(fileURLWithPath: directory).lastPathComponent, systemImage: "folder")
+                if let project = session.projectName {
+                    Label(project, systemImage: "folder")
                         .font(NotchWindowFont.control)
                         .foregroundStyle(NotchWindowPalette.tertiaryText)
                         .lineLimit(1)

@@ -181,10 +181,7 @@ struct WaitingReplyView: View {
     }
 
     private var projectName: String {
-        guard let directory = session.workingDirectory else {
-            return session.task
-        }
-        return URL(fileURLWithPath: directory).lastPathComponent
+        return session.projectName ?? session.task
     }
 }
 

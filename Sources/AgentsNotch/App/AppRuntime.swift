@@ -46,6 +46,7 @@ final class AppRuntime {
     private var replyServer: UnixReplyServer?
     /// Completes sessions still in `.unknown` when no live hook confirms them.
     private var unknownGraceTask: Task<Void, Never>?
+    private var historyPruneTask: Task<Void, Never>?
     private var socketRetryTask: Task<Void, Never>?
     private var replyRetryTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
@@ -399,6 +400,7 @@ final class AppRuntime {
         guard isCurrentLifecycle(generation) else { return }
         activity.onSessionsChanged = { [weak self] _ in
             self?.schedulePersist()
+            self?.scheduleHistoryPrune()
         }
         isRestoring = false
         let bufferedEvents = startupEvents
@@ -407,6 +409,7 @@ final class AppRuntime {
             process(event, notify: false)
         }
         scheduleUnknownSessionGracePeriod(generation: generation)
+        scheduleHistoryPrune()
     }
 
     private func startProviderMonitoring(generation: Int) async -> Bool {
@@ -430,6 +433,8 @@ final class AppRuntime {
         activity.onSessionsChanged = nil
         unknownGraceTask?.cancel()
         unknownGraceTask = nil
+        historyPruneTask?.cancel()
+        historyPruneTask = nil
         persistScheduler.cancelPending()
         if persistScheduler.writesAllowed {
             do {
@@ -560,8 +565,11 @@ final class AppRuntime {
     }
 
     func applyHistoryRetention(days: Int) {
-        guard days > 0 else { return }
-        activity.pruneCompleted(olderThan: TimeInterval(days * 24 * 60 * 60))
+        guard let age = SessionHistoryPolicy.completedSessionRetentionAge(
+            configuredDays: days
+        ) else { return }
+        activity.pruneCompleted(olderThan: age)
+        scheduleHistoryPrune()
     }
 
     func refreshNotchSurface() {
@@ -569,6 +577,7 @@ final class AppRuntime {
     }
 
     func openActivityCenter() {
+        pruneHistory()
         openActivityCenterHandler?()
     }
 
@@ -590,9 +599,33 @@ final class AppRuntime {
     }
 
     private func pruneHistory() {
-        guard let configuredDays = historyRetentionDays(), configuredDays > 0 else { return }
-        let days = max(1, configuredDays)
-        activity.pruneCompleted(olderThan: TimeInterval(days * 24 * 60 * 60))
+        guard let age = SessionHistoryPolicy.completedSessionRetentionAge(
+            configuredDays: historyRetentionDays()
+        ) else { return }
+        activity.pruneCompleted(olderThan: age)
+    }
+
+    /// Wake at the next completed-session expiry so an idle, long-running app
+    /// cannot keep Activity Center history beyond the configured limit.
+    private func scheduleHistoryPrune() {
+        historyPruneTask?.cancel()
+        guard acceptsEvents,
+              let age = SessionHistoryPolicy.completedSessionRetentionAge(
+                  configuredDays: historyRetentionDays()
+              ),
+              let oldestCompletion = activity.sessions.compactMap(\.completedAt).min()
+        else {
+            historyPruneTask = nil
+            return
+        }
+        let expiry = oldestCompletion.addingTimeInterval(age)
+        let delay = max(1, expiry.timeIntervalSinceNow)
+        historyPruneTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled, self.acceptsEvents else { return }
+            self.pruneHistory()
+            self.scheduleHistoryPrune()
+        }
     }
 
     func integration(for provider: AgentProvider) -> ProviderIntegrationManager? {
