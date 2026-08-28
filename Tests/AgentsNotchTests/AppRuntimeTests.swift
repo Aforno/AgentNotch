@@ -4,6 +4,13 @@ import Foundation
 import XCTest
 
 final class AppRuntimeTests: XCTestCase {
+    func testThreeDayHistoryRetentionOption() {
+        XCTAssertEqual(
+            SessionHistoryPolicy.completedSessionRetentionAge(configuredDays: 3),
+            3 * 24 * 60 * 60
+        )
+    }
+
     @MainActor
     func testRuntimeConstructsEveryBuiltInProviderIntegration() {
         let runtime = AppRuntime(monitorProviders: false)

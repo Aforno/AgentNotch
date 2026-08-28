@@ -564,6 +564,14 @@ final class AppRuntime {
         activity.clearRecent()
     }
 
+    func applyHistoryRetention(days: Int) {
+        guard let age = SessionHistoryPolicy.completedSessionRetentionAge(
+            configuredDays: days
+        ) else { return }
+        activity.pruneCompleted(olderThan: age)
+        scheduleHistoryPrune()
+    }
+
     func refreshNotchSurface() {
         panelController?.refreshPreferences()
     }
