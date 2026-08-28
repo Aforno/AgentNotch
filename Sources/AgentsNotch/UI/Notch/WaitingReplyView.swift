@@ -187,7 +187,8 @@ struct WaitingReplyActions: View {
                             replyButton(
                                 option.label,
                                 emphasis: selected ? .primary : .neutral,
-                                shortcut: digitShortcut(for: index, in: questions, question: question)
+                                shortcut: digitShortcut(for: index, in: questions, question: question),
+                                selected: selected
                             ) {
                                 select(option, for: question)
                                 if questions.count == 1, !question.allowsMultiple {
@@ -284,6 +285,7 @@ struct WaitingReplyActions: View {
         _ title: String,
         emphasis: NotchActionEmphasis,
         shortcut: String? = nil,
+        selected: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -296,7 +298,27 @@ struct WaitingReplyActions: View {
             }
         }
         .buttonStyle(NotchActionButtonStyle(emphasis: emphasis))
-        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityHintIfPresent(shortcut.map(spokenShortcutHint))
+    }
+
+    private func spokenShortcutHint(_ shortcut: String) -> String {
+        switch shortcut {
+        case "⏎": "Press Return"
+        case "esc": "Press Escape"
+        default: "Press \(shortcut)"
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func accessibilityHintIfPresent(_ hint: String?) -> some View {
+        if let hint {
+            accessibilityHint(hint)
+        } else {
+            self
+        }
     }
 }
 

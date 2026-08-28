@@ -58,7 +58,7 @@ enum NotchActionEmphasis {
 
     var fill: Color {
         switch self {
-        case .primary: Color.accentColor.opacity(0.9)
+        case .primary: Color.accentColor.opacity(NotchAccentContrast.primaryFillOpacity)
         case .neutral: NotchWindowPalette.raisedStrong
         }
     }
@@ -79,7 +79,7 @@ enum NotchActionEmphasis {
 
     var foreground: Color {
         switch self {
-        case .primary: .white
+        case .primary: NotchAccentContrast.foreground(for: .controlAccentColor)
         case .neutral: NotchWindowPalette.primaryText
         }
     }

@@ -29,6 +29,60 @@ enum NotchWindowPalette {
     static let quaternaryText = Color.white.opacity(0.32)
 }
 
+/// Foreground for accent-filled notch actions. Blends the accent at the
+/// primary fill opacity over the notch's black surface and picks black or
+/// white from relative luminance so yellow, green, and orange stay readable.
+enum NotchAccentContrast {
+    static let primaryFillOpacity: CGFloat = 0.9
+    /// Luminance at or above this value uses black text. Tuned so yellow,
+    /// green, and orange get dark foreground; blue, pink, and red stay white.
+    static let darkForegroundThreshold: CGFloat = 0.3
+
+    static func usesDarkForeground(
+        for accent: NSColor,
+        fillOpacity: CGFloat = primaryFillOpacity
+    ) -> Bool {
+        blendedRelativeLuminance(of: accent, fillOpacity: fillOpacity) >= darkForegroundThreshold
+    }
+
+    static func foreground(
+        for accent: NSColor,
+        fillOpacity: CGFloat = primaryFillOpacity
+    ) -> Color {
+        usesDarkForeground(for: accent, fillOpacity: fillOpacity) ? .black : .white
+    }
+
+    static func blendedRelativeLuminance(
+        of accent: NSColor,
+        fillOpacity: CGFloat = primaryFillOpacity
+    ) -> CGFloat {
+        let rgb = sRGBComponents(of: accent)
+        return relativeLuminance(
+            red: rgb.red * fillOpacity,
+            green: rgb.green * fillOpacity,
+            blue: rgb.blue * fillOpacity
+        )
+    }
+
+    static func relativeLuminance(red: CGFloat, green: CGFloat, blue: CGFloat) -> CGFloat {
+        0.2126 * linearize(red) + 0.7152 * linearize(green) + 0.0722 * linearize(blue)
+    }
+
+    static func sRGBComponents(of color: NSColor) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
+        let converted = color.usingColorSpace(.sRGB) ?? color
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        converted.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return (red, green, blue)
+    }
+
+    private static func linearize(_ channel: CGFloat) -> CGFloat {
+        channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+    }
+}
+
 /// The notch uses a small, tight radius scale and never `.black` weights.
 enum NotchWindowMetrics {
     static let cardRadius: CGFloat = 9

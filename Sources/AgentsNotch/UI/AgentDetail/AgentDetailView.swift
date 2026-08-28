@@ -15,6 +15,8 @@ struct AgentDetailView: View {
     @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
     @State private var measuredContentHeight: CGFloat = 0
     @State private var viewportHeight: CGFloat = 0
+    @State private var contentMinY: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: DynamicIslandSpacing.standard) {
@@ -113,9 +115,14 @@ struct AgentDetailView: View {
             .background {
                 GeometryReader { contentGeometry in
                     let contentHeight = contentGeometry.size.height
+                    let minY = contentGeometry.frame(in: .named(AgentDetailScrollSpace.name)).minY
                     Color.clear
                         .onAppear {
                             reportIdealHeight(contentHeight)
+                            contentMinY = minY
+                        }
+                        .onChange(of: minY) { _, value in
+                            contentMinY = value
                         }
                         // Recreate the probe when measured height or chrome
                         // changes so `onAppear` re-runs on MainActor. Swift 6.0
@@ -127,6 +134,7 @@ struct AgentDetailView: View {
                 }
             }
         }
+        .coordinateSpace(name: AgentDetailScrollSpace.name)
         .scrollIndicators(.never)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
@@ -141,6 +149,7 @@ struct AgentDetailView: View {
         // Scroll indicators are hidden, so a clipped edge would otherwise be
         // the only hint that more content exists. Fade it instead.
         .mask(scrollEdgeMask)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: showsBottomFade)
     }
 
     @ViewBuilder
@@ -216,13 +225,21 @@ struct AgentDetailView: View {
         viewportHeight > 0 && measuredContentHeight > viewportHeight + 1
     }
 
+    private var distanceFromBottom: CGFloat {
+        measuredContentHeight + contentMinY - viewportHeight
+    }
+
+    private var showsBottomFade: Bool {
+        isScrollable && distanceFromBottom > 4
+    }
+
     private var scrollEdgeMask: LinearGradient {
-        let fadeStart: CGFloat = isScrollable ? 0.9 : 1
+        let fadeStart: CGFloat = showsBottomFade ? 0.9 : 1
         return LinearGradient(
             stops: [
                 .init(color: .black, location: 0),
                 .init(color: .black, location: fadeStart),
-                .init(color: isScrollable ? .clear : .black, location: 1),
+                .init(color: showsBottomFade ? .clear : .black, location: 1),
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -239,6 +256,10 @@ struct AgentDetailView: View {
         let fixedChromeHeight: CGFloat = originDestinations.isEmpty ? 56 : 98
         onIdealHeightChange(contentHeight + fixedChromeHeight)
     }
+}
+
+private enum AgentDetailScrollSpace {
+    static let name = "agentDetailScroll"
 }
 
 private struct AgentDetailHeightSignal: Hashable {
