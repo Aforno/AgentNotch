@@ -2,10 +2,8 @@ import SwiftUI
 
 /// Interactive vocabulary for the notch surface.
 ///
-/// Every control inside the notch used to be a `.plain` button with a static
-/// appearance, so nothing distinguished a clickable 44pt row from a label until
-/// you clicked it. These styles give the notch the same hover/press feedback
-/// the Activity Center list already had.
+/// Hover and press fills distinguish controls from labels. Row highlight is
+/// inset so content stays aligned with dividers and chrome.
 
 /// Full-width list row: inset rounded highlight on hover, stronger on press.
 ///
@@ -171,12 +169,12 @@ struct NotchKeyCap: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 9, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white.opacity(0.75))
+            .font(NotchWindowFont.footnoteEmphasis)
+            .foregroundStyle(NotchWindowPalette.primaryText)
             .frame(minWidth: 14)
             .padding(.horizontal, 3)
             .padding(.vertical, 1)
-            .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .background(NotchWindowPalette.raisedPressed, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             .accessibilityHidden(true)
     }
 }

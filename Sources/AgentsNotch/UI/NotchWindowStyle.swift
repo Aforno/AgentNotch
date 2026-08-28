@@ -115,12 +115,9 @@ enum NotchWindowFont {
     static let counter = Font.system(size: 11, weight: .semibold, design: .rounded)
 }
 
-/// How an agent state reads on screen. The colour scale is deliberately short —
-/// neutral, active, attention, success, failure — because the previous
-/// nine-colour mapping put mint next to green and cyan next to blue at 8-12pt,
-/// where they are indistinguishable. The finer distinction between thinking,
-/// editing, and running is carried by `systemImage`, not by hue, so the state
-/// survives greyscale and colour-blind viewing.
+/// How an agent state reads on screen. Five hues only: idle, active,
+/// attention, success, failure. Thinking, editing, and running share active
+/// blue and are distinguished by `systemImage`, so the state survives greyscale.
 struct AgentStatePresentation {
     let color: Color
     /// Empty when `showsSpinner` is true.
@@ -142,8 +139,7 @@ func agentStatePresentation(for state: AgentState) -> AgentStatePresentation {
         AgentStatePresentation(color: .blue, systemImage: "ellipsis", showsSpinner: false)
     case .starting, .running, .executingTool:
         AgentStatePresentation(color: .blue, systemImage: "", showsSpinner: true)
-    // Reconnecting is *not* proof of work. A spinner here made a session that
-    // died while the app was quit look identical to one that is still running.
+    // Unknown is a static refresh glyph so reconnecting does not look like running.
     case .unknown:
         AgentStatePresentation(
             color: NotchWindowPalette.tertiaryText,

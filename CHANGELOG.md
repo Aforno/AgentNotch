@@ -6,6 +6,19 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Notch controls show hover and press, and waiting-prompt shortcuts only
+  while the pointer is over the prompt.
+- Primary actions pick black or white text from the system accent so light
+  yellow, green, and orange fills stay readable.
+
+### Fixed
+
+- Long project names in the agent row truncate instead of overflowing the
+  status indicator.
+- Thread-detail scroll fade clears when the scroller is at the bottom.
+
 ## [0.2.1] - 2026-08-26
 
 ### Added

@@ -122,8 +122,7 @@ struct AgentListView: View {
         )
     }
 
-    /// Hovering with nothing running used to be a dead end. The idle row now
-    /// routes to the one place that still has something to show.
+    /// Idle list opens Activity Center, which is where recent sessions live.
     private var emptyState: some View {
         Button(action: onOpenActivityCenter) {
             HStack(spacing: DynamicIslandSpacing.related) {
@@ -135,7 +134,7 @@ struct AgentListView: View {
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
                 Text("Browse recent")
                     .font(NotchWindowFont.footnote)
-                    .foregroundStyle(NotchWindowPalette.quaternaryText)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
             }
             .padding(.horizontal, 6)
             .frame(height: DynamicIslandSpacing.chromeHeight)
