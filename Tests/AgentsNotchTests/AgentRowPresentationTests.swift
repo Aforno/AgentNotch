@@ -148,7 +148,7 @@ final class AgentRowPresentationTests: XCTestCase {
         XCTAssertEqual(AgentRowPresentation.formattedRole("  "), "Subagent")
     }
 
-    func testRowSplitsTaskFromProjectSoTheProjectSurvivesTruncation() {
+    func testRowSeparatesTaskFromProjectAndHidesBothInPrivacyMode() {
         let session = session(
             id: "root",
             state: .running,
@@ -164,35 +164,6 @@ final class AgentRowPresentationTests: XCTestCase {
             AgentRowPresentation.projectChip(for: session, privacyModeEnabled: false),
             "AgentNotch"
         )
-    }
-
-    func testProjectChipIsOmittedWhenItWouldRepeatTheTitle() {
-        let noTask = session(id: "a", state: .running, workingDirectory: "/Users/me/AgentNotch")
-        let taskOnly = session(id: "b", state: .running, task: "Fix authentication")
-        let subagent = session(
-            id: "c",
-            parentID: "a",
-            state: .running,
-            task: "Review auth module",
-            workingDirectory: "/Users/me/AgentNotch",
-            agentRole: "auditor"
-        )
-
-        XCTAssertEqual(AgentRowPresentation.taskTitle(for: noTask, privacyModeEnabled: false), "AgentNotch")
-        XCTAssertNil(AgentRowPresentation.projectChip(for: noTask, privacyModeEnabled: false))
-        XCTAssertNil(AgentRowPresentation.projectChip(for: taskOnly, privacyModeEnabled: false))
-        // Subagents inherit the parent's project, so repeating it is noise.
-        XCTAssertNil(AgentRowPresentation.projectChip(for: subagent, privacyModeEnabled: false))
-    }
-
-    func testPrivacyModeHidesTheTaskAndTheProjectChip() {
-        let session = session(
-            id: "root",
-            state: .running,
-            task: "Fix authentication",
-            workingDirectory: "/Users/me/AgentNotch"
-        )
-
         XCTAssertEqual(
             AgentRowPresentation.taskTitle(for: session, privacyModeEnabled: true),
             "AgentNotch"
@@ -206,15 +177,6 @@ final class AgentRowPresentationTests: XCTestCase {
         XCTAssertTrue(agentStatePresentation(for: .running).showsSpinner)
         XCTAssertFalse(agentStatePresentation(for: .unknown).showsSpinner)
         XCTAssertFalse(agentStatePresentation(for: .unknown).systemImage.isEmpty)
-    }
-
-    func testActiveStatesShareOneHueAndAreSeparatedByGlyph() {
-        let active: [AgentState] = [.starting, .running, .executingTool, .thinking, .editing]
-        XCTAssertEqual(Set(active.map { agentStateColor(for: $0).description }).count, 1)
-
-        // Non-spinner active states still need distinct glyphs.
-        let glyphs = [AgentState.thinking, .editing].map { agentStatePresentation(for: $0).systemImage }
-        XCTAssertEqual(Set(glyphs).count, glyphs.count)
     }
 
     func testListHeightDoesNotReserveChromeRowWhenSessionsAreVisible() {

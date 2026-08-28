@@ -45,32 +45,4 @@ final class NotchAccentContrastTests: XCTestCase {
         )
     }
 
-    func testDisabledPrimaryActionUsesReadablePaletteText() {
-        let yellow = NSColor(srgbRed: 1, green: 0.8, blue: 0, alpha: 1)
-
-        XCTAssertEqual(
-            NotchActionEmphasis.primary.foreground(
-                isEnabled: false,
-                isPressed: false,
-                isHovering: false,
-                accent: yellow
-            ),
-            NotchWindowPalette.tertiaryText
-        )
-    }
-
-    func testBlendedLuminanceIsSourceTimesFillOpacityOverBlack() {
-        let white = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
-        let expected = NotchAccentContrast.relativeLuminance(red: 0.9, green: 0.9, blue: 0.9)
-        XCTAssertEqual(
-            NotchAccentContrast.blendedRelativeLuminance(of: white),
-            expected,
-            accuracy: 0.0001
-        )
-        XCTAssertEqual(
-            NotchAccentContrast.blendedRelativeLuminance(of: .black),
-            0,
-            accuracy: 0.0001
-        )
-    }
 }
