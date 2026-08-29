@@ -5,14 +5,26 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let runtime = AppRuntime()
+    private let instanceCoordinator = AppInstanceCoordinator()
     private var panelController: NotchPanelController?
     private var activityCenterWindowController: ActivityCenterWindowController?
     private var onboardingWindowController: OnboardingWindowController?
     private var settingsWindowController: SettingsWindowController?
     private var globalShortcutController: GlobalActivityShortcutController?
     private var recoveryStatusItem: SurfaceRecoveryStatusItem?
+    private var handsOffLaunch = false
+    private var monitorsActivity = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        handsOffLaunch = instanceCoordinator.handOffIfNeeded()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard !handsOffLaunch else {
+            NSApp.terminate(nil)
+            return
+        }
+
         var defaults: [String: Any] = [
             "animationsEnabled": true,
             "displayPreference": DisplayPreference.primary.rawValue,
@@ -33,10 +45,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         UserDefaults.standard.register(defaults: defaults)
 
+        instanceCoordinator.startReceiving { [weak self] in
+            self?.showActivityCenter()
+        }
+
         NSApp.setActivationPolicy(.accessory)
         ProcessInfo.processInfo.disableAutomaticTermination(
             "Agent Notch monitors local agent activity"
         )
+        monitorsActivity = true
         let panel = NotchPanelController(runtime: runtime)
         panelController = panel
         runtime.panelController = panel
@@ -71,10 +88,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        instanceCoordinator.stopReceiving()
+        guard monitorsActivity else { return }
         runtime.stop()
         ProcessInfo.processInfo.enableAutomaticTermination(
             "Agent Notch monitors local agent activity"
         )
+        monitorsActivity = false
+    }
+
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        showActivityCenter()
+        return true
     }
 
     private func showActivityCenter() {

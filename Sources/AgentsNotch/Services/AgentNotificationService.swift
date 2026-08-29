@@ -11,7 +11,7 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     var onOpenSession: ((String) -> Void)?
 
     private let center: UNUserNotificationCenter?
-    private static let logger = Logger(
+    nonisolated private static let logger = Logger(
         subsystem: "com.afonsoferreira.AgentNotch",
         category: "notifications"
     )

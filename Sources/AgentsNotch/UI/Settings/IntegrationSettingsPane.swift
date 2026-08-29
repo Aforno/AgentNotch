@@ -8,7 +8,7 @@ struct IntegrationSettingsPane: View {
             VStack(alignment: .leading, spacing: NotchWindowMetrics.sectionSpacing) {
                 SettingsHeading(
                     title: "Integrations",
-                    detail: "Connect local coding agents to Agent Notch."
+                    detail: connectionSummary
                 )
                 runtimeHealthMessages
                 VStack(spacing: 0) {
@@ -48,16 +48,11 @@ struct IntegrationSettingsPane: View {
             ProviderIconView(provider: integration.provider, size: 20)
                 .frame(width: 24, height: 24)
             VStack(alignment: .leading, spacing: 3) {
-                Text(integration.provider.displayName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.86))
-                if case .unavailable = integration.status {
-                    HStack(spacing: 5) {
-                        Circle().fill(.red).frame(width: 6, height: 6)
-                        Text(integration.status.title)
-                    }
-                    .font(NotchWindowFont.caption)
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
+                HStack(spacing: 8) {
+                    Text(integration.provider.displayName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.86))
+                    ProviderIntegrationStatusView(status: integration.status)
                 }
                 if let instructions = integration.trustInstructions {
                     Text(instructions)
@@ -94,5 +89,11 @@ struct IntegrationSettingsPane: View {
         }
         .controlSize(.small)
         .padding(.vertical, 9)
+    }
+
+    private var connectionSummary: String {
+        let connected = runtime.integrations.filter { $0.status.isConnected }.count
+        let total = runtime.integrations.count
+        return "\(connected) of \(total) connected. Observers stay local to this Mac."
     }
 }

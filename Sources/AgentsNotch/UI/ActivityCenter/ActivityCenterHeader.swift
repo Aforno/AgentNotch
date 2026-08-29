@@ -5,6 +5,7 @@ struct ActivityCenterHeader: View {
     let sessionCount: Int
     let activeCount: Int
     let attentionCount: Int
+    let statusFilter: Binding<ActivityStatusFilter>
     let groupingMode: Binding<ActivityGroupingMode>
     let canClearHistory: Bool
     let requestClearHistory: () -> Void
@@ -20,8 +21,20 @@ struct ActivityCenterHeader: View {
                     .foregroundStyle(NotchWindowPalette.secondaryText)
             }
             Spacer()
-            ActivityMetric(title: "Active", value: activeCount, color: .blue)
-            ActivityMetric(title: "Attention", value: attentionCount, color: .orange)
+            ActivityMetric(
+                title: "Active",
+                value: activeCount,
+                color: .blue,
+                isSelected: statusFilter.wrappedValue == .active,
+                action: { toggleStatusFilter(.active) }
+            )
+            ActivityMetric(
+                title: "Attention",
+                value: attentionCount,
+                color: .orange,
+                isSelected: statusFilter.wrappedValue == .attention,
+                action: { toggleStatusFilter(.attention) }
+            )
             Menu {
                 Picker("Session Grouping", selection: groupingMode) {
                     ForEach(ActivityGroupingMode.allCases) { mode in
@@ -29,7 +42,7 @@ struct ActivityCenterHeader: View {
                     }
                 }
                 Divider()
-                Button("Clear Completed History", role: .destructive, action: requestClearHistory)
+                Button("Clear Finished History", role: .destructive, action: requestClearHistory)
                     .disabled(!canClearHistory)
                 Divider()
                 Button("Quit Agent Notch") {
@@ -46,6 +59,10 @@ struct ActivityCenterHeader: View {
         .padding(.horizontal, NotchWindowMetrics.contentInset)
         .padding(.vertical, 14)
         .background(NotchWindowPalette.background)
+    }
+
+    private func toggleStatusFilter(_ filter: ActivityStatusFilter) {
+        statusFilter.wrappedValue = statusFilter.wrappedValue == filter ? .all : filter
     }
 }
 

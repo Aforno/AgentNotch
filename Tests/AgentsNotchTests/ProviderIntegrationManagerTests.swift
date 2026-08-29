@@ -4,6 +4,16 @@ import Foundation
 import XCTest
 
 final class ProviderIntegrationManagerTests: XCTestCase {
+    func testStatusReadinessFlagsMatchLifecycle() {
+        XCTAssertFalse(ProviderIntegrationStatus.notInstalled.isInstalled)
+        XCTAssertFalse(ProviderIntegrationStatus.notInstalled.isConnected)
+        XCTAssertTrue(ProviderIntegrationStatus.awaitingFirstEvent.isInstalled)
+        XCTAssertFalse(ProviderIntegrationStatus.awaitingFirstEvent.isConnected)
+        XCTAssertTrue(ProviderIntegrationStatus.connected.isInstalled)
+        XCTAssertTrue(ProviderIntegrationStatus.connected.isConnected)
+        XCTAssertFalse(ProviderIntegrationStatus.unavailable("Unavailable").isInstalled)
+    }
+
     @MainActor
     func testInstallIsIdempotentAndUninstallPreservesExistingConfiguration() throws {
         let fixture = try Fixture()

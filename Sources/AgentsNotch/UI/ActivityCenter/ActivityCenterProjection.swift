@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 enum ActivityStatusFilter: String, CaseIterable, Identifiable {
-    case all, active, attention, completed
+    case all, active, attention, completed, failed
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -11,6 +11,7 @@ enum ActivityStatusFilter: String, CaseIterable, Identifiable {
         case .active: "Active"
         case .attention: "Attention"
         case .completed: "Completed"
+        case .failed: "Failed"
         }
     }
 }
@@ -22,15 +23,18 @@ enum ActivityGroupingMode: String, CaseIterable, Identifiable {
 }
 
 enum ActivityDateFilter: String, CaseIterable, Identifiable {
-    case all, today, sevenDays, thirtyDays
+    case all, today, sevenDays
     var id: String { rawValue }
     var title: String {
         switch self {
         case .all: "Any time"
         case .today: "Today"
         case .sevenDays: "Last 7 days"
-        case .thirtyDays: "Last 30 days"
         }
+    }
+
+    static func fromPersistedValue(_ rawValue: String) -> ActivityDateFilter {
+        rawValue == "thirtyDays" ? .sevenDays : ActivityDateFilter(rawValue: rawValue) ?? .all
     }
 
     func includes(_ date: Date, now: Date, calendar: Calendar = .current) -> Bool {
@@ -38,7 +42,6 @@ enum ActivityDateFilter: String, CaseIterable, Identifiable {
         case .all: true
         case .today: date >= calendar.startOfDay(for: now)
         case .sevenDays: date >= calendar.date(byAdding: .day, value: -7, to: now) ?? .distantPast
-        case .thirtyDays: date >= calendar.date(byAdding: .day, value: -30, to: now) ?? .distantPast
         }
     }
 }
@@ -163,7 +166,8 @@ final class ActivityCenterProjection {
             case .all: true
             case .active: session.isActive
             case .attention: session.state == .waitingForUser
-            case .completed: !session.isActive
+            case .completed: session.state == .completed
+            case .failed: session.state == .failed
             }
             return statusMatches && (query.isEmpty || Self.searchText(for: session).localizedCaseInsensitiveContains(query))
         }.sorted { $0.updatedAt != $1.updatedAt ? $0.updatedAt > $1.updatedAt : $0.id < $1.id }

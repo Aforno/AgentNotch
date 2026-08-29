@@ -27,6 +27,7 @@ struct ActivityCenterView: View {
                 sessionCount: projection.sessionCount,
                 activeCount: runtime.activity.notchSnapshot.activeSessions.count,
                 attentionCount: runtime.activity.notchSnapshot.attentionCount,
+                statusFilter: statusFilterBinding,
                 groupingMode: groupingModeBinding,
                 canClearHistory: projection.hasRecentSessions,
                 requestClearHistory: { confirmsClearHistory = true }
@@ -36,7 +37,7 @@ struct ActivityCenterView: View {
 
             HStack(spacing: 0) {
                 sidebar
-                    .frame(minWidth: 270, idealWidth: 300, maxWidth: 340)
+                    .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
                     // Arrow / return / delete need the column to take focus.
                     // The default ring is a blue rectangle around the sidebar.
                     .focusable()
@@ -55,7 +56,7 @@ struct ActivityCenterView: View {
         .frame(minWidth: 760, minHeight: 500)
         .deepBlackWindowSurface()
         .confirmationDialog(
-            "Clear completed session history?",
+            "Clear finished session history?",
             isPresented: $confirmsClearHistory
         ) {
             Button("Clear History", role: .destructive) { runtime.clearHistory() }
@@ -63,6 +64,7 @@ struct ActivityCenterView: View {
             Text("Active and waiting sessions will be kept.")
         }
         .onAppear {
+            normalizePersistedFilters()
             refreshProjection()
             synchronizeSelection()
             handleSearchRequest()
@@ -157,7 +159,7 @@ struct ActivityCenterView: View {
     }
 
     private var dateFilter: ActivityDateFilter {
-        ActivityDateFilter(rawValue: dateFilterRaw) ?? .all
+        ActivityDateFilter.fromPersistedValue(dateFilterRaw)
     }
 
     private var groupingMode: ActivityGroupingMode {
@@ -299,5 +301,12 @@ struct ActivityCenterView: View {
         handledSearchRequest = runtime.activitySearchRequest
         isSessionListFocused = false
         isSearchFocused = true
+    }
+
+    private func normalizePersistedFilters() {
+        let normalizedDate = ActivityDateFilter.fromPersistedValue(dateFilterRaw).rawValue
+        if dateFilterRaw != normalizedDate {
+            dateFilterRaw = normalizedDate
+        }
     }
 }

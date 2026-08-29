@@ -131,7 +131,7 @@ struct HistorySettingsSection: View {
     var body: some View {
         SettingsSection(title: "Local History") {
             SettingsMenuRow(
-                title: "Keep completed sessions",
+                title: "Keep finished sessions",
                 detail: "How long finished sessions remain in Activity Center.",
                 selection: retentionDays,
                 options: [
@@ -141,7 +141,7 @@ struct HistorySettingsSection: View {
             )
             SettingsControlRow(
                 title: "History actions",
-                detail: "Open related windows or clear completed local sessions."
+                detail: "Open related windows or clear finished local sessions."
             ) {
                 HStack(spacing: 8) {
                     Button("Open Activity Center", action: openActivityCenter)
@@ -317,6 +317,39 @@ struct SettingsMessage: View {
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
+    }
+}
+
+/// Compact provider health shared by Setup and Integrations.
+struct ProviderIntegrationStatusView: View {
+    let status: ProviderIntegrationStatus
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text(status.title)
+                .lineLimit(1)
+        }
+        .font(NotchWindowFont.footnoteEmphasis)
+        .foregroundStyle(color)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Integration status: \(status.title)")
+    }
+
+    private var color: Color {
+        switch status {
+        case .notInstalled:
+            NotchWindowPalette.tertiaryText
+        case .awaitingFirstEvent:
+            .orange
+        case .connected:
+            .green
+        case .unavailable:
+            .red
+        }
     }
 }
 
