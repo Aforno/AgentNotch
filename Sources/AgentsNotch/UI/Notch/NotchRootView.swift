@@ -60,7 +60,7 @@ struct NotchRootView: View {
     @State private var sizeGeneration = 0
     @State private var detailContentHeight = NotchLayoutMetrics.minimumDetailContentHeight
     @State private var waitingContentHeight: CGFloat = 96
-    @AppStorage("animationsEnabled") private var animationsEnabled = true
+    @AppStorage(AppPreferences.Key.animationsEnabled) private var animationsEnabled = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The in-app toggle is an override, not the whole story: the system

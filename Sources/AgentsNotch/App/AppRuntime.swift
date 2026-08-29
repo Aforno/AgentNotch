@@ -82,13 +82,13 @@ final class AppRuntime {
         persistDebounceDuration: Duration = .milliseconds(350),
         persistMaximumDelay: Duration = .seconds(2),
         historyRetentionDays: @escaping () -> Int? = {
-            UserDefaults.standard.object(forKey: "historyRetentionDays") as? Int
+            UserDefaults.standard.object(forKey: AppPreferences.Key.historyRetentionDays) as? Int
         },
         answersFromNotch: @escaping @Sendable () -> Bool = {
-            UserDefaults.standard.bool(forKey: "answerFromNotchEnabled")
+            UserDefaults.standard.bool(forKey: AppPreferences.Key.answerFromNotchEnabled)
         },
         privacyModeEnabled: @escaping @Sendable () -> Bool = {
-            UserDefaults.standard.bool(forKey: "privacyModeEnabled")
+            UserDefaults.standard.bool(forKey: AppPreferences.Key.privacyModeEnabled)
         }
     ) {
         self.persistence = persistence

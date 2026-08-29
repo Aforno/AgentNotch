@@ -56,8 +56,9 @@ final class NotchPanelController: NSWindowController {
     }
 
     var isSurfaceEnabled: Bool {
-        UserDefaults.standard.bool(forKey: "notchEnabled")
-            && (geometry.hasPhysicalNotch || UserDefaults.standard.bool(forKey: "showVirtualNotch"))
+        UserDefaults.standard.bool(forKey: AppPreferences.Key.notchEnabled)
+            && (geometry.hasPhysicalNotch
+                || UserDefaults.standard.bool(forKey: AppPreferences.Key.showVirtualNotch))
     }
 
     /// Makes the notch panel visible.
@@ -172,7 +173,7 @@ final class NotchPanelController: NSWindowController {
     }
 
     private func updatePointerDisplayObservation() {
-        let followsPointer = UserDefaults.standard.string(forKey: "displayPreference")
+        let followsPointer = UserDefaults.standard.string(forKey: AppPreferences.Key.displayPreference)
             == DisplayPreference.pointer.rawValue
 
         guard followsPointer else {

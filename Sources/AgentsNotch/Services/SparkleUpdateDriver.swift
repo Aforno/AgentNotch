@@ -15,7 +15,9 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
         reply: @escaping (SUUpdatePermissionResponse) -> Void
     ) {
         _ = request
-        let enabled = UserDefaults.standard.bool(forKey: UpdateService.automaticChecksDefaultsKey)
+        let enabled = UserDefaults.standard.bool(
+            forKey: AppPreferences.Key.automaticallyCheckForUpdates
+        )
         reply(SUUpdatePermissionResponse(automaticUpdateChecks: enabled, sendSystemProfile: false))
     }
 

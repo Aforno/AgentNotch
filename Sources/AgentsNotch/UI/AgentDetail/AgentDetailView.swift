@@ -12,7 +12,7 @@ struct AgentDetailView: View {
     let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     let outerCornerRadius: CGFloat
     let onIdealHeightChange: (CGFloat) -> Void
-    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
     @State private var measuredContentHeight: CGFloat = 0
     @State private var viewportHeight: CGFloat = 0
     @State private var contentMinY: CGFloat = 0

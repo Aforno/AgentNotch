@@ -75,23 +75,17 @@ public enum ProviderDecisionMapper {
         return ["hookSpecificOutput": output]
     }
 
-    /// The notch UI only sends deny/cancel for elicitation prompts today, so
-    /// `accept` is reachable only from reply.sock clients that attach
-    /// `content`. It stays because the wire protocol supports it and a future
-    /// free-form input affordance can use it without a mapper change.
     private static func claudeElicitationOutput(reply: AgentReply) -> [String: Any] {
         let action: String = switch reply.decision {
-        case .allow where jsonObject(from: reply.content) != nil: "accept"
-        case .allow: "decline"
-        case .deny: "decline"
+        case .deny, .allow, .option: "decline"
         case .cancel: "cancel"
-        case .option: "decline"
         }
-        var output: [String: Any] = ["hookEventName": "Elicitation", "action": action]
-        if action == "accept", let content = jsonObject(from: reply.content) {
-            output["content"] = content
-        }
-        return ["hookSpecificOutput": output]
+        return [
+            "hookSpecificOutput": [
+                "hookEventName": "Elicitation",
+                "action": action,
+            ],
+        ]
     }
 
     private static func validClaudeAnswers(

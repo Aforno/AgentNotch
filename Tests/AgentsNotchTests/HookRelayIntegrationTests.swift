@@ -33,7 +33,9 @@ final class HookRelayIntegrationTests: XCTestCase {
             candidates.append(url)
         }
         // Prefer the plain-debug binary.
-        guard let binary = candidates.first { $0.path.contains("/debug/") } ?? candidates.first else {
+        guard let binary = candidates.first(where: { $0.path.contains("/debug/") })
+            ?? candidates.first
+        else {
             throw XCTSkip("AgentsNotchHook executable not found under .build")
         }
         return binary

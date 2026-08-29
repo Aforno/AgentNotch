@@ -4,7 +4,7 @@ import SwiftUI
 struct AgentRowView: View {
     let session: AgentSession
     let subagents: [AgentSession]
-    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
 
     var body: some View {
         HStack(spacing: DynamicIslandSpacing.standard) {

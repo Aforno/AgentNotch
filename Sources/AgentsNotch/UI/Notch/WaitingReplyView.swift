@@ -11,7 +11,7 @@ struct WaitingReplyView: View {
     let onOpenDetail: () -> Void
     let onIdealHeightChange: (CGFloat) -> Void
 
-    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
     @FocusState private var isFocused: Bool
     @State private var isPointerInside = false
     @State private var requestsShortcutFocus = false

@@ -4,20 +4,20 @@ struct SettingsView: View {
     let runtime: AppRuntime
     @Bindable var presentation: SettingsPresentation
 
-    @AppStorage("animationsEnabled") private var animationsEnabled = true
-    @AppStorage("displayPreference") private var displayPreference = DisplayPreference.primary.rawValue
-    @AppStorage("attentionNotificationsEnabled") private var attentionNotificationsEnabled = false
-    @AppStorage("attentionNotificationSoundEnabled") private var attentionNotificationSoundEnabled = false
-    @AppStorage("failureNotificationsEnabled") private var failureNotificationsEnabled = false
-    @AppStorage("historyRetentionDays") private var historyRetentionDays = 7
-    @AppStorage("notchEnabled") private var notchEnabled = true
-    @AppStorage("showVirtualNotch") private var showVirtualNotch = false
-    @AppStorage("automaticallyCheckForUpdates") private var automaticallyCheckForUpdates = true
-    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
-    @AppStorage("answerFromNotchEnabled") private var answerFromNotchEnabled = false
-    @AppStorage("globalActivityShortcut") private var globalActivityShortcut = GlobalActivityShortcut.off.rawValue
+    @AppStorage(AppPreferences.Key.animationsEnabled) private var animationsEnabled = true
+    @AppStorage(AppPreferences.Key.displayPreference) private var displayPreference = DisplayPreference.primary.rawValue
+    @AppStorage(AppPreferences.Key.attentionNotificationsEnabled) private var attentionNotificationsEnabled = false
+    @AppStorage(AppPreferences.Key.attentionNotificationSoundEnabled) private var attentionNotificationSoundEnabled = false
+    @AppStorage(AppPreferences.Key.failureNotificationsEnabled) private var failureNotificationsEnabled = false
+    @AppStorage(AppPreferences.Key.historyRetentionDays) private var historyRetentionDays = 7
+    @AppStorage(AppPreferences.Key.notchEnabled) private var notchEnabled = true
+    @AppStorage(AppPreferences.Key.showVirtualNotch) private var showVirtualNotch = false
+    @AppStorage(AppPreferences.Key.automaticallyCheckForUpdates) private var automaticallyCheckForUpdates = true
+    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
+    @AppStorage(AppPreferences.Key.answerFromNotchEnabled) private var answerFromNotchEnabled = false
+    @AppStorage(AppPreferences.Key.globalActivityShortcut) private var globalActivityShortcut = GlobalActivityShortcut.off.rawValue
     #if DEBUG
-    @AppStorage("debugMode") private var debugMode = false
+    @AppStorage(AppPreferences.Key.debugMode) private var debugMode = false
     #endif
     @State private var launchAtLogin = LaunchAtLoginService.isEnabled
     @State private var launchError: String?

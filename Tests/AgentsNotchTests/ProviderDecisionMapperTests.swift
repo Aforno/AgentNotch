@@ -69,17 +69,15 @@ final class ProviderDecisionMapperTests: XCTestCase {
         XCTAssertNil(denied["updatedInput"])
     }
 
-    func testClaudeElicitationAcceptDeclineAndCancelMatchSchema() throws {
+    func testClaudeElicitationOnlyDeclinesOrCancels() throws {
         let payload = try decode(elicitationFixture)
-        let accepted = try hookOutput(ProviderDecisionMapper.jsonObject(
-            provider: .claudeCode,
-            payload: payload,
-            reply: AgentReply(replyId: UUID(), decision: .allow, content: .object(["username": .string("alice")]))
-        ))
-        XCTAssertEqual(accepted["action"] as? String, "accept")
-        XCTAssertEqual((accepted["content"] as? [String: Any])?["username"] as? String, "alice")
-
-        for (reply, expected) in [(AgentReplyDecision.deny, "decline"), (.cancel, "cancel")] {
+        let cases: [(AgentReplyDecision, String)] = [
+            (.deny, "decline"),
+            (.allow, "decline"),
+            (.option, "decline"),
+            (.cancel, "cancel"),
+        ]
+        for (reply, expected) in cases {
             let output = try hookOutput(ProviderDecisionMapper.jsonObject(
                 provider: .claudeCode,
                 payload: payload,
