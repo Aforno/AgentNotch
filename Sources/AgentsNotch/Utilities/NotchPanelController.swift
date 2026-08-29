@@ -244,7 +244,6 @@ final class NotchPanelController: NSWindowController {
         let size = CGSize(width: width.rounded(.up), height: height.rounded(.up))
         let targetFrame = frame(for: size)
 
-        // Skip no-op updates (SwiftUI may re-report the same settled size).
         let current = panel.frame
         if abs(current.width - targetFrame.width) < 0.5,
            abs(current.height - targetFrame.height) < 0.5,

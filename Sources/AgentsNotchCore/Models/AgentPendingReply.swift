@@ -8,7 +8,6 @@ public enum AgentPromptKind: String, Codable, Sendable {
     case elicitation
 }
 
-/// A single choice on a waiting prompt.
 public struct AgentPromptOption: Codable, Hashable, Sendable, Identifiable {
     public var id: String
     public var label: String

@@ -2,7 +2,6 @@ import AgentsNotchCore
 import AppKit
 import SwiftUI
 
-/// Shows a waiting prompt and the actions available from the notch.
 struct WaitingReplyView: View {
     let session: AgentSession
     let waitingCount: Int

@@ -1,6 +1,5 @@
 import Foundation
 
-/// Owns the persisted preference names and the defaults registered at launch.
 enum AppPreferences {
     enum Key {
         static let animationsEnabled = "animationsEnabled"

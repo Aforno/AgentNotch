@@ -16,8 +16,6 @@ private struct NotchLayout: Equatable {
 
 @MainActor
 private extension AnyTransition {
-    /// Content inside the notch fades through a light blur and settles from a
-    /// subtle scale, echoing the Dynamic Island's material feel.
     static let notchContent: AnyTransition = .asymmetric(
         insertion: .opacity
             .combined(with: .scale(scale: 0.96, anchor: .top))
@@ -63,8 +61,6 @@ struct NotchRootView: View {
     @AppStorage(AppPreferences.Key.animationsEnabled) private var animationsEnabled = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The in-app toggle is an override, not the whole story: the system
-    /// Reduce Motion setting has to suppress the morph too.
     private var motionEnabled: Bool { animationsEnabled && !reduceMotion }
 
     private var activity: AgentActivityService { runtime.activity }

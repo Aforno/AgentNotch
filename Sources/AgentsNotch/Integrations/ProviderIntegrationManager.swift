@@ -3,11 +3,8 @@ import Foundation
 import Observation
 
 enum ProviderIntegrationStatus: Equatable {
-    /// Hooks / relay are not present on disk.
     case notInstalled
-    /// Hooks are installed; no genuine provider event has been observed yet.
     case awaitingFirstEvent
-    /// At least one genuine provider event was received while hooks were installed.
     case connected
     case unavailable(String)
 

@@ -155,7 +155,6 @@ struct AgentRowView: View {
     }
 }
 
-/// Compact label pill shared by the subagent role and the project name.
 private struct RowChip: View {
     let text: String
 
@@ -301,7 +300,6 @@ enum AgentRowPresentation {
         }
     }
 
-    /// The truncating half of the row title.
     static func taskTitle(for session: AgentSession, privacyModeEnabled: Bool) -> String {
         let project = projectName(for: session)
         if privacyModeEnabled {

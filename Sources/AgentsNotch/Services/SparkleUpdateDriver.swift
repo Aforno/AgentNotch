@@ -1,8 +1,7 @@
 import Foundation
 import Sparkle
 
-/// Sparkle user driver that never presents Sparkle windows. Status lives in
-/// `UpdateService` so Settings can check, download, then restart like T3 Code.
+/// Suppresses Sparkle windows while `UpdateService` owns the update UI state.
 @MainActor
 final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     weak var service: UpdateService?

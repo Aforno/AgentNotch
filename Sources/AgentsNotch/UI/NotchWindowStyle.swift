@@ -16,7 +16,6 @@ enum NotchWindowPalette {
     /// hint rather than a selection.
     static let hover = Color.white.opacity(0.075)
 
-    /// Hairline separator tone used throughout the notch.
     static let hairline = Color.white.opacity(0.08)
 
     // Text ladder. Four rungs only — anything dimmer than `quaternaryText`
@@ -124,7 +123,6 @@ enum NotchWindowFont {
     static let control = Font.system(size: 11, weight: .medium)
     static let mono = Font.system(size: 10, weight: .regular, design: .monospaced)
     static let monoCaption = Font.system(size: 11, weight: .regular, design: .monospaced)
-    /// Rounded digits for the collapsed-notch count and metric pills.
     static let counter = Font.system(size: 11, weight: .semibold, design: .rounded)
 }
 
@@ -241,7 +239,6 @@ extension View {
     }
 }
 
-/// The notch's separator: 0.6pt at 8% white, optionally inset like the agent list.
 struct NotchHairline: View {
     var leadingInset: CGFloat = 0
 
