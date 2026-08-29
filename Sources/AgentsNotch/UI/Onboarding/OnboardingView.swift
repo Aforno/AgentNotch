@@ -21,9 +21,6 @@ struct OnboardingView: View {
                         .font(NotchWindowFont.body)
                         .foregroundStyle(NotchWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(connectionSummary)
-                        .font(NotchWindowFont.footnoteEmphasis)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
             }
 
@@ -84,12 +81,10 @@ struct OnboardingView: View {
                 .frame(width: 26)
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(integration.provider.displayName)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.86))
-                    ProviderIntegrationStatusView(status: integration.status)
-                }
+                Text(integration.provider.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.86))
+                    .accessibilityLabel("\(integration.provider.displayName), \(integration.status.title)")
 
                 if let instructions = integration.trustInstructions {
                     Text(instructions)
@@ -135,10 +130,5 @@ struct OnboardingView: View {
         runtime.integrations.contains { $0.status.isInstalled }
             ? "Finish Setup"
             : "Finish without Connecting"
-    }
-
-    private var connectionSummary: String {
-        let connected = runtime.integrations.filter { $0.status.isConnected }.count
-        return "\(connected) of \(runtime.integrations.count) connected"
     }
 }

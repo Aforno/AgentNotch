@@ -8,7 +8,7 @@ struct IntegrationSettingsPane: View {
             VStack(alignment: .leading, spacing: NotchWindowMetrics.sectionSpacing) {
                 SettingsHeading(
                     title: "Integrations",
-                    detail: connectionSummary
+                    detail: "Install a local observer for each agent you use."
                 )
                 runtimeHealthMessages
                 VStack(spacing: 0) {
@@ -48,12 +48,10 @@ struct IntegrationSettingsPane: View {
             ProviderIconView(provider: integration.provider, size: 20)
                 .frame(width: 24, height: 24)
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(integration.provider.displayName)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.86))
-                    ProviderIntegrationStatusView(status: integration.status)
-                }
+                Text(integration.provider.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.86))
+                    .accessibilityLabel("\(integration.provider.displayName), \(integration.status.title)")
                 if let instructions = integration.trustInstructions {
                     Text(instructions)
                         .font(NotchWindowFont.caption)
@@ -89,11 +87,5 @@ struct IntegrationSettingsPane: View {
         }
         .controlSize(.small)
         .padding(.vertical, 9)
-    }
-
-    private var connectionSummary: String {
-        let connected = runtime.integrations.filter { $0.status.isConnected }.count
-        let total = runtime.integrations.count
-        return "\(connected) of \(total) connected. Observers stay local to this Mac."
     }
 }

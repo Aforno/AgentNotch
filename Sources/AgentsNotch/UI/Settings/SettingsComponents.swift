@@ -320,39 +320,6 @@ struct SettingsMessage: View {
     }
 }
 
-/// Compact provider health shared by Setup and Integrations.
-struct ProviderIntegrationStatusView: View {
-    let status: ProviderIntegrationStatus
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
-                .accessibilityHidden(true)
-            Text(status.title)
-                .lineLimit(1)
-        }
-        .font(NotchWindowFont.footnoteEmphasis)
-        .foregroundStyle(color)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Integration status: \(status.title)")
-    }
-
-    private var color: Color {
-        switch status {
-        case .notInstalled:
-            NotchWindowPalette.tertiaryText
-        case .awaitingFirstEvent:
-            .orange
-        case .connected:
-            .green
-        case .unavailable:
-            .red
-        }
-    }
-}
-
 struct RuntimeHealthMessages: View {
     let socketError: String?
     let persistenceError: String?

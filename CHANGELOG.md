@@ -17,8 +17,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Update checks use the Sparkle appcast instead of opening the GitHub releases
   page. Automatic checks default on, run at launch and once a day, and never
   download or install until you ask.
-- Setup and Integrations show each provider's connection state. Setup also
-  reports overall readiness and states when it will finish without a provider.
+- Setup and Integrations list each provider with install or remove. Follow-up
+  instructions and errors stay under the name. Setup finishes as Finish Setup
+  when an observer is installed, or Finish without Connecting otherwise.
 - Activity Center's Active and Attention metrics filter the session list. Its
   status filters now keep completed and failed sessions separate.
 - Tool lifecycle events with a shared call identifier render as one timeline
