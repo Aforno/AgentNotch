@@ -3,6 +3,17 @@ import XCTest
 
 final class NotchPanelControllerTests: XCTestCase {
     @MainActor
+    func testPanelKeepsHostingViewBehindAppKitSizingBoundary() throws {
+        let controller = NotchPanelController(runtime: AppRuntime(monitorProviders: false))
+        let contentView = try XCTUnwrap(controller.window?.contentView)
+
+        XCTAssertTrue(contentView is NotchPanelContentView)
+        XCTAssertEqual(contentView.subviews.count, 1)
+        XCTAssertEqual(contentView.subviews[0].autoresizingMask, [.width, .height])
+        XCTAssertEqual(contentView.subviews[0].frame, contentView.bounds)
+    }
+
+    @MainActor
     func testSurfaceAvailabilityCallbackTracksPreferenceChanges() {
         let defaults = UserDefaults.standard
         let originalNotchEnabled = defaults.object(forKey: "notchEnabled")
