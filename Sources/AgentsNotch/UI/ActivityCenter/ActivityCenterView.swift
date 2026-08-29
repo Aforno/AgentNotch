@@ -25,8 +25,8 @@ struct ActivityCenterView: View {
         VStack(spacing: 0) {
             ActivityCenterHeader(
                 sessionCount: projection.sessionCount,
-                activeCount: runtime.activity.notchSnapshot.activeSessions.count,
-                attentionCount: runtime.activity.notchSnapshot.attentionCount,
+                activeCount: projection.activeCount,
+                attentionCount: projection.attentionCount,
                 statusFilter: statusFilterBinding,
                 groupingMode: groupingModeBinding,
                 canClearHistory: projection.hasRecentSessions,

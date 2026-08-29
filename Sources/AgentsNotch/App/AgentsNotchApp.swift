@@ -5,7 +5,9 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let runtime = AppRuntime()
-    private let instanceCoordinator = AppInstanceCoordinator()
+    private let instanceCoordinator = AppInstanceCoordinator(
+        ownershipLock: FileInstanceOwnershipLock()
+    )
     private var panelController: NotchPanelController?
     private var activityCenterWindowController: ActivityCenterWindowController?
     private var onboardingWindowController: OnboardingWindowController?
@@ -14,9 +16,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recoveryStatusItem: SurfaceRecoveryStatusItem?
     private var handsOffLaunch = false
     private var monitorsActivity = false
+    private var canPresentWindows = false
+    private var pendingActivationRequest = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Listen before the handoff decision so a slightly later peer can still
+        // wake this process. The dying process stops observing immediately.
+        instanceCoordinator.startReceiving { [weak self] in
+            self?.handleExistingInstanceActivation()
+        }
         handsOffLaunch = instanceCoordinator.handOffIfNeeded()
+        if handsOffLaunch {
+            instanceCoordinator.stopReceiving()
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -44,10 +56,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults["debugMode"] = false
         #endif
         UserDefaults.standard.register(defaults: defaults)
-
-        instanceCoordinator.startReceiving { [weak self] in
-            self?.showActivityCenter()
-        }
 
         NSApp.setActivationPolicy(.accessory)
         ProcessInfo.processInfo.disableAutomaticTermination(
@@ -85,6 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
             showOnboarding()
         }
+        canPresentWindows = true
+        if pendingActivationRequest {
+            pendingActivationRequest = false
+            showActivityCenter()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -103,6 +116,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) -> Bool {
         showActivityCenter()
         return true
+    }
+
+    private func handleExistingInstanceActivation() {
+        guard !handsOffLaunch else { return }
+        guard canPresentWindows else {
+            pendingActivationRequest = true
+            return
+        }
+        showActivityCenter()
     }
 
     private func showActivityCenter() {

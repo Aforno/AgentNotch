@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 struct RunningAgentNotchInstance {
@@ -7,7 +8,55 @@ struct RunningAgentNotchInstance {
     let activate: () -> Bool
 }
 
-/// Hands a repeated launch to the oldest running Agent Notch process.
+/// Exclusive lock so two overlapping launches cannot both become the owner.
+/// The fcntl lock is released when the process exits, including crashes.
+final class FileInstanceOwnershipLock {
+    private let fd: Int32?
+    private var holdsLock = false
+
+    static var defaultFileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AgentNotch", isDirectory: true)
+            .appendingPathComponent("instance.lock")
+    }
+
+    init(fileURL: URL = FileInstanceOwnershipLock.defaultFileURL) {
+        let directory = fileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fd = Darwin.open(fileURL.path, O_CREAT | O_RDWR, mode_t(0o600))
+        self.fd = fd >= 0 ? fd : nil
+    }
+
+    deinit {
+        if holdsLock, let fd {
+            var lock = flock()
+            lock.l_type = Int16(F_UNLCK)
+            _ = Darwin.fcntl(fd, F_SETLK, &lock)
+        }
+        if let fd {
+            Darwin.close(fd)
+        }
+    }
+
+    /// Returns false when another process already owns the instance lock.
+    /// A missing lock file does not block launch; launch-date ordering still applies.
+    /// `fcntl` locks are per-process, so two objects in the same process do not contend.
+    func tryAcquire() -> Bool {
+        guard !holdsLock else { return true }
+        guard let fd else { return true }
+        var lock = flock()
+        lock.l_type = Int16(F_WRLCK)
+        lock.l_whence = Int16(SEEK_SET)
+        if Darwin.fcntl(fd, F_SETLK, &lock) == 0 {
+            holdsLock = true
+            return true
+        }
+        let error = errno
+        return error != EAGAIN && error != EACCES
+    }
+}
+
+/// Hands a repeated launch to a strictly older running Agent Notch process.
 @MainActor
 final class AppInstanceCoordinator: NSObject {
     static let activationNotification = Notification.Name(
@@ -16,7 +65,8 @@ final class AppInstanceCoordinator: NSObject {
 
     private let currentProcessIdentifier: pid_t
     private let runningInstances: () -> [RunningAgentNotchInstance]
-    private let postActivationRequest: (pid_t) -> Void
+    private let postActivationRequest: (pid_t?) -> Void
+    private let tryAcquireOwnership: () -> Bool
     private let distributedCenter: DistributedNotificationCenter
     private var onActivationRequest: (() -> Void)?
     private var isObserving = false
@@ -26,7 +76,9 @@ final class AppInstanceCoordinator: NSObject {
         bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "com.afonsoferreira.AgentNotch",
         distributedCenter: DistributedNotificationCenter = .default(),
         runningInstances: (() -> [RunningAgentNotchInstance])? = nil,
-        postActivationRequest: ((pid_t) -> Void)? = nil
+        postActivationRequest: ((pid_t?) -> Void)? = nil,
+        tryAcquireOwnership: (() -> Bool)? = nil,
+        ownershipLock: FileInstanceOwnershipLock? = nil
     ) {
         self.currentProcessIdentifier = currentProcessIdentifier
         self.distributedCenter = distributedCenter
@@ -44,22 +96,50 @@ final class AppInstanceCoordinator: NSObject {
         self.postActivationRequest = postActivationRequest ?? { processIdentifier in
             distributedCenter.postNotificationName(
                 Self.activationNotification,
-                object: String(processIdentifier),
+                object: processIdentifier.map(String.init),
                 userInfo: nil,
                 deliverImmediately: true
             )
         }
+        self.tryAcquireOwnership = tryAcquireOwnership
+            ?? { ownershipLock?.tryAcquire() ?? true }
         super.init()
     }
 
+    /// Yields only to a process that launched earlier than this one. A newer
+    /// peer is not "the existing instance", so two overlapping launches cannot
+    /// both hand off and quit. The ownership lock is the tie-breaker when
+    /// launch dates are missing or a peer already claimed ownership.
     func handOffIfNeeded() -> Bool {
-        guard let existing = runningInstances()
-            .filter({ $0.processIdentifier != currentProcessIdentifier })
-            .min(by: { $0.launchDate < $1.launchDate })
-        else { return false }
+        let instances = runningInstances()
+        let currentLaunchDate = instances
+            .first { $0.processIdentifier == currentProcessIdentifier }?
+            .launchDate
+        let peers = instances.filter { $0.processIdentifier != currentProcessIdentifier }
 
-        postActivationRequest(existing.processIdentifier)
-        _ = existing.activate()
+        if let currentLaunchDate,
+           let existing = peers
+            .filter({ $0.launchDate < currentLaunchDate })
+            .min(by: { $0.launchDate < $1.launchDate })
+        {
+            return handOff(to: existing)
+        }
+
+        if tryAcquireOwnership() {
+            return false
+        }
+
+        if let peer = peers.min(by: { $0.launchDate < $1.launchDate }) {
+            return handOff(to: peer)
+        }
+
+        postActivationRequest(nil)
+        return true
+    }
+
+    private func handOff(to instance: RunningAgentNotchInstance) -> Bool {
+        postActivationRequest(instance.processIdentifier)
+        _ = instance.activate()
         return true
     }
 
@@ -88,7 +168,11 @@ final class AppInstanceCoordinator: NSObject {
     }
 
     @objc private func handleActivationRequest(_ notification: Notification) {
-        guard notification.object as? String == String(currentProcessIdentifier) else { return }
+        if let object = notification.object as? String,
+           object != String(currentProcessIdentifier)
+        {
+            return
+        }
         onActivationRequest?()
     }
 }

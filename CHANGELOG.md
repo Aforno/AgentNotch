@@ -31,7 +31,12 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - A repeated app launch now opens Activity Center in the existing process and
-  exits before competing for the local event socket.
+  exits before competing for the local event socket. Two overlapping launches
+  no longer both quit: only a strictly older process is treated as the owner,
+  and an exclusive lock breaks remaining ties.
+- Activity Center's Active and Attention counts follow the current provider,
+  project, date, and search filters, so clicking a chip matches the number it
+  shows.
 - Activity Center project headings no longer expose the decorative folder as
   an unrelated VoiceOver action, and long session titles show in hover help.
 - Swift 6 builds no longer warn about notification logging or the hook relay
