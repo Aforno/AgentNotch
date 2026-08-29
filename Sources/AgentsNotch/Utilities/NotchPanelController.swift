@@ -1,6 +1,10 @@
 import AppKit
 import SwiftUI
 
+/// Keeps AppKit in sole control of the panel frame while the hosted SwiftUI
+/// hierarchy animates its own layout inside these fixed bounds.
+final class NotchPanelContentView: NSView {}
+
 @MainActor
 final class NotchPanelController: NSWindowController {
     private let runtime: AppRuntime
@@ -143,12 +147,18 @@ final class NotchPanelController: NSWindowController {
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingView.safeAreaRegions = []
         // Don't size the window from SwiftUI intrinsic content — the panel
         // frame is the single source of truth for bounds during animation.
-        if #available(macOS 13.0, *) {
-            hostingView.sizingOptions = []
-        }
-        panel.contentView = hostingView
+        hostingView.sizingOptions = []
+
+        let contentView = NotchPanelContentView(frame: panel.contentLayoutRect)
+        contentView.wantsLayer = true
+        contentView.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingView.frame = contentView.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        contentView.addSubview(hostingView)
+        panel.contentView = contentView
     }
 
     private func observeDisplayChanges() {
