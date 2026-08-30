@@ -16,6 +16,7 @@ struct ActivityCenterSidebar: View {
     let onToggleGroup: (String) -> Void
     let onOpen: (AgentSession, OriginOpenAction) -> Void
     let onRemove: (String) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,7 +63,13 @@ struct ActivityCenterSidebar: View {
                 .scrollIndicators(.visible)
                 .onChange(of: selection) { _, selectedID in
                     guard let selectedID else { return }
-                    withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(selectedID, anchor: .center) }
+                    if reduceMotion {
+                        proxy.scrollTo(selectedID, anchor: .center)
+                    } else {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo(selectedID, anchor: .center)
+                        }
+                    }
                 }
             }
         }
@@ -71,7 +78,9 @@ struct ActivityCenterSidebar: View {
     private func projectSection(_ project: ActivityProjectSection) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                Image(systemName: "folder").font(.system(size: 9, weight: .medium))
+                Image(systemName: "folder")
+                    .font(.system(size: 9, weight: .medium))
+                    .accessibilityHidden(true)
                 Text(project.title).lineLimit(1)
                 Spacer(minLength: 4)
                 Text("\(project.sessionCount)").monospacedDigit()
@@ -81,6 +90,12 @@ struct ActivityCenterSidebar: View {
             .padding(.horizontal, 10)
             .padding(.top, 8)
             .padding(.bottom, 4)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                project.sessionCount == 1
+                    ? "\(project.title), 1 session"
+                    : "\(project.title), \(project.sessionCount) sessions"
+            )
             ForEach(project.groups, content: sessionGroup)
         }
     }
@@ -117,6 +132,7 @@ struct ActivityCenterSidebar: View {
             ActivitySessionRow(session: session, isSelected: selection == session.id)
         }
         .buttonStyle(.plain)
+        .help(session.task)
         .contextMenu {
             ForEach(OriginActivationService.destinations(for: session), id: \.action) { destination in
                 Button(destination.title) { onOpen(session, destination.action) }

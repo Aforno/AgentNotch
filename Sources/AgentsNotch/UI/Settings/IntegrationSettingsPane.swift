@@ -8,7 +8,7 @@ struct IntegrationSettingsPane: View {
             VStack(alignment: .leading, spacing: NotchWindowMetrics.sectionSpacing) {
                 SettingsHeading(
                     title: "Integrations",
-                    detail: "Connect local coding agents to Agent Notch."
+                    detail: "Install a local observer for each agent you use."
                 )
                 runtimeHealthMessages
                 VStack(spacing: 0) {
@@ -51,14 +51,7 @@ struct IntegrationSettingsPane: View {
                 Text(integration.provider.displayName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.86))
-                if case .unavailable = integration.status {
-                    HStack(spacing: 5) {
-                        Circle().fill(.red).frame(width: 6, height: 6)
-                        Text(integration.status.title)
-                    }
-                    .font(NotchWindowFont.caption)
-                    .foregroundStyle(NotchWindowPalette.secondaryText)
-                }
+                    .accessibilityLabel("\(integration.provider.displayName), \(integration.status.title)")
                 if let instructions = integration.trustInstructions {
                     Text(instructions)
                         .font(NotchWindowFont.caption)

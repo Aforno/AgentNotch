@@ -54,7 +54,7 @@ struct SettingsView: View {
         .onChange(of: privacyModeEnabled) { _, enabled in
             runtime.applyPrivacyModeEnabled(enabled)
         }
-        .confirmationDialog("Clear completed session history?", isPresented: $confirmsClearHistory) {
+        .confirmationDialog("Clear finished session history?", isPresented: $confirmsClearHistory) {
             Button("Clear History", role: .destructive) { runtime.clearHistory() }
         } message: {
             Text("Active and waiting sessions will be kept.")

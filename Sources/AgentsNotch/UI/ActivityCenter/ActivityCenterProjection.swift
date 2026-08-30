@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 enum ActivityStatusFilter: String, CaseIterable, Identifiable {
-    case all, active, attention, completed
+    case all, active, attention, completed, failed
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -11,6 +11,7 @@ enum ActivityStatusFilter: String, CaseIterable, Identifiable {
         case .active: "Active"
         case .attention: "Attention"
         case .completed: "Completed"
+        case .failed: "Failed"
         }
     }
 }
@@ -22,15 +23,18 @@ enum ActivityGroupingMode: String, CaseIterable, Identifiable {
 }
 
 enum ActivityDateFilter: String, CaseIterable, Identifiable {
-    case all, today, sevenDays, thirtyDays
+    case all, today, sevenDays
     var id: String { rawValue }
     var title: String {
         switch self {
         case .all: "Any time"
         case .today: "Today"
         case .sevenDays: "Last 7 days"
-        case .thirtyDays: "Last 30 days"
         }
+    }
+
+    static func fromPersistedValue(_ rawValue: String) -> ActivityDateFilter {
+        rawValue == "thirtyDays" ? .sevenDays : ActivityDateFilter(rawValue: rawValue) ?? .all
     }
 
     func includes(_ date: Date, now: Date, calendar: Calendar = .current) -> Bool {
@@ -38,7 +42,6 @@ enum ActivityDateFilter: String, CaseIterable, Identifiable {
         case .all: true
         case .today: date >= calendar.startOfDay(for: now)
         case .sevenDays: date >= calendar.date(byAdding: .day, value: -7, to: now) ?? .distantPast
-        case .thirtyDays: date >= calendar.date(byAdding: .day, value: -30, to: now) ?? .distantPast
         }
     }
 }
@@ -69,7 +72,9 @@ final class ActivityCenterProjection {
         let projectGroups: [ActivityProjectSection]
         let sessionCount: Int
         let hasRecentSessions: Bool
-        static let empty = State(filteredSessions: [], filteredSessionIDs: [], availableProviders: [], availableProjects: [], projectGroups: [], sessionCount: 0, hasRecentSessions: false)
+        let activeCount: Int
+        let attentionCount: Int
+        static let empty = State(filteredSessions: [], filteredSessionIDs: [], availableProviders: [], availableProjects: [], projectGroups: [], sessionCount: 0, hasRecentSessions: false, activeCount: 0, attentionCount: 0)
     }
 
     private var state = State.empty
@@ -82,6 +87,10 @@ final class ActivityCenterProjection {
     var projectGroups: [ActivityProjectSection] { state.projectGroups }
     var sessionCount: Int { state.sessionCount }
     var hasRecentSessions: Bool { state.hasRecentSessions }
+    /// Active and waiting counts after every filter except status, so the
+    /// header chips match the list they produce when clicked.
+    var activeCount: Int { state.activeCount }
+    var attentionCount: Int { state.attentionCount }
 
     func session(id: String) -> AgentSession? { sessionsByID[id] }
     func parent(of session: AgentSession) -> AgentSession? { session.parentSessionId.flatMap { sessionsByID[$0] } }
@@ -152,20 +161,25 @@ final class ActivityCenterProjection {
             return lhs.id < rhs.id
         }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let filtered = sessions.filter { session in
+        let inContext = sessions.filter { session in
             guard providerFilter == "all"
                     || Self.canonicalProviderRawValue(session.provider.rawValue)
                         == Self.canonicalProviderRawValue(providerFilter),
                   projectFilter == "all" || projectKeyBySessionID[session.id] == projectFilter,
                   dateFilter.includes(session.updatedAt, now: now)
             else { return false }
-            let statusMatches = switch statusFilter {
+            return query.isEmpty || Self.searchText(for: session).localizedCaseInsensitiveContains(query)
+        }
+        let activeCount = inContext.filter(\.isActive).count
+        let attentionCount = inContext.filter { $0.state == .waitingForUser }.count
+        let filtered = inContext.filter { session in
+            switch statusFilter {
             case .all: true
             case .active: session.isActive
             case .attention: session.state == .waitingForUser
-            case .completed: !session.isActive
+            case .completed: session.state == .completed
+            case .failed: session.state == .failed
             }
-            return statusMatches && (query.isEmpty || Self.searchText(for: session).localizedCaseInsensitiveContains(query))
         }.sorted { $0.updatedAt != $1.updatedAt ? $0.updatedAt > $1.updatedAt : $0.id < $1.id }
 
         let projectGroups = Self.makeProjectGroups(matchingSessions: filtered, sessionsByID: sessionsByID, projectKeyBySessionID: projectKeyBySessionID, projectTitles: projectTitles)
@@ -177,7 +191,9 @@ final class ActivityCenterProjection {
             availableProjects: availableProjects,
             projectGroups: projectGroups,
             sessionCount: sessions.count,
-            hasRecentSessions: sessions.contains { !$0.isActive }
+            hasRecentSessions: sessions.contains { !$0.isActive },
+            activeCount: activeCount,
+            attentionCount: attentionCount
         )
         if next != state { state = next }
     }

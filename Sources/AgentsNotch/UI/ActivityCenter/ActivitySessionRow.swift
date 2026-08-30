@@ -5,26 +5,43 @@ struct ActivityMetric: View {
     let title: String
     let value: Int
     let color: Color
+    let isSelected: Bool
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 7) {
-            Circle()
-                .fill(value > 0 ? color : Color.white.opacity(0.18))
-                .frame(width: 6, height: 6)
-                .shadow(color: color.opacity(value > 0 ? 0.55 : 0), radius: 4)
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(value > 0 ? color : Color.white.opacity(0.18))
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
 
-            Text(title)
-                .font(NotchWindowFont.caption)
-                .foregroundStyle(NotchWindowPalette.secondaryText)
+                Text(title)
+                    .font(NotchWindowFont.caption)
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.92) : NotchWindowPalette.secondaryText)
 
-            Text("\(value)")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(value > 0 ? 0.9 : 0.4))
-                .monospacedDigit()
+                Text("\(value)")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(value > 0 ? 0.9 : 0.4))
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(
+                isSelected ? color.opacity(0.2) : NotchWindowPalette.raised,
+                in: Capsule()
+            )
+            .overlay {
+                if isSelected {
+                    Capsule().strokeBorder(color.opacity(0.42), lineWidth: 0.6)
+                }
+            }
         }
-        .padding(.horizontal, 9)
-        .frame(height: 24)
-        .background(NotchWindowPalette.raised, in: Capsule())
+        .buttonStyle(.plain)
+        .help(isSelected ? "Show all sessions" : "Show \(title.lowercased()) sessions")
+        .accessibilityLabel("\(title), \(value) sessions")
+        .accessibilityHint(isSelected ? "Show all sessions" : "Filter sessions")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -33,6 +50,7 @@ struct ActivitySessionRow: View {
     let isSelected: Bool
 
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 10) {
@@ -76,7 +94,7 @@ struct ActivitySessionRow: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: NotchWindowMetrics.cardRadius, style: .continuous))
         .onHover { isHovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovering)
     }
 
     private var rowFill: Color {

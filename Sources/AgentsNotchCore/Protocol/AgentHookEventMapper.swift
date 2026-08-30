@@ -67,6 +67,7 @@ public enum AgentHookEventMapper {
         let metadata = [
             "model": payload.model,
             "turnId": payload.turnId,
+            "toolCallId": payload.toolCallId,
             // Store the canonical lifecycle name when the provider uses an
             // alias (e.g. Gemini BeforeAgent → UserPromptSubmit) so session
             // resume and other hookEvent gates stay provider-neutral.
@@ -116,12 +117,20 @@ public enum AgentHookEventMapper {
             return toolEvent(payload, completed: true, context: context)
 
         case .postToolUseFailure:
-            return context.event(
+            return AgentEvent(
                 type: .toolCompleted,
+                sessionId: context.sessionId,
+                provider: context.provider,
                 activity: payload.error.map {
                     "Tool failed: \(ProviderEventPolicy.concise($0, limit: 76))"
                 } ?? "Tool failed",
-                state: .running
+                state: .running,
+                timestamp: context.now,
+                workingDirectory: context.workingDirectory,
+                metadata: context.metadata.merging(
+                    ["tool": payload.toolName].compactMapValues { $0 },
+                    uniquingKeysWith: { _, new in new }
+                )
             )
 
         case .permissionRequest where permissionRequestRequiresUserInput:
