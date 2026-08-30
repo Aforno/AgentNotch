@@ -131,7 +131,7 @@ struct HistorySettingsSection: View {
     var body: some View {
         SettingsSection(title: "Local History") {
             SettingsMenuRow(
-                title: "Keep completed sessions",
+                title: "Keep finished sessions",
                 detail: "How long finished sessions remain in Activity Center.",
                 selection: retentionDays,
                 options: [
@@ -141,7 +141,7 @@ struct HistorySettingsSection: View {
             )
             SettingsControlRow(
                 title: "History actions",
-                detail: "Open related windows or clear completed local sessions."
+                detail: "Open related windows or clear finished local sessions."
             ) {
                 HStack(spacing: 8) {
                     Button("Open Activity Center", action: openActivityCenter)

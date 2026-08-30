@@ -5,20 +5,45 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let runtime = AppRuntime()
+    private let instanceCoordinator = AppInstanceCoordinator(
+        ownershipLock: FileInstanceOwnershipLock()
+    )
     private var panelController: NotchPanelController?
     private var activityCenterWindowController: ActivityCenterWindowController?
     private var onboardingWindowController: OnboardingWindowController?
     private var settingsWindowController: SettingsWindowController?
     private var globalShortcutController: GlobalActivityShortcutController?
     private var recoveryStatusItem: SurfaceRecoveryStatusItem?
+    private var handsOffLaunch = false
+    private var monitorsActivity = false
+    private var canPresentWindows = false
+    private var pendingActivationRequest = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Listen before the handoff decision so a slightly later peer can still
+        // wake this process. The dying process stops observing immediately.
+        instanceCoordinator.startReceiving { [weak self] in
+            self?.handleExistingInstanceActivation()
+        }
+        handsOffLaunch = instanceCoordinator.handOffIfNeeded()
+        if handsOffLaunch {
+            instanceCoordinator.stopReceiving()
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard !handsOffLaunch else {
+            NSApp.terminate(nil)
+            return
+        }
+
         AppPreferences.registerDefaults()
 
         NSApp.setActivationPolicy(.accessory)
         ProcessInfo.processInfo.disableAutomaticTermination(
             "Agent Notch monitors local agent activity"
         )
+        monitorsActivity = true
         let panel = NotchPanelController(runtime: runtime)
         panelController = panel
         runtime.panelController = panel
@@ -50,13 +75,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !UserDefaults.standard.bool(forKey: AppPreferences.Key.hasCompletedOnboarding) {
             showOnboarding()
         }
+        canPresentWindows = true
+        if pendingActivationRequest {
+            pendingActivationRequest = false
+            showActivityCenter()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        instanceCoordinator.stopReceiving()
+        guard monitorsActivity else { return }
         runtime.stop()
         ProcessInfo.processInfo.enableAutomaticTermination(
             "Agent Notch monitors local agent activity"
         )
+        monitorsActivity = false
+    }
+
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        showActivityCenter()
+        return true
+    }
+
+    private func handleExistingInstanceActivation() {
+        guard !handsOffLaunch else { return }
+        guard canPresentWindows else {
+            pendingActivationRequest = true
+            return
+        }
+        showActivityCenter()
     }
 
     private func showActivityCenter() {

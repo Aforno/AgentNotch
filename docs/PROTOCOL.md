@@ -105,6 +105,9 @@ is the same channel the built-in hooks use.
 3. Set `workingDirectory` so the session groups under the right project, and
    `timestamp` (ISO 8601) on every event. Events with future timestamps are
    clamped on ingest.
+   When tool lifecycle events expose a stable call identifier, place it in
+   `metadata.toolCallId` so Activity Center can pair start and completion even
+   when another event arrives between them.
 4. Encode with the same conventions as `JSONEncoder.agentsNotch`: one JSON
    object per line, sorted keys optional, dates as ISO 8601 strings. Payloads
    over 1 MiB are rejected.
@@ -112,4 +115,3 @@ is the same channel the built-in hooks use.
 Reference implementations live in `Sources/AgentsNotchCore/Protocol/`
 (`AgentHookEventMapper` converts each supported provider's native payloads into
 these events) and the bundled relay in `Sources/AgentsNotchHook/`.
-

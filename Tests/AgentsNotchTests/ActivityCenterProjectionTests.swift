@@ -104,6 +104,42 @@ final class ActivityCenterProjectionTests: XCTestCase {
         XCTAssertEqual(Set(projection.availableProjects.map(\.title)), ["Recent", "Old"])
     }
 
+    func testStatusFiltersKeepCompletedAndFailedDistinct() {
+        let now = Date(timeIntervalSince1970: 1_100_000)
+        let sessions = [
+            makeSession(id: "running", task: "Running", timestamp: now, directory: "/tmp/Status", state: .running),
+            makeSession(id: "waiting", task: "Waiting", timestamp: now, directory: "/tmp/Status", state: .waitingForUser),
+            makeSession(id: "completed", task: "Completed", timestamp: now, directory: "/tmp/Status", state: .completed),
+            makeSession(id: "failed", task: "Failed", timestamp: now, directory: "/tmp/Status", state: .failed),
+            makeSession(id: "idle", task: "Idle", timestamp: now, directory: "/tmp/Status", state: .idle),
+        ]
+        let projection = ActivityCenterProjection()
+
+        let expectations: [(ActivityStatusFilter, Set<String>)] = [
+            (.active, ["running", "waiting"]),
+            (.attention, ["waiting"]),
+            (.completed, ["completed"]),
+            (.failed, ["failed"]),
+        ]
+        for (filter, expectedIDs) in expectations {
+            projection.update(
+                sessions: sessions,
+                searchText: "",
+                providerFilter: "all",
+                statusFilter: filter,
+                now: now
+            )
+            XCTAssertEqual(Set(projection.filteredSessions.map(\.id)), expectedIDs, "Wrong results for \(filter)")
+        }
+    }
+
+    func testLegacyThirtyDayFilterMigratesToSevenDays() {
+        XCTAssertEqual(ActivityDateFilter.fromPersistedValue("thirtyDays"), .sevenDays)
+        XCTAssertEqual(ActivityDateFilter.fromPersistedValue("today"), .today)
+        XCTAssertEqual(ActivityDateFilter.fromPersistedValue("invalid"), .all)
+        XCTAssertEqual(ActivityDateFilter.allCases, [.all, .today, .sevenDays])
+    }
+
     func testLegacyProviderAliasesShareOneFilterOptionAndMatchCanonicalSelection() {
         let now = Date(timeIntervalSince1970: 30_000)
         var legacy = makeSession(
@@ -357,6 +393,65 @@ final class ActivityCenterProjectionTests: XCTestCase {
         XCTAssertNil(projection.groupID(containing: child.id))
     }
 
+    func testStatusMetricCountsFollowEveryFilterExceptStatus() {
+        let now = Date(timeIntervalSince1970: 80_000)
+        let claudeRunning = makeSession(
+            id: "claude-code:running",
+            task: "Claude running",
+            timestamp: now,
+            directory: "/tmp/Claude",
+            provider: .claudeCode,
+            state: .running
+        )
+        let claudeWaiting = makeSession(
+            id: "claude-code:waiting",
+            task: "Claude waiting",
+            timestamp: now,
+            directory: "/tmp/Claude",
+            provider: .claudeCode,
+            state: .waitingForUser
+        )
+        let claudeCompleted = makeSession(
+            id: "claude-code:done",
+            task: "Claude done",
+            timestamp: now,
+            directory: "/tmp/Claude",
+            provider: .claudeCode,
+            state: .completed
+        )
+        let codexRunning = makeSession(
+            id: "codex:running",
+            task: "Codex running",
+            timestamp: now,
+            directory: "/tmp/Codex",
+            state: .running
+        )
+        let projection = ActivityCenterProjection()
+
+        projection.update(
+            sessions: [claudeRunning, claudeWaiting, claudeCompleted, codexRunning],
+            searchText: "",
+            providerFilter: AgentProvider.claudeCode.rawValue,
+            statusFilter: .completed,
+            now: now
+        )
+
+        XCTAssertEqual(projection.activeCount, 2)
+        XCTAssertEqual(projection.attentionCount, 1)
+        XCTAssertEqual(projection.filteredSessions.map(\.id), [claudeCompleted.id])
+
+        projection.update(
+            sessions: [claudeRunning, claudeWaiting, claudeCompleted, codexRunning],
+            searchText: "",
+            providerFilter: "all",
+            statusFilter: .all,
+            now: now
+        )
+
+        XCTAssertEqual(projection.activeCount, 3)
+        XCTAssertEqual(projection.attentionCount, 1)
+    }
+
     func testWorktreeSessionsUseMainRepositoryProjectTitle() throws {
         let fixture = try LinkedGitWorktree.make()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -386,15 +481,17 @@ final class ActivityCenterProjectionTests: XCTestCase {
         task: String,
         timestamp: Date,
         directory: String,
-        parentID: String? = nil
+        parentID: String? = nil,
+        provider: AgentProvider = .codex,
+        state: AgentState = .running
     ) -> AgentSession {
         AgentSession(event: AgentEvent(
             type: .activity,
             sessionId: id,
-            provider: .codex,
+            provider: provider,
             task: task,
             activity: "Working",
-            state: .running,
+            state: state,
             timestamp: timestamp,
             workingDirectory: directory,
             parentSessionId: parentID

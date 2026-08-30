@@ -446,6 +446,42 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.activity, "Tool failed: Tests failed")
     }
 
+    func testToolCallIdentifierAliasesReachEventMetadata() throws {
+        let aliases = ["toolUseId", "toolCallId", "tool_use_id", "tool_call_id"]
+        for alias in aliases {
+            let payload = try decode("""
+            {
+              "session_id": "tool-call-alias",
+              "cwd": "/tmp/AgentsNotch",
+              "hook_event_name": "PreToolUse",
+              "tool_name": "Bash",
+              "\(alias)": "call-123",
+              "tool_input": {"command": "swift test"}
+            }
+            """)
+
+            let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .claudeCode))
+            XCTAssertEqual(event.metadata?["toolCallId"], "call-123", "Missing alias \(alias)")
+        }
+    }
+
+    func testToolFailureKeepsToolAndCallIdentity() throws {
+        let payload = try decode("""
+        {
+          "session_id": "claude_123",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "PostToolUseFailure",
+          "tool_name": "Bash",
+          "tool_use_id": "call-failed",
+          "error": "Tests failed"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .claudeCode))
+        XCTAssertEqual(event.metadata?["tool"], "Bash")
+        XCTAssertEqual(event.metadata?["toolCallId"], "call-failed")
+    }
+
     func testSessionStartUsesMainRepositoryNameForGitWorktrees() throws {
         let fixture = try LinkedGitWorktree.make()
         defer { try? FileManager.default.removeItem(at: fixture.root) }

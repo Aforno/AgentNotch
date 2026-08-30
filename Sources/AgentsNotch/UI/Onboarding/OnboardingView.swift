@@ -11,6 +11,7 @@ struct OnboardingView: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 64, height: 64)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Agents should find you—not interrupt you")
@@ -47,14 +48,24 @@ struct OnboardingView: View {
             .padding(.horizontal, 14)
             .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
 
+            Label(
+                "Observers run locally. Agent Notch does not upload source code or session history.",
+                systemImage: "lock"
+            )
+            .font(NotchWindowFont.footnote)
+            .foregroundStyle(NotchWindowPalette.secondaryText)
+
             Spacer()
 
             HStack {
                 Button("Open Activity Center") { runtime.openActivityCenter() }
                     .buttonStyle(NotchPillButtonStyle())
                 Spacer()
-                Button("Finish") {
-                    UserDefaults.standard.set(true, forKey: AppPreferences.Key.hasCompletedOnboarding)
+                Button(finishButtonTitle) {
+                    UserDefaults.standard.set(
+                        true,
+                        forKey: AppPreferences.Key.hasCompletedOnboarding
+                    )
                     onDone()
                 }
                 .buttonStyle(NotchPillButtonStyle())
@@ -76,12 +87,7 @@ struct OnboardingView: View {
                 Text(integration.provider.displayName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.86))
-
-                if case let .unavailable(message) = integration.status {
-                    Text(message)
-                        .font(NotchWindowFont.caption)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
-                }
+                    .accessibilityLabel("\(integration.provider.displayName), \(integration.status.title)")
 
                 if let instructions = integration.trustInstructions {
                     Text(instructions)
@@ -121,5 +127,11 @@ struct OnboardingView: View {
         }
         .controlSize(.small)
         .padding(.vertical, 11)
+    }
+
+    private var finishButtonTitle: String {
+        runtime.integrations.contains { $0.status.isInstalled }
+            ? "Finish Setup"
+            : "Finish without Connecting"
     }
 }

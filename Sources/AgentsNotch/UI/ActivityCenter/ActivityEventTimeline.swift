@@ -13,16 +13,27 @@ struct ActivityEventSummary: Identifiable, Equatable {
     let startedAt: Date
     let endedAt: Date
     let operationCount: Int
+    let isFailure: Bool
     let events: [AgentEvent]
 
     var duration: TimeInterval { max(0, endedAt.timeIntervalSince(startedAt)) }
 
     static func make(from recentEvents: [AgentEvent]) -> [ActivityEventSummary] {
         var summaries: [ActivityEventSummary] = []
+        var toolSummaryIndexByCallID: [String: Int] = [:]
         for event in recentEvents.sorted(by: { $0.timestamp < $1.timestamp }) {
-            if let tool = toolName(for: event),
+            if let tool = toolName(for: event), let callID = toolCallID(for: event) {
+                if let index = toolSummaryIndexByCallID[callID] {
+                    let combined = summaries[index].events + [event]
+                    summaries[index] = toolSummary(tool: tool, events: combined)
+                } else {
+                    toolSummaryIndexByCallID[callID] = summaries.count
+                    summaries.append(toolSummary(tool: tool, events: [event]))
+                }
+            } else if let tool = toolName(for: event),
                let last = summaries.last,
                last.kind == .tool,
+               toolCallID(for: last.events.last) == nil,
                last.events.last.flatMap(toolName(for:)) == tool
             {
                 let combined = last.events + [event]
@@ -37,17 +48,22 @@ struct ActivityEventSummary: Identifiable, Equatable {
                     startedAt: event.timestamp,
                     endedAt: event.timestamp,
                     operationCount: 1,
+                    isFailure: event.resolvedState == .failed,
                     events: [event]
                 ))
             }
         }
-        return summaries.reversed()
+        return summaries.sorted {
+            $0.endedAt != $1.endedAt ? $0.endedAt > $1.endedAt : $0.startedAt > $1.startedAt
+        }
     }
 
     private static func toolSummary(tool: String, events: [AgentEvent]) -> ActivityEventSummary {
         let completed = events.filter { $0.type == .toolCompleted }.count
         let started = events.filter { $0.type == .toolStarted }.count
-        let failed = events.contains { $0.resolvedState == .failed }
+        let failed = events.contains {
+            $0.resolvedState == .failed || $0.activity?.hasPrefix("Tool failed") == true
+        }
         let isRunning = events.last?.type == .toolStarted
         let verb = failed ? "Tool failed" : (isRunning ? "Using" : "Ran")
         return ActivityEventSummary(
@@ -57,8 +73,13 @@ struct ActivityEventSummary: Identifiable, Equatable {
             startedAt: events.map(\.timestamp).min() ?? .distantPast,
             endedAt: events.map(\.timestamp).max() ?? .distantPast,
             operationCount: max(1, max(completed, started)),
+            isFailure: failed,
             events: events
         )
+    }
+
+    private static func toolCallID(for event: AgentEvent?) -> String? {
+        event?.metadata?["toolCallId"]?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
     }
 
     private static func toolName(for event: AgentEvent) -> String? {
@@ -156,6 +177,7 @@ struct ActivityEventTimeline: View {
     }
 
     private func symbol(for summary: ActivityEventSummary) -> String {
+        if summary.isFailure { return "xmark" }
         guard let event = summary.events.last else { return "circle" }
         return switch event.type {
         case .toolStarted, .toolCompleted: "terminal"
@@ -168,6 +190,7 @@ struct ActivityEventTimeline: View {
     }
 
     private func color(for summary: ActivityEventSummary) -> Color {
+        if summary.isFailure { return .red }
         guard let state = summary.events.last?.resolvedState else { return NotchWindowPalette.tertiaryText }
         return agentStateColor(for: state)
     }

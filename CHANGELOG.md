@@ -17,6 +17,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Update checks use the Sparkle appcast instead of opening the GitHub releases
   page. Automatic checks default on, run at launch and once a day, and never
   download or install until you ask.
+- Setup and Integrations list each provider with install or remove. Follow-up
+  instructions and errors stay under the name. Setup finishes as Finish Setup
+  when an observer is installed, or Finish without Connecting otherwise.
+- Activity Center's Active and Attention metrics filter the session list. Its
+  status filters now keep completed and failed sessions separate.
+- Tool lifecycle events with a shared call identifier render as one timeline
+  entry, even when another important event arrives between them.
 - Notch controls show hover and press. Waiting-prompt shortcuts activate after
   a click and remain active only while the pointer is over the prompt.
 - Primary actions pick black or white text from the system accent so light
@@ -24,6 +31,17 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A repeated app launch now opens Activity Center in the existing process and
+  exits before competing for the local event socket. Two overlapping launches
+  no longer both quit: only a strictly older process is treated as the owner,
+  and an exclusive lock breaks remaining ties.
+- Activity Center's Active and Attention counts follow the current provider,
+  project, date, and search filters, so clicking a chip matches the number it
+  shows.
+- Activity Center project headings no longer expose the decorative folder as
+  an unrelated VoiceOver action, and long session titles show in hover help.
+- Swift 6 builds no longer warn about notification logging or the hook relay
+  test's trailing closure.
 - Retry after a Sparkle startup failure starts the updater again instead of
   doing nothing until relaunch.
 - An ineligible update (newer macOS required, and similar Sparkle reasons) no

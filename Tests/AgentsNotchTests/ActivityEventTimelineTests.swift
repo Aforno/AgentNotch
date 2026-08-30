@@ -32,6 +32,32 @@ final class ActivityEventTimelineTests: XCTestCase {
         XCTAssertEqual(summaries[1].title, "Needs approval")
     }
 
+    func testToolCallIdentityPairsLifecycleAcrossImportantEvent() {
+        let start = Date(timeIntervalSince1970: 100)
+        let events = [
+            event(.toolCompleted, at: start.addingTimeInterval(2), activity: "Finished js", callID: "call-1"),
+            event(.waiting, at: start.addingTimeInterval(1), activity: "Needs approval"),
+            event(.toolStarted, at: start, activity: "Using js", callID: "call-1"),
+        ]
+
+        let summaries = ActivityEventSummary.make(from: events)
+
+        XCTAssertEqual(summaries.count, 2)
+        XCTAssertEqual(summaries[0].title, "Ran JavaScript")
+        XCTAssertEqual(summaries[0].events.count, 2)
+        XCTAssertEqual(summaries[0].duration, 2)
+        XCTAssertEqual(summaries[1].title, "Needs approval")
+    }
+
+    func testFailedToolSummaryCarriesFailurePresentation() {
+        let summary = ActivityEventSummary.make(from: [
+            event(.toolCompleted, at: Date(timeIntervalSince1970: 100), activity: "Tool failed: Tests failed"),
+        ])
+
+        XCTAssertEqual(summary.first?.title, "Tool failed JavaScript")
+        XCTAssertTrue(summary.first?.isFailure == true)
+    }
+
     func testWhitespaceOnlyToolMetadataIsIgnored() {
         let events = [
             AgentEvent(
@@ -54,15 +80,18 @@ final class ActivityEventTimelineTests: XCTestCase {
     private func event(
         _ type: AgentEventType,
         at timestamp: Date,
-        activity: String
+        activity: String,
+        callID: String? = nil
     ) -> AgentEvent {
-        AgentEvent(
+        var metadata = ["tool": "mcp__node_repl__js"]
+        metadata["toolCallId"] = callID
+        return AgentEvent(
             type: type,
             sessionId: "codex:test",
             provider: .codex,
             activity: activity,
             timestamp: timestamp,
-            metadata: ["tool": "mcp__node_repl__js"]
+            metadata: metadata
         )
     }
 }

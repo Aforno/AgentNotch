@@ -4,11 +4,6 @@ import Observation
 import os
 import UserNotifications
 
-private let notificationLogger = Logger(
-    subsystem: "com.afonsoferreira.AgentNotch",
-    category: "notifications"
-)
-
 @Observable
 @MainActor
 final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate {
@@ -16,6 +11,10 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     var onOpenSession: ((String) -> Void)?
 
     private let center: UNUserNotificationCenter?
+    nonisolated private static let logger = Logger(
+        subsystem: "com.afonsoferreira.AgentNotch",
+        category: "notifications"
+    )
     private static let categoryIdentifier = "AGENT_ATTENTION"
     private static let openActionIdentifier = "OPEN_SESSION"
 
@@ -148,7 +147,7 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
         }
         center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
             if let error {
-                notificationLogger.error("Failed to schedule notification \(id): \(error.localizedDescription)")
+                Self.logger.error("Failed to schedule notification \(id): \(error.localizedDescription)")
             }
         }
     }

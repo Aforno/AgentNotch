@@ -32,6 +32,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var source: String?
     public var reason: String?
     public var toolName: String?
+    public var toolCallId: String?
     public var toolInput: JSONValue?
     public var agentId: String?
     public var agentType: String?
@@ -47,7 +48,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         // Grok camelCase
         case sessionId, transcriptPath, cwd, workspaceRoot, hookEventName
         case model, turnId, approvalsReviewer, prompt, source, reason, status
-        case toolName, toolInput, agentId, agentType, parentSessionId
+        case toolName, toolUseId, toolCallId, toolInput, agentId, agentType, parentSessionId
         case description, lastAssistantMessage, notificationType
         case notificationMessage = "message"
         case promptResponse, error, timestamp, createdAt
@@ -61,6 +62,8 @@ public struct AgentHookPayload: Decodable, Sendable {
         case turnIdSnake = "turn_id"
         case approvalsReviewerSnake = "approvals_reviewer"
         case toolNameSnake = "tool_name"
+        case toolUseIdSnake = "tool_use_id"
+        case toolCallIdSnake = "tool_call_id"
         case toolInputSnake = "tool_input"
         case agentIdSnake = "agent_id"
         case agentTypeSnake = "agent_type"
@@ -125,6 +128,11 @@ public struct AgentHookPayload: Decodable, Sendable {
         reason = try values.decodeIfPresent(String.self, forKey: .reason)
             ?? values.decodeIfPresent(String.self, forKey: .status)
         toolName = try values.decodeEitherIfPresent(String.self, forKey: .toolName, or: .toolNameSnake)
+        let camelToolUseId = try values.decodeIfPresent(String.self, forKey: .toolUseId)?.nonEmpty
+        let camelToolCallId = try values.decodeIfPresent(String.self, forKey: .toolCallId)?.nonEmpty
+        let snakeToolUseId = try values.decodeIfPresent(String.self, forKey: .toolUseIdSnake)?.nonEmpty
+        let snakeToolCallId = try values.decodeIfPresent(String.self, forKey: .toolCallIdSnake)?.nonEmpty
+        toolCallId = camelToolUseId ?? camelToolCallId ?? snakeToolUseId ?? snakeToolCallId
         toolInput = try values.decodeEitherIfPresent(JSONValue.self, forKey: .toolInput, or: .toolInputSnake)
         agentId = try values.decodeEitherIfPresent(String.self, forKey: .agentId, or: .agentIdSnake)
             ?? values.decodeIfPresent(String.self, forKey: .subagentIdSnake)

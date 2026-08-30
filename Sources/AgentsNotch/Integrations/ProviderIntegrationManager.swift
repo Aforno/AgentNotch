@@ -23,6 +23,13 @@ enum ProviderIntegrationStatus: Equatable {
         case .awaitingFirstEvent, .connected: false
         }
     }
+
+    var isInstalled: Bool {
+        switch self {
+        case .awaitingFirstEvent, .connected: true
+        case .notInstalled, .unavailable: false
+        }
+    }
 }
 
 @Observable
