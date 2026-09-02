@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#050505" />
+  <meta name="description" content="Agent Notch keeps Codex, Claude Code, Grok, Gemini CLI, OpenCode, and Cursor activity in your MacBook notch." />
+  <title>Agent Notch — Your coding agents, in the notch.</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header" data-header>
+      <a class="brand" href="#top" aria-label="Agent Notch home">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span>Agent Notch</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#features">Features</a>
+        <a href="#integrations">Integrations</a>
+        <a href="#privacy">Privacy</a>
+      </nav>
+      <a class="header-link" href="https://github.com/Aforno/AgentNotch" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main id="top">
+      <section class="hero section-pad">
+        <div class="hero-copy reveal">
+          <h1>Your coding agents.<br><span>Right in the notch.</span></h1>
+          <p>See what every local coding agent is doing without opening another window. Agent Notch stays out of the way until something needs you.</p>
+          <div class="hero-actions">
+            <a class="primary-button" href="#install">Install the beta</a>
+            <a class="text-link" href="https://github.com/Aforno/AgentNotch" target="_blank" rel="noreferrer">View source <span aria-hidden="true">↗</span></a>
+          </div>
+          <p class="hero-meta">Apple Silicon · macOS 14+ · Open source</p>
+        </div>
+
+        <div class="hero-stage reveal" aria-label="Animated preview of Agent Notch">
+          <div class="ambient-line ambient-line-a"></div>
+          <div class="ambient-line ambient-line-b"></div>
+          <div class="screen-frame">
+            <div class="screen-glass">
+              <div class="wallpaper-orb orb-one"></div>
+              <div class="wallpaper-orb orb-two"></div>
+              <div class="desktop-copy">
+                <span>Ship the feature.</span>
+                <strong>Keep the flow.</strong>
+              </div>
+              <div class="notch-demo" data-notch>
+                <div class="notch-camera" aria-hidden="true"></div>
+                <div class="notch-collapsed">
+                  <div class="agent-dot is-codex"></div>
+                  <div class="collapsed-copy">
+                    <strong>Codex</strong>
+                    <span data-activity>Running tests</span>
+                  </div>
+                  <div class="mini-wave" aria-hidden="true"><i></i><i></i><i></i></div>
+                </div>
+                <div class="notch-expanded">
+                  <div class="notch-head">
+                    <div>
+                      <span class="status-dot"></span>
+                      <strong data-mode-title>3 agents working</strong>
+                    </div>
+                    <span class="shortcut">⌘ 1</span>
+                  </div>
+                  <div class="agent-list">
+                    <div class="agent-row active-row">
+                      <div class="provider-symbol codex-symbol">C</div>
+                      <div class="agent-copy"><strong>Codex</strong><span>Running auth tests</span></div>
+                      <span class="agent-state running">Running</span>
+                    </div>
+                    <div class="agent-row">
+                      <div class="provider-symbol claude-symbol">A</div>
+                      <div class="agent-copy"><strong>Claude Code</strong><span>Refactoring SessionStore</span></div>
+                      <span class="agent-state editing">Editing</span>
+                    </div>
+                    <div class="agent-row">
+                      <div class="provider-symbol gemini-symbol">G</div>
+                      <div class="agent-copy"><strong>Gemini CLI</strong><span>Indexing project</span></div>
+                      <span class="agent-state thinking">Working</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="laptop-edge"></div>
+        </div>
+      </section>
+
+      <section class="integrations-strip section-pad" id="integrations">
+        <p class="section-label">One view for the agents you already use</p>
+        <div class="integration-rail" aria-label="Supported coding agents">
+          <span>Codex</span><i></i><span>Claude Code</span><i></i><span>Grok</span><i></i><span>Gemini CLI</span><i></i><span>OpenCode</span><i></i><span>Cursor</span>
+        </div>
+      </section>
+
+      <section class="feature-story section-pad" id="features">
+        <div class="story-copy reveal">
+          <p class="section-number">01</p>
+          <h2>Quiet by default.<br>Visible when it matters.</h2>
+          <p>Routine tool calls, file edits, and completions stay collapsed. Hover when you want context. When an agent needs a permission or an answer, the notch opens itself.</p>
+          <ul class="plain-list">
+            <li><span></span>Tracks multiple sessions at once</li>
+            <li><span></span>Queues waiting agents by urgency</li>
+            <li><span></span>Shows plan and workflow progress</li>
+          </ul>
+        </div>
+
+        <div class="attention-demo reveal">
+          <div class="attention-topline"><span>14:32</span><span>agentnotch.local</span><span>100%</span></div>
+          <div class="attention-notch">
+            <div class="attention-title">
+              <div class="provider-symbol claude-symbol">A</div>
+              <div><strong>Claude Code needs you</strong><span>Agent Notch · just now</span></div>
+            </div>
+            <p>Allow Claude Code to run the migration in the local database?</p>
+            <div class="choice-row">
+              <button type="button" data-choice="allow">Allow once</button>
+              <button type="button" class="secondary-choice" data-choice="deny">Not now</button>
+            </div>
+            <div class="choice-result" data-choice-result aria-live="polite"></div>
+          </div>
+          <div class="attention-caption">The prompt comes to you. Your editor stays exactly where it is.</div>
+        </div>
+      </section>
+
+      <section class="activity-section section-pad">
+        <div class="section-heading reveal">
+          <p class="section-number">02</p>
+          <h2>Every session, one glance away.</h2>
+          <p>Activity Center turns parallel agent work into something you can actually scan.</p>
+        </div>
+
+        <div class="activity-window reveal">
+          <div class="window-toolbar">
+            <div class="traffic-lights" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="window-title">Activity Center</div>
+            <div class="toolbar-actions"><span>⌕</span><span>⋯</span></div>
+          </div>
+          <div class="activity-layout">
+            <aside class="activity-sidebar">
+              <button class="sidebar-item selected" type="button"><span class="sidebar-icon">⌁</span><span>All sessions</span><em>6</em></button>
+              <button class="sidebar-item" type="button"><span class="sidebar-icon">C</span><span>Codex</span><em>2</em></button>
+              <button class="sidebar-item" type="button"><span class="sidebar-icon">A</span><span>Claude</span><em>2</em></button>
+              <button class="sidebar-item" type="button"><span class="sidebar-icon">G</span><span>Gemini</span><em>1</em></button>
+              <button class="sidebar-item" type="button"><span class="sidebar-icon">›_</span><span>OpenCode</span><em>1</em></button>
+              <div class="sidebar-spacer"></div>
+              <div class="sidebar-foot"><span class="local-indicator"></span> Local only</div>
+            </aside>
+
+            <div class="session-list">
+              <button class="session-item selected" type="button" data-session="auth">
+                <div><strong>Fix authentication bug</strong><span>agentnotch · Codex</span></div><em>Running tests</em><time>now</time>
+              </button>
+              <button class="session-item" type="button" data-session="sidebar">
+                <div><strong>Refine activity sidebar</strong><span>agentnotch · Claude</span></div><em>Editing SidebarView.swift</em><time>2m</time>
+              </button>
+              <button class="session-item waiting-item" type="button" data-session="migration">
+                <div><strong>Database migration</strong><span>api · Claude</span></div><em>Waiting for permission</em><time>4m</time>
+              </button>
+              <button class="session-item" type="button" data-session="tests">
+                <div><strong>Stabilize integration tests</strong><span>client · Gemini</span></div><em>Inspecting failures</em><time>7m</time>
+              </button>
+              <button class="session-item" type="button" data-session="release">
+                <div><strong>Prepare 0.2.1 release</strong><span>agentnotch · OpenCode</span></div><em>Completed</em><time>18m</time>
+              </button>
+            </div>
+
+            <div class="session-detail" data-session-detail>
+              <div class="detail-head"><div><span>Codex</span><h3>Fix authentication bug</h3></div><button type="button">Open in Codex ↗</button></div>
+              <div class="progress-track"><span style="width:72%"></span></div>
+              <div class="detail-plan">
+                <div class="plan-row done"><span>✓</span><div><strong>Trace login flow</strong><em>Completed</em></div></div>
+                <div class="plan-row done"><span>✓</span><div><strong>Patch token refresh</strong><em>Completed</em></div></div>
+                <div class="plan-row current"><span></span><div><strong>Run authentication tests</strong><em>In progress</em></div></div>
+                <div class="plan-row"><span></span><div><strong>Review edge cases</strong><em>Pending</em></div></div>
+              </div>
+              <div class="detail-files"><span>Recent files</span><code>Sources/Auth/SessionStore.swift</code><code>Tests/AuthTests.swift</code></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="local-section section-pad" id="privacy">
+        <div class="local-visual reveal" aria-hidden="true">
+          <div class="local-ring ring-one"></div>
+          <div class="local-ring ring-two"></div>
+          <div class="local-core">
+            <span class="brand-mark big-mark"><span></span></span>
+            <strong>Your Mac</strong>
+            <em>~/.agentnotch/agent.sock</em>
+          </div>
+          <div class="orbit-label orbit-a">Codex</div>
+          <div class="orbit-label orbit-b">Claude</div>
+          <div class="orbit-label orbit-c">Gemini</div>
+          <div class="orbit-label orbit-d">Cursor</div>
+        </div>
+        <div class="local-copy reveal">
+          <p class="section-number">03</p>
+          <h2>Local is not a mode.<br>It is the architecture.</h2>
+          <p>Agent Notch listens to local provider hooks over a private Unix socket. Session history stays on your machine. There is no analytics pipeline and no source upload.</p>
+          <div class="local-facts">
+            <div><strong>0700 / 0600</strong><span>Private directory and socket modes</span></div>
+            <div><strong>0 analytics</strong><span>No remote telemetry</span></div>
+            <div><strong>1 MiB cap</strong><span>Oversized payloads are discarded</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="details-band section-pad">
+        <div class="detail-column reveal"><span>01</span><h3>Answer from the notch</h3><p>Supported Codex and Claude permission prompts can be answered without leaving your current app.</p></div>
+        <div class="detail-column reveal"><span>02</span><h3>Go back to the source</h3><p>Open the captured Codex thread, provider session, editor, terminal, or working directory from the session detail.</p></div>
+        <div class="detail-column reveal"><span>03</span><h3>Works without a notch</h3><p>Use the virtual notch or Activity Center on external displays and Macs without the hardware cutout.</p></div>
+      </section>
+
+      <section class="install-section section-pad" id="install">
+        <div class="install-copy reveal">
+          <h2>Make the notch useful.</h2>
+          <p>Agent Notch is a pre-1.0 public beta for Apple Silicon Macs running macOS 14 or later.</p>
+        </div>
+        <div class="install-command reveal">
+          <div class="command-tabs"><span class="active">Homebrew</span><span>v0.2.1</span></div>
+          <div class="command-line"><code>brew tap Aforno/agentnotch https://github.com/Aforno/AgentNotch<br>brew install --cask aforno/agentnotch/agent-notch</code><button type="button" data-copy aria-label="Copy install command">Copy</button></div>
+          <div class="install-links">
+            <a href="https://github.com/Aforno/AgentNotch/releases" target="_blank" rel="noreferrer">Download manually ↗</a>
+            <a href="https://github.com/Aforno/AgentNotch#develop-from-source" target="_blank" rel="noreferrer">Build from source ↗</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer section-pad">
+      <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><span></span></span><span>Agent Notch</span></a>
+      <p>Open source. Local-first. Made for the space your Mac was already taking.</p>
+      <div class="footer-links"><a href="https://github.com/Aforno/AgentNotch" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/Aforno/AgentNotch/blob/main/SECURITY.md" target="_blank" rel="noreferrer">Security</a><a href="https://github.com/Aforno/AgentNotch/blob/main/LICENSE" target="_blank" rel="noreferrer">License</a></div>
+    </footer>
+  </div>
+
+  <script src="./script.js"></script>
+</body>
+</html>
