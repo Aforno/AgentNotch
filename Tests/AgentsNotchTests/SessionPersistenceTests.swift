@@ -1,5 +1,6 @@
 @testable import AgentsNotch
 import AgentsNotchCore
+import Darwin
 import Foundation
 import XCTest
 
@@ -73,6 +74,7 @@ final class SessionPersistenceTests: XCTestCase {
         )
         await runtime.start()
         defer { runtime.stop() }
+        try await fixture.waitForSocket()
 
         try UnixSocketClient.send(AgentEvent(
             protocolVersion: 2,
@@ -81,8 +83,11 @@ final class SessionPersistenceTests: XCTestCase {
             provider: .codex,
             state: .running
         ), to: fixture.socketURL)
-        try await Task.sleep(for: .milliseconds(150))
+        for _ in 0..<50 where !runtime.activity.protocolMismatchDetected {
+            try await Task.sleep(for: .milliseconds(10))
+        }
 
+        XCTAssertTrue(runtime.activity.protocolMismatchDetected)
         XCTAssertTrue(runtime.activity.sessions.isEmpty)
         XCTAssertNil(runtime.lastEventReceivedAt[.codex])
 
@@ -92,7 +97,7 @@ final class SessionPersistenceTests: XCTestCase {
             provider: .codex,
             state: .running
         ), to: fixture.socketURL)
-        for _ in 0..<30 where runtime.lastEventReceivedAt[.codex] == nil {
+        for _ in 0..<50 where runtime.lastEventReceivedAt[.codex] == nil {
             try await Task.sleep(for: .milliseconds(10))
         }
 
@@ -112,9 +117,7 @@ final class SessionPersistenceTests: XCTestCase {
         )
         let startTask = Task { await runtime.start() }
 
-        for _ in 0..<30 where !FileManager.default.fileExists(atPath: fixture.socketURL.path) {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await fixture.waitForSocket()
         try UnixSocketClient.send(AgentEvent(
             type: .activity,
             sessionId: "codex:startup-event",
@@ -475,16 +478,28 @@ private final class PersistenceFixture: @unchecked Sendable {
 
     init() throws {
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AgentsNotchPersistenceTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("an-p-\(UUID().uuidString.prefix(8))", isDirectory: true)
         fileURL = root.appendingPathComponent("sessions.json")
-        socketURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("an-\(UUID().uuidString.prefix(8)).sock")
+        socketURL = root.appendingPathComponent("agent.sock")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
+    func waitForSocket() async throws {
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: socketURL.path) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: socketURL.path),
+            "event socket was not created at \(socketURL.path)"
+        )
+    }
+
+    /// Unlink the socket first. FileManager.removeItem throws if stop() already removed the path.
     func remove() {
-        try? FileManager.default.removeItem(at: root)
-        try? FileManager.default.removeItem(at: socketURL)
-        try? FileManager.default.removeItem(atPath: socketURL.path + ".lock")
+        _ = unlink(socketURL.path)
+        _ = unlink(socketURL.path + ".lock")
+        do {
+            try FileManager.default.removeItem(at: root)
+        } catch {}
     }
 }
