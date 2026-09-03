@@ -639,12 +639,11 @@ final class AppRuntime {
     }
 }
 
-private final class AnswerModeAvailability: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage = false
+private final class AnswerModeAvailability: Sendable {
+    private let state = OSAllocatedUnfairLock(initialState: false)
 
     var value: Bool {
-        get { lock.withLock { storage } }
-        set { lock.withLock { storage = newValue } }
+        get { state.withLock { $0 } }
+        set { state.withLock { $0 = newValue } }
     }
 }

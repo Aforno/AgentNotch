@@ -80,6 +80,7 @@ final class ActivityCenterProjection {
     private var state = State.empty
     @ObservationIgnored private var sessionsByID: [String: AgentSession] = [:]
     @ObservationIgnored private var childrenByParentID: [String: [AgentSession]] = [:]
+    @ObservationIgnored private var sessionIndex: SessionIndex?
     var filteredSessions: [AgentSession] { state.filteredSessions }
     var filteredSessionIDs: Set<String> { state.filteredSessionIDs }
     var availableProviders: [AgentProvider] { state.availableProviders }
@@ -97,11 +98,12 @@ final class ActivityCenterProjection {
     func children(of sessionID: String) -> [AgentSession] { childrenByParentID[sessionID] ?? [] }
     func groupID(containing sessionID: String) -> String? {
         guard sessionsByID[sessionID] != nil else { return nil }
-        return Self.rootID(for: sessionID, sessionsByID: sessionsByID)
+        return sessionIndex?.rootID(for: sessionID) ?? sessionID
     }
 
     func update(
         sessions: [AgentSession],
+        index: SessionIndex? = nil,
         searchText: String,
         providerFilter: String,
         statusFilter: ActivityStatusFilter,
@@ -109,29 +111,34 @@ final class ActivityCenterProjection {
         dateFilter: ActivityDateFilter = .all,
         now: Date = Date()
     ) {
-        var allByID: [String: AgentSession] = [:]
-        allByID.reserveCapacity(sessions.count)
-        for session in sessions {
-            allByID[session.id] = session
-        }
-        let sessions = sessions.filter { session in
-            let root = allByID[Self.rootID(for: session.id, sessionsByID: allByID)] ?? session
+        let index = index ?? SessionIndex(sessions: sessions)
+        self.sessionIndex = index
+
+        let visibleSessions = sessions.filter { session in
+            let root = index.rootID(for: session.id).flatMap { index.sessionsByID[$0] } ?? session
             return AgentTaskTitle.isUserVisible(session, groupRoot: root)
         }
+
         var sessionsByID: [String: AgentSession] = [:]
         var childrenByParentID: [String: [AgentSession]] = [:]
         var providers = Set<AgentProvider>()
-        for session in sessions {
+        for session in visibleSessions {
             sessionsByID[session.id] = session
             providers.insert(AgentProvider(rawValue: Self.canonicalProviderRawValue(session.provider.rawValue)))
-            if let parentID = session.parentSessionId { childrenByParentID[parentID, default: []].append(session) }
+            if let parentID = session.parentSessionId {
+                childrenByParentID[parentID, default: []].append(session)
+            }
         }
-        for parentID in childrenByParentID.keys { childrenByParentID[parentID]?.sort(by: Self.orderSessions) }
+        for parentID in childrenByParentID.keys {
+            childrenByParentID[parentID]?.sort(by: Self.orderSessions)
+        }
         self.sessionsByID = sessionsByID
         self.childrenByParentID = childrenByParentID
 
+        let sessions = visibleSessions
+
         let projectKeyBySessionID = Dictionary(uniqueKeysWithValues: sessions.map { session in
-            let root = sessionsByID[Self.rootID(for: session.id, sessionsByID: sessionsByID)] ?? session
+            let root = index.rootID(for: session.id).flatMap { index.sessionsByID[$0] } ?? session
             return (session.id, root.workingDirectory ?? session.workingDirectory ?? "provider:\(root.provider.rawValue)")
         })
         let projectTitles = Dictionary(grouping: sessions, by: { projectKeyBySessionID[$0.id] ?? "provider:\($0.provider.rawValue)" })
@@ -182,7 +189,13 @@ final class ActivityCenterProjection {
             }
         }.sorted { $0.updatedAt != $1.updatedAt ? $0.updatedAt > $1.updatedAt : $0.id < $1.id }
 
-        let projectGroups = Self.makeProjectGroups(matchingSessions: filtered, sessionsByID: sessionsByID, projectKeyBySessionID: projectKeyBySessionID, projectTitles: projectTitles)
+        let projectGroups = Self.makeProjectGroups(
+            matchingSessions: filtered,
+            sessionsByID: index.sessionsByID,
+            rootIDForSession: { index.rootID(for: $0) ?? $0 },
+            projectKeyBySessionID: projectKeyBySessionID,
+            projectTitles: projectTitles
+        )
         let contextualRootIDs = Set(projectGroups.flatMap { $0.groups.map(\.root.id) })
         let next = State(
             filteredSessions: filtered,
@@ -212,30 +225,14 @@ final class ActivityCenterProjection {
         }
     }
 
-    private static func rootID(for sessionID: String, sessionsByID: [String: AgentSession]) -> String {
-        var currentID = sessionID
-        var visited: [String] = []
-        var visitedSet = Set<String>()
-        while visitedSet.insert(currentID).inserted,
-              let parentID = sessionsByID[currentID]?.parentSessionId,
-              sessionsByID[parentID] != nil
-        {
-            visited.append(currentID)
-            currentID = parentID
-        }
-        if visitedSet.contains(sessionsByID[currentID]?.parentSessionId ?? "") {
-            return (visited + [currentID]).min() ?? sessionID
-        }
-        return currentID
-    }
-
     private static func makeProjectGroups(
         matchingSessions: [AgentSession],
         sessionsByID: [String: AgentSession],
+        rootIDForSession: (String) -> String,
         projectKeyBySessionID: [String: String],
         projectTitles: [String: String]
     ) -> [ActivityProjectSection] {
-        let matchesByRoot = Dictionary(grouping: matchingSessions) { rootID(for: $0.id, sessionsByID: sessionsByID) }
+        let matchesByRoot = Dictionary(grouping: matchingSessions) { rootIDForSession($0.id) }
         var groupsByProject: [String: [ActivitySessionGroup]] = [:]
         for (rootID, matches) in matchesByRoot {
             guard let fallback = matches.first else { continue }

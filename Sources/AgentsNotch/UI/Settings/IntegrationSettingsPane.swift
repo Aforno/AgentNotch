@@ -68,8 +68,11 @@ struct IntegrationSettingsPane: View {
             }
             Spacer(minLength: 12)
             if integration.status.canInstall {
-                Button(integration.status == .notInstalled ? "Install" : "Retry") { integration.install() }
-                    .buttonStyle(NotchPillButtonStyle())
+                Button(integration.status == .notInstalled ? "Install" : "Retry") {
+                    Task { await integration.install() }
+                }
+                .buttonStyle(NotchPillButtonStyle())
+                .disabled(integration.isPerformingMaintenance)
             } else {
                 Button {
                     integration.refreshStatus(
@@ -81,8 +84,12 @@ struct IntegrationSettingsPane: View {
                 .buttonStyle(NotchIconButtonStyle())
                 .help("Refresh status")
                 .accessibilityLabel("Refresh \(integration.provider.displayName) status")
-                Button("Remove", role: .destructive) { integration.uninstall() }
-                    .buttonStyle(NotchPillButtonStyle(destructive: true))
+                .disabled(integration.isPerformingMaintenance)
+                Button("Remove", role: .destructive) {
+                    Task { await integration.uninstall() }
+                }
+                .buttonStyle(NotchPillButtonStyle(destructive: true))
+                .disabled(integration.isPerformingMaintenance)
             }
         }
         .controlSize(.small)

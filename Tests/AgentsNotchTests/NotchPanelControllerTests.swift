@@ -39,6 +39,42 @@ final class NotchPanelControllerTests: XCTestCase {
         XCTAssertEqual(availability, [true, false])
     }
 
+    @MainActor
+    func testDisplayResolverRespectsNotchPreference() {
+        let defaults = UserDefaults.standard
+        let originalDisplayPreference = defaults.object(forKey: "displayPreference")
+        defer {
+            restore(originalDisplayPreference, forKey: "displayPreference", in: defaults)
+        }
+
+        defaults.set(DisplayPreference.notch.rawValue, forKey: "displayPreference")
+        XCTAssertEqual(DisplayPreference.notch.title, "Display with notch")
+
+        let preferred = DisplayResolver.preferredScreen()
+        let expected = NSScreen.screens.first { DisplayGeometry.detect(on: $0).hasPhysicalNotch }
+            ?? NSScreen.screens.first
+            ?? NSScreen.main
+        XCTAssertEqual(preferred, expected)
+    }
+
+    @MainActor
+    func testPointerDisplayObservationTogglesWithPreference() {
+        let defaults = UserDefaults.standard
+        let originalDisplayPreference = defaults.object(forKey: "displayPreference")
+        defer {
+            restore(originalDisplayPreference, forKey: "displayPreference", in: defaults)
+        }
+
+        defaults.set(DisplayPreference.pointer.rawValue, forKey: "displayPreference")
+        let controller = NotchPanelController(runtime: AppRuntime(monitorProviders: false))
+
+        defaults.set(DisplayPreference.primary.rawValue, forKey: "displayPreference")
+        controller.refreshPreferences()
+
+        defaults.set(DisplayPreference.notch.rawValue, forKey: "displayPreference")
+        controller.refreshPreferences()
+    }
+
     private func restore(_ value: Any?, forKey key: String, in defaults: UserDefaults) {
         if let value {
             defaults.set(value, forKey: key)

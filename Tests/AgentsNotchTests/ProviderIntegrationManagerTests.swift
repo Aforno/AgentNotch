@@ -15,7 +15,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testInstallIsIdempotentAndUninstallPreservesExistingConfiguration() throws {
+    func testInstallIsIdempotentAndUninstallPreservesExistingConfiguration() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let hooksURL = fixture.home
@@ -40,8 +40,8 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: hooksURL.path)
 
         let manager = fixture.manager(provider: .codex)
-        manager.install()
-        manager.install()
+        await manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)
@@ -59,7 +59,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(preToolUse.count, 2, "reinstalling must not duplicate the relay")
         XCTAssertEqual(Self.commands(in: preToolUse).filter { $0.contains("agentnotch-hook") }.count, 1)
 
-        manager.uninstall()
+        await manager.uninstall()
 
         XCTAssertEqual(manager.status, .notInstalled)
         let uninstalledRoot = try Self.readJSON(at: hooksURL)
@@ -75,7 +75,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testInstallPreservesSymlinkedConfigurationFile() throws {
+    func testInstallPreservesSymlinkedConfigurationFile() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let sharedURL = fixture.root.appendingPathComponent("dotfiles/hooks.json")
@@ -94,7 +94,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: hooksURL, withDestinationURL: sharedURL)
 
         let manager = fixture.manager(provider: .codex)
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertEqual(
@@ -107,11 +107,11 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testUninstallRemovesProviderOwnedLegacyEventHooks() throws {
+    func testUninstallRemovesProviderOwnedLegacyEventHooks() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .codex)
-        manager.install()
+        await manager.install()
         let hooksURL = fixture.home
             .appendingPathComponent(".codex", isDirectory: true)
             .appendingPathComponent("hooks.json")
@@ -129,7 +129,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         root["hooks"] = hooks
         try Self.writeJSON(root, to: hooksURL)
 
-        manager.uninstall()
+        await manager.uninstall()
 
         let removedRoot = try Self.readJSON(at: hooksURL)
         let removedHooks = try XCTUnwrap(removedRoot["hooks"] as? [String: Any])
@@ -138,7 +138,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testInstallRefusesToOverwriteInvalidRootConfiguration() throws {
+    func testInstallRefusesToOverwriteInvalidRootConfiguration() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let hooksURL = fixture.home
@@ -152,7 +152,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         try original.write(to: hooksURL)
 
         let manager = fixture.manager(provider: .claudeCode)
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertNotNil(manager.lastError)
@@ -160,7 +160,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testInstallRefusesToReplaceInvalidHooksSection() throws {
+    func testInstallRefusesToReplaceInvalidHooksSection() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let hooksURL = fixture.home
@@ -174,14 +174,14 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         try original.write(to: hooksURL)
 
         let manager = fixture.manager(provider: .codex)
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertEqual(try Data(contentsOf: hooksURL), original)
     }
 
     @MainActor
-    func testInstallFailsInsteadOfReportingPartialMalformedEventConfiguration() throws {
+    func testInstallFailsInsteadOfReportingPartialMalformedEventConfiguration() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let hooksURL = fixture.home
@@ -197,14 +197,14 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let original = try Data(contentsOf: hooksURL)
 
         let manager = fixture.manager(provider: .codex)
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertEqual(try Data(contentsOf: hooksURL), original)
     }
 
     @MainActor
-    func testSharedSymlinkedConfigurationKeepsProviderSpecificCommandsSeparate() throws {
+    func testSharedSymlinkedConfigurationKeepsProviderSpecificCommandsSeparate() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let sharedURL = fixture.root.appendingPathComponent("dotfiles/shared-hooks.json")
@@ -224,9 +224,9 @@ final class ProviderIntegrationManagerTests: XCTestCase {
 
         let codex = fixture.manager(provider: .codex)
         let claude = fixture.manager(provider: .claudeCode)
-        codex.install()
-        claude.install()
-        claude.uninstall()
+        await codex.install()
+        await claude.install()
+        await claude.uninstall()
 
         let root = try Self.readJSON(at: sharedURL)
         let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
@@ -241,7 +241,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .grok)
-        manager.install()
+        await manager.install()
         let hooksURL = fixture.home
             .appendingPathComponent(".grok/hooks", isDirectory: true)
             .appendingPathComponent("agentnotch.json")
@@ -261,12 +261,14 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testCodexPromotesToConnectedAfterGenuineEventAndRefreshDoesNotDemote() throws {
+    func testCodexPromotesToConnectedAfterGenuineEventAndRefreshDoesNotDemote() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .codex)
 
-        manager.install()
+        XCTAssertFalse(manager.isPerformingMaintenance)
+        await manager.install()
+        XCTAssertFalse(manager.isPerformingMaintenance)
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNotNil(manager.trustInstructions)
         XCTAssertFalse(manager.hasReceivedEvent)
@@ -282,17 +284,18 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         manager.refreshStatus(hasReceivedEvent: true)
         XCTAssertEqual(manager.status, .connected)
 
-        manager.uninstall()
+        await manager.uninstall()
+        XCTAssertFalse(manager.isPerformingMaintenance)
         XCTAssertEqual(manager.status, .notInstalled)
         XCTAssertFalse(manager.hasReceivedEvent)
     }
 
     @MainActor
-    func testRefreshStatusAcceptsRuntimeEventEvidence() throws {
+    func testRefreshStatusAcceptsRuntimeEventEvidence() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .claudeCode)
-        manager.install()
+        await manager.install()
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.trustInstructions, "trust warning is Codex-only")
 
@@ -302,11 +305,11 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testClaudeInstallWritesDocumentedAsynchronousObserverHooks() throws {
+    func testClaudeInstallWritesDocumentedAsynchronousObserverHooks() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .claudeCode)
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         let settingsURL = fixture.home.appendingPathComponent(".claude/settings.json")
@@ -347,11 +350,11 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testAnswerFromNotchInstallsBlockingClaudePermissionHooks() throws {
+    func testAnswerFromNotchInstallsBlockingClaudePermissionHooks() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .claudeCode, answersFromNotch: true)
-        manager.install()
+        await manager.install()
 
         let settingsURL = fixture.home.appendingPathComponent(".claude/settings.json")
         let hooks = try XCTUnwrap(try Self.readJSON(at: settingsURL)["hooks"] as? [String: Any])
@@ -392,7 +395,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .claudeCode)
-        manager.install()
+        await manager.install()
         let settingsURL = fixture.home.appendingPathComponent(".claude/settings.json")
         try Self.writeJSON([
             "hooks": [
@@ -425,7 +428,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testMissingBundledRelayDoesNotModifyProviderConfiguration() throws {
+    func testMissingBundledRelayDoesNotModifyProviderConfiguration() async throws {
         let fixture = try Fixture(createBundledRelay: false)
         defer { fixture.remove() }
         let hooksURL = fixture.home
@@ -433,7 +436,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
             .appendingPathComponent("hooks.json")
         let manager = fixture.manager(provider: .codex)
 
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertEqual(manager.lastError, "The bundled agent relay could not be found. Launch the packaged Agent Notch app.")
@@ -441,7 +444,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testCursorInstallUsesNativeHookShapeAndPreservesExistingHooks() throws {
+    func testCursorInstallUsesNativeHookShapeAndPreservesExistingHooks() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let hooksURL = fixture.home.appendingPathComponent(".cursor/hooks.json")
@@ -461,8 +464,8 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         ], to: hooksURL)
 
         let manager = fixture.manager(provider: .cursor)
-        manager.install()
-        manager.install()
+        await manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)
@@ -491,7 +494,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
             XCTAssertNil(handlers.first?["hooks"], "Cursor uses direct command entries, not matcher groups")
         }
 
-        manager.uninstall()
+        await manager.uninstall()
 
         XCTAssertEqual(manager.status, .notInstalled)
         let removed = try Self.readJSON(at: hooksURL)
@@ -503,7 +506,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testOpenCodeInstallWritesOwnedGlobalPluginAndRemovesOnlyThatFile() throws {
+    func testOpenCodeInstallWritesOwnedGlobalPluginAndRemovesOnlyThatFile() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let pluginsURL = fixture.home.appendingPathComponent(".config/opencode/plugins", isDirectory: true)
@@ -513,8 +516,8 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let pluginURL = pluginsURL.appendingPathComponent("agentnotch.js")
 
         let manager = fixture.manager(provider: .openCode)
-        manager.install()
-        manager.install()
+        await manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)
@@ -545,7 +548,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let permissions = try FileManager.default.attributesOfItem(atPath: pluginURL.path)[.posixPermissions] as? NSNumber
         XCTAssertEqual(permissions?.intValue, 0o600)
 
-        manager.uninstall()
+        await manager.uninstall()
 
         XCTAssertEqual(manager.status, .notInstalled)
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginURL.path))
@@ -553,7 +556,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testOpenCodeInstallRefusesToOverwriteUnownedPlugin() throws {
+    func testOpenCodeInstallRefusesToOverwriteUnownedPlugin() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let pluginURL = fixture.home.appendingPathComponent(".config/opencode/plugins/agentnotch.js")
@@ -565,7 +568,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         try original.write(to: pluginURL)
 
         let manager = fixture.manager(provider: .openCode)
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertEqual(try Data(contentsOf: pluginURL), original)
@@ -607,12 +610,12 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testGeminiIntegrationWritesOfficialHookNamesAndMillisecondTimeouts() throws {
+    func testGeminiIntegrationWritesOfficialHookNamesAndMillisecondTimeouts() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
 
         let manager = fixture.manager(provider: .geminiCLI)
-        manager.install()
+        await manager.install()
 
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         let settingsURL = fixture.home.appendingPathComponent(".gemini/settings.json")

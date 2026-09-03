@@ -231,6 +231,7 @@ struct ActivityCenterView: View {
     private func refreshProjection() {
         projection.update(
             sessions: runtime.activity.sessions,
+            index: runtime.activity.sessionIndex,
             searchText: searchText,
             providerFilter: providerFilter,
             statusFilter: statusFilter,
