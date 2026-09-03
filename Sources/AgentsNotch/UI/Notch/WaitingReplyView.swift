@@ -45,7 +45,9 @@ struct WaitingReplyView: View {
         }
         .onPreferenceChange(WaitingReplyContentHeightKey.self) { height in
             guard height > 0 else { return }
-            onIdealHeightChange(height)
+            MainActor.assumeIsolated {
+                onIdealHeightChange(height)
+            }
         }
         .focusable()
         .focused($isFocused)
