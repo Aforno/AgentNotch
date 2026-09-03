@@ -72,6 +72,7 @@ struct IntegrationSettingsPane: View {
                     Task { await integration.install() }
                 }
                 .buttonStyle(NotchPillButtonStyle())
+                .disabled(integration.isPerformingMaintenance)
             } else {
                 Button {
                     integration.refreshStatus(
@@ -83,10 +84,12 @@ struct IntegrationSettingsPane: View {
                 .buttonStyle(NotchIconButtonStyle())
                 .help("Refresh status")
                 .accessibilityLabel("Refresh \(integration.provider.displayName) status")
+                .disabled(integration.isPerformingMaintenance)
                 Button("Remove", role: .destructive) {
                     Task { await integration.uninstall() }
                 }
                 .buttonStyle(NotchPillButtonStyle(destructive: true))
+                .disabled(integration.isPerformingMaintenance)
             }
         }
         .controlSize(.small)

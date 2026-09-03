@@ -62,4 +62,10 @@ final class AgentOriginTests: XCTestCase {
         XCTAssertNil(AgentProcessIdentity.ttyPath(fromDevice: 0))
         XCTAssertNil(AgentProcessIdentity.ttyPath(fromDevice: UInt32.max))
     }
+
+    func testTerminalProgramBundleIdentifiers() {
+        XCTAssertEqual(AgentOrigin.bundleIdentifier(forProgram: "alacritty"), "org.alacritty")
+        XCTAssertEqual(AgentOrigin.bundleIdentifier(forProgram: "hyper"), "co.zeit.hyper")
+        XCTAssertEqual(AgentOrigin.bundleIdentifier(forProgram: "tabby"), "org.tabby")
+    }
 }

@@ -48,6 +48,7 @@ final class ProviderIntegrationManager {
     /// demoted by a no-op status recompute. Cleared when hooks disappear or
     /// on uninstall so reinstall cannot falsely report Connected.
     private(set) var hasReceivedEvent = false
+    private(set) var isPerformingMaintenance = false
     private var maintenanceGeneration = 0
 
     nonisolated private let store: ProviderHookStore
@@ -124,6 +125,12 @@ final class ProviderIntegrationManager {
         maintenanceGeneration &+= 1
         let generation = maintenanceGeneration
         let answering = answersFromNotch()
+        isPerformingMaintenance = true
+        defer {
+            if generation == maintenanceGeneration {
+                isPerformingMaintenance = false
+            }
+        }
         let preparation = await Task.detached(priority: .utility) { [store] in
             store.prepareForMonitoringOnDisk(answersFromNotch: answering)
         }.value
@@ -145,6 +152,12 @@ final class ProviderIntegrationManager {
         maintenanceGeneration &+= 1
         let generation = maintenanceGeneration
         let answering = answersFromNotch()
+        isPerformingMaintenance = true
+        defer {
+            if generation == maintenanceGeneration {
+                isPerformingMaintenance = false
+            }
+        }
         let result = await Task.detached(priority: .utility) { [store] () -> Result<Void, Error> in
             do {
                 try store.install(answersFromNotch: answering)
@@ -167,6 +180,12 @@ final class ProviderIntegrationManager {
     func uninstall() async {
         maintenanceGeneration &+= 1
         let generation = maintenanceGeneration
+        isPerformingMaintenance = true
+        defer {
+            if generation == maintenanceGeneration {
+                isPerformingMaintenance = false
+            }
+        }
         let result = await Task.detached(priority: .utility) { [store] () -> Result<Void, Error> in
             do {
                 try store.uninstall()
@@ -182,31 +201,6 @@ final class ProviderIntegrationManager {
             status = .notInstalled
             lastError = nil
         case let .failure(error):
-            lastError = error.localizedDescription
-            status = .unavailable("Removal failed")
-        }
-    }
-
-    func installSynchronously() {
-        maintenanceGeneration &+= 1
-        do {
-            try store.install(answersFromNotch: answersFromNotch())
-            status = hasReceivedEvent ? .connected : .awaitingFirstEvent
-            lastError = nil
-        } catch {
-            lastError = error.localizedDescription
-            status = .unavailable("Installation failed")
-        }
-    }
-
-    func uninstallSynchronously() {
-        maintenanceGeneration &+= 1
-        do {
-            try store.uninstall()
-            hasReceivedEvent = false
-            status = .notInstalled
-            lastError = nil
-        } catch {
             lastError = error.localizedDescription
             status = .unavailable("Removal failed")
         }

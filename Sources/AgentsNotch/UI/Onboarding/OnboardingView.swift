@@ -109,6 +109,7 @@ struct OnboardingView: View {
                     Task { await integration.install() }
                 }
                 .buttonStyle(NotchPillButtonStyle())
+                .disabled(integration.isPerformingMaintenance)
             } else {
                 Button {
                     integration.refreshStatus(
@@ -120,6 +121,7 @@ struct OnboardingView: View {
                 .buttonStyle(NotchIconButtonStyle())
                 .help("Refresh status")
                 .accessibilityLabel("Refresh \(integration.provider.displayName) status")
+                .disabled(integration.isPerformingMaintenance)
             }
         }
         .controlSize(.small)

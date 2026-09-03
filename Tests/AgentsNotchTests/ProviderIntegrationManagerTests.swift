@@ -266,7 +266,9 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         defer { fixture.remove() }
         let manager = fixture.manager(provider: .codex)
 
+        XCTAssertFalse(manager.isPerformingMaintenance)
         await manager.install()
+        XCTAssertFalse(manager.isPerformingMaintenance)
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNotNil(manager.trustInstructions)
         XCTAssertFalse(manager.hasReceivedEvent)
@@ -283,6 +285,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(manager.status, .connected)
 
         await manager.uninstall()
+        XCTAssertFalse(manager.isPerformingMaintenance)
         XCTAssertEqual(manager.status, .notInstalled)
         XCTAssertFalse(manager.hasReceivedEvent)
     }
