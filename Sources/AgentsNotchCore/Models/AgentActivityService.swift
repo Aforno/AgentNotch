@@ -120,6 +120,10 @@ public final class AgentActivityService {
         index.sessionsByID[id]
     }
 
+    public var sessionIndex: SessionIndex {
+        index
+    }
+
     public var attentionCount: Int {
         notchSnapshot.attentionCount
     }

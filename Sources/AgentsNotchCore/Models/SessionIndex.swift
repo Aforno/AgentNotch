@@ -3,11 +3,11 @@ import Foundation
 /// Immutable projection of the session graph used by the activity service.
 /// Keeping graph construction here prevents event reduction from also owning
 /// hierarchy traversal and notch presentation policy.
-struct SessionIndex {
-    struct GroupAggregate {
-        let needsAttention: Bool
-        let isActive: Bool
-        let updatedAt: Date
+public struct SessionIndex: Sendable {
+    public struct GroupAggregate: Sendable {
+        public let needsAttention: Bool
+        public let isActive: Bool
+        public let updatedAt: Date
     }
 
     private struct SessionGroups {
@@ -54,20 +54,20 @@ struct SessionIndex {
         }
     }
 
-    let sessionsByID: [String: AgentSession]
-    let childrenByParentID: [String: [AgentSession]]
-    let hierarchicalSessions: [AgentSession]
-    let activeSessions: [AgentSession]
-    let activeProviders: [AgentProvider]
-    let attentionSessions: [AgentSession]
-    let groupRoots: [AgentSession]
-    let groupMembersByRootID: [String: [AgentSession]]
-    let groupRootIDBySessionID: [String: String]
-    let groupAggregates: [String: GroupAggregate]
+    public let sessionsByID: [String: AgentSession]
+    public let childrenByParentID: [String: [AgentSession]]
+    public let hierarchicalSessions: [AgentSession]
+    public let activeSessions: [AgentSession]
+    public let activeProviders: [AgentProvider]
+    public let attentionSessions: [AgentSession]
+    public let groupRoots: [AgentSession]
+    public let groupMembersByRootID: [String: [AgentSession]]
+    public let groupRootIDBySessionID: [String: String]
+    public let groupAggregates: [String: GroupAggregate]
 
-    static let empty = SessionIndex(sessions: [])
+    public static let empty = SessionIndex(sessions: [])
 
-    init(sessions: [AgentSession]) {
+    public init(sessions: [AgentSession]) {
         let sessionsByID = Self.indexByID(sessions)
         let childrenByParentID = Self.indexChildren(sessions)
         let groups = Self.makeGroups(
@@ -93,7 +93,11 @@ struct SessionIndex {
         attentionSessions = Self.waitingSessions(in: visibleSessions)
     }
 
-    func descendantIDs(of sessionID: String) -> Set<String> {
+    public func rootID(for sessionID: String) -> String? {
+        groupRootIDBySessionID[sessionID]
+    }
+
+    public func descendantIDs(of sessionID: String) -> Set<String> {
         var result: Set<String> = []
         var pending = [sessionID]
         var visited: Set<String> = [sessionID]
@@ -108,7 +112,7 @@ struct SessionIndex {
         return result
     }
 
-    func notchSnapshot(attentionEvent: AgentEvent?) -> NotchActivitySnapshot {
+    public func notchSnapshot(attentionEvent: AgentEvent?) -> NotchActivitySnapshot {
         let listSessions = latestGroupRoots()
         let attentionSession = attentionEvent
             .flatMap { sessionsByID[$0.sessionId] }

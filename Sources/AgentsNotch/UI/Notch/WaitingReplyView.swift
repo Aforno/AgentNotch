@@ -37,12 +37,15 @@ struct WaitingReplyView: View {
         .padding(.bottom, DynamicIslandSpacing.standard)
         .background {
             GeometryReader { geometry in
-                Color.clear
-                    .onAppear { onIdealHeightChange(geometry.size.height) }
-                    .onChange(of: geometry.size.height) { _, height in
-                        onIdealHeightChange(height)
-                    }
+                Color.clear.preference(
+                    key: WaitingReplyContentHeightKey.self,
+                    value: geometry.size.height
+                )
             }
+        }
+        .onPreferenceChange(WaitingReplyContentHeightKey.self) { height in
+            guard height > 0 else { return }
+            onIdealHeightChange(height)
         }
         .focusable()
         .focused($isFocused)
@@ -444,5 +447,13 @@ private extension View {
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+private struct WaitingReplyContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 { value = next }
     }
 }

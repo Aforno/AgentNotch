@@ -141,7 +141,53 @@ final class ProviderIntegrationManager {
         }
     }
 
-    func install() {
+    func install() async {
+        maintenanceGeneration &+= 1
+        let generation = maintenanceGeneration
+        let answering = answersFromNotch()
+        let result = await Task.detached(priority: .utility) { [store] () -> Result<Void, Error> in
+            do {
+                try store.install(answersFromNotch: answering)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }.value
+        guard generation == maintenanceGeneration else { return }
+        switch result {
+        case .success:
+            status = hasReceivedEvent ? .connected : .awaitingFirstEvent
+            lastError = nil
+        case let .failure(error):
+            lastError = error.localizedDescription
+            status = .unavailable("Installation failed")
+        }
+    }
+
+    func uninstall() async {
+        maintenanceGeneration &+= 1
+        let generation = maintenanceGeneration
+        let result = await Task.detached(priority: .utility) { [store] () -> Result<Void, Error> in
+            do {
+                try store.uninstall()
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }.value
+        guard generation == maintenanceGeneration else { return }
+        switch result {
+        case .success:
+            hasReceivedEvent = false
+            status = .notInstalled
+            lastError = nil
+        case let .failure(error):
+            lastError = error.localizedDescription
+            status = .unavailable("Removal failed")
+        }
+    }
+
+    func installSynchronously() {
         maintenanceGeneration &+= 1
         do {
             try store.install(answersFromNotch: answersFromNotch())
@@ -153,7 +199,7 @@ final class ProviderIntegrationManager {
         }
     }
 
-    func uninstall() {
+    func uninstallSynchronously() {
         maintenanceGeneration &+= 1
         do {
             try store.uninstall()

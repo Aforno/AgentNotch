@@ -86,7 +86,7 @@ final class AppRuntimeTests: XCTestCase {
         defer { runtime.stop() }
 
         let manager = try XCTUnwrap(runtime.integration(for: .claudeCode))
-        manager.install()
+        await manager.install()
 
         let settingsURL = root.appendingPathComponent(".claude/settings.json")
         let hooks = try XCTUnwrap(
@@ -193,7 +193,7 @@ final class AppRuntimeTests: XCTestCase {
             historyRetentionDays: { 365 }
         )
         let codexIntegration = try XCTUnwrap(runtime.integration(for: .codex))
-        codexIntegration.install()
+        await codexIntegration.install()
         XCTAssertEqual(codexIntegration.status, .awaitingFirstEvent)
         await runtime.start()
         defer { runtime.stop() }

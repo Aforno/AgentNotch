@@ -106,7 +106,7 @@ struct OnboardingView: View {
 
             if integration.status.canInstall {
                 Button(integration.status == .notInstalled ? "Install" : "Retry") {
-                    integration.install()
+                    Task { await integration.install() }
                 }
                 .buttonStyle(NotchPillButtonStyle())
             } else {

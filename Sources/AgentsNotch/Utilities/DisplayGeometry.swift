@@ -50,12 +50,14 @@ struct DisplayGeometry: Equatable {
 
 enum DisplayPreference: String, CaseIterable, Identifiable {
     case primary
+    case notch
     case pointer
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .primary: "Primary display"
+        case .notch: "Display with notch"
         case .pointer: "Display under pointer"
         }
     }
@@ -64,10 +66,16 @@ enum DisplayPreference: String, CaseIterable, Identifiable {
 enum DisplayResolver {
     static func preferredScreen() -> NSScreen? {
         let raw = UserDefaults.standard.string(forKey: "displayPreference") ?? DisplayPreference.primary.rawValue
-        if raw == DisplayPreference.pointer.rawValue {
+        switch raw {
+        case DisplayPreference.pointer.rawValue:
             let location = NSEvent.mouseLocation
             return NSScreen.screens.first { $0.frame.contains(location) } ?? NSScreen.main
+        case DisplayPreference.notch.rawValue:
+            return NSScreen.screens.first { DisplayGeometry.detect(on: $0).hasPhysicalNotch }
+                ?? NSScreen.screens.first
+                ?? NSScreen.main
+        default:
+            return NSScreen.screens.first ?? NSScreen.main
         }
-        return NSScreen.screens.first ?? NSScreen.main
     }
 }

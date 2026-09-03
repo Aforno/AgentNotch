@@ -171,6 +171,8 @@ final class NotchPanelController: NSWindowController {
         }
     }
 
+    private var pointerCheckScheduled = false
+
     private func updatePointerDisplayObservation() {
         let followsPointer = UserDefaults.standard.string(forKey: "displayPreference")
             == DisplayPreference.pointer.rawValue
@@ -185,20 +187,21 @@ final class NotchPanelController: NSWindowController {
                 matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
             ) { [weak self] _ in
                 // AppKit delivers global and local monitor handlers on the main thread.
-                MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
+                MainActor.assumeIsolated { self?.schedulePointerDisplayCheck() }
             }
         }
         if localPointerObserver == nil {
             localPointerObserver = NSEvent.addLocalMonitorForEvents(
                 matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
             ) { [weak self] event in
-                MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
+                MainActor.assumeIsolated { self?.schedulePointerDisplayCheck() }
                 return event
             }
         }
     }
 
     private func removePointerDisplayObservation() {
+        pointerCheckScheduled = false
         if let globalPointerObserver {
             NSEvent.removeMonitor(globalPointerObserver)
             self.globalPointerObserver = nil
@@ -206,6 +209,16 @@ final class NotchPanelController: NSWindowController {
         if let localPointerObserver {
             NSEvent.removeMonitor(localPointerObserver)
             self.localPointerObserver = nil
+        }
+    }
+
+    private func schedulePointerDisplayCheck() {
+        guard !pointerCheckScheduled else { return }
+        pointerCheckScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(120)) { [weak self] in
+            guard let self else { return }
+            self.pointerCheckScheduled = false
+            self.refreshPointerDisplayIfNeeded()
         }
     }
 
