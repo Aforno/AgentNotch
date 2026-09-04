@@ -529,8 +529,8 @@ final class OriginActivationServiceTests: XCTestCase {
         )
         let session = AgentSession(event: AgentEvent(
             type: .activity,
-            sessionId: "simulator:repo",
-            provider: .simulator,
+            sessionId: "opencode:repo",
+            provider: .openCode,
             state: .running,
             workingDirectory: "/Users/me/project"
         ))

@@ -25,7 +25,6 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var cwd: String
     public var workspaceRoot: String?
     public var hookEventName: String
-    public var model: String?
     public var turnId: String?
     public var approvalsReviewer: String?
     public var prompt: String?
@@ -47,7 +46,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     private enum CodingKeys: String, CodingKey {
         // Grok camelCase
         case sessionId, transcriptPath, cwd, workspaceRoot, hookEventName
-        case model, turnId, approvalsReviewer, prompt, source, reason, status
+        case turnId, approvalsReviewer, prompt, source, reason, status
         case toolName, toolUseId, toolCallId, toolInput, agentId, agentType, parentSessionId
         case description, lastAssistantMessage, notificationType
         case notificationMessage = "message"
@@ -116,7 +115,6 @@ public struct AgentHookPayload: Decodable, Sendable {
             forKey: .hookEventName,
             or: .hookEventNameSnake
         )
-        model = try values.decodeIfPresent(String.self, forKey: .model)
         turnId = try values.decodeEitherIfPresent(String.self, forKey: .turnId, or: .turnIdSnake)
         approvalsReviewer = try values.decodeEitherIfPresent(
             String.self,

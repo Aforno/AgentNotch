@@ -5,13 +5,6 @@ import Foundation
 @MainActor
 final class DebugEventSimulator {
     nonisolated private static let sessionPrefix = "debug-simulator:"
-    nonisolated private static let legacySessionIDs: Set<String> = [
-        "simulator-primary",
-        "sim-codex",
-        "sim-claude",
-        "sim-gemini",
-        "sim-codex:reviewer",
-    ]
 
     private let activity: AgentActivityService
     private var demoTask: Task<Void, Never>?
@@ -24,8 +17,6 @@ final class DebugEventSimulator {
         let namespacedPrefix = session.provider.namespacedSessionID(sessionPrefix)
         return session.id.hasPrefix(sessionPrefix)
             || session.id.hasPrefix(namespacedPrefix)
-            || legacySessionIDs.contains(session.id)
-            || legacySessionIDs.contains { session.provider.namespacedSessionID($0) == session.id }
             || session.recentEvents.contains { $0.metadata?["source"] == "simulator" }
     }
 

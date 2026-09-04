@@ -6,7 +6,6 @@ struct NotchMenuPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
     let accessibilityLabel: String
-    var fillsAvailableWidth = false
 
     @State private var anchorView: NSView?
     @State private var isExpanded = false
@@ -26,7 +25,7 @@ struct NotchMenuPicker<Value: Hashable>: View {
                     .foregroundStyle(Color.white.opacity(0.45))
             }
             .padding(.horizontal, 12)
-            .frame(maxWidth: fillsAvailableWidth ? .infinity : nil, minHeight: 28, maxHeight: 28, alignment: .leading)
+            .frame(minHeight: 28, maxHeight: 28, alignment: .leading)
             .background(Color(red: 0.16, green: 0.16, blue: 0.17), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
         }

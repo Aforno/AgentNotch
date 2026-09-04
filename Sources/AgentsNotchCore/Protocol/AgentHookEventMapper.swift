@@ -65,8 +65,6 @@ public enum AgentHookEventMapper {
             ?? (payload.agentId?.isEmpty == false ? payload.sessionId : nil)
 
         let metadata = [
-            "model": payload.model,
-            "turnId": payload.turnId,
             "toolCallId": payload.toolCallId,
             // Store the canonical lifecycle name when the provider uses an
             // alias (e.g. Gemini BeforeAgent → UserPromptSubmit) so session
@@ -255,7 +253,7 @@ public enum AgentHookEventMapper {
         started: Bool,
         context: MappingContext
     ) -> AgentEvent {
-        if ProviderEventPolicy.remapsParentScopedSubagent(
+        if GrokEventPolicy.remapsParentScopedSubagent(
             provider: context.provider,
             payload: payload,
             parentSessionId: context.parentSessionId

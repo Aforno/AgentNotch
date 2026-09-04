@@ -573,11 +573,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
-    func testIntegratedProvidersDeclareAnExplicitTimeoutUnit() {
-        for provider in IntegratedHookProvider.allCases {
-            let timeout = provider.timeout(for: "SessionStart")
-            XCTAssertEqual(timeout.unit, provider.timeoutUnit)
-        }
+    func testIntegratedProvidersDeclareTimeouts() {
         XCTAssertEqual(IntegratedHookProvider.geminiCLI.timeout(for: "BeforeAgent"), .milliseconds(5_000))
         XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "SessionEnd"), .seconds(3))
         XCTAssertEqual(IntegratedHookProvider.claudeCode.timeout(for: "PermissionRequest"), .seconds(5))

@@ -27,7 +27,6 @@ public struct AgentProvider: RawRepresentable, Codable, Hashable, Sendable, Iden
     public static let openCode = AgentProvider(rawValue: "opencode")
     public static let geminiCLI = AgentProvider(rawValue: "gemini-cli")
     public static let cursor = AgentProvider(rawValue: "cursor")
-    public static let simulator = AgentProvider(rawValue: "simulator")
 
     /// Session IDs are stored as `provider:nativeId`. Live hooks already emit
     /// this form; restore and ingest rewrite leftover bare IDs.
