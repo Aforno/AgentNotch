@@ -109,9 +109,10 @@ struct OnboardingView: View {
 
             if integration.status.canInstall {
                 Button(integration.status == .notInstalled ? "Install" : "Retry") {
-                    integration.install()
+                    Task { await integration.install() }
                 }
                 .buttonStyle(NotchPillButtonStyle())
+                .disabled(integration.isPerformingMaintenance)
             } else {
                 Button {
                     integration.refreshStatus(
@@ -123,6 +124,7 @@ struct OnboardingView: View {
                 .buttonStyle(NotchIconButtonStyle())
                 .help("Refresh status")
                 .accessibilityLabel("Refresh \(integration.provider.displayName) status")
+                .disabled(integration.isPerformingMaintenance)
             }
         }
         .controlSize(.small)

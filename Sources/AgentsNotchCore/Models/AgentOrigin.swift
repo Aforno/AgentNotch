@@ -123,6 +123,9 @@ public struct AgentOrigin: Codable, Hashable, Sendable {
         case "wezterm": "com.github.wez.wezterm"
         case "ghostty": "com.mitchellh.ghostty"
         case "kitty": "net.kovidgoyal.kitty"
+        case "alacritty": "org.alacritty"
+        case "hyper": "co.zeit.hyper"
+        case "tabby": "org.tabby"
         default: nil
         }
     }
@@ -158,6 +161,7 @@ public struct AgentOrigin: Codable, Hashable, Sendable {
         "org.alacritty",
         "io.alacritty",
         "co.zeit.hyper",
+        "org.tabby",
     ]
 
     private static let graphicalBundles: Set<String> = [

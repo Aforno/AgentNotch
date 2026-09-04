@@ -172,6 +172,8 @@ final class NotchPanelController: NSWindowController {
         }
     }
 
+    private var pointerCheckWorkItem: DispatchWorkItem?
+
     private func updatePointerDisplayObservation() {
         let followsPointer = UserDefaults.standard.string(forKey: AppPreferences.Key.displayPreference)
             == DisplayPreference.pointer.rawValue
@@ -186,20 +188,22 @@ final class NotchPanelController: NSWindowController {
                 matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
             ) { [weak self] _ in
                 // AppKit delivers global and local monitor handlers on the main thread.
-                MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
+                MainActor.assumeIsolated { self?.schedulePointerDisplayCheck() }
             }
         }
         if localPointerObserver == nil {
             localPointerObserver = NSEvent.addLocalMonitorForEvents(
                 matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
             ) { [weak self] event in
-                MainActor.assumeIsolated { self?.refreshPointerDisplayIfNeeded() }
+                MainActor.assumeIsolated { self?.schedulePointerDisplayCheck() }
                 return event
             }
         }
     }
 
     private func removePointerDisplayObservation() {
+        pointerCheckWorkItem?.cancel()
+        pointerCheckWorkItem = nil
         if let globalPointerObserver {
             NSEvent.removeMonitor(globalPointerObserver)
             self.globalPointerObserver = nil
@@ -210,7 +214,21 @@ final class NotchPanelController: NSWindowController {
         }
     }
 
+    private func schedulePointerDisplayCheck() {
+        guard pointerCheckWorkItem == nil else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pointerCheckWorkItem = nil
+                self.refreshPointerDisplayIfNeeded()
+            }
+        }
+        pointerCheckWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(120), execute: workItem)
+    }
+
     private func refreshPointerDisplayIfNeeded() {
+        guard globalPointerObserver != nil || localPointerObserver != nil else { return }
         let pointerLocation = NSEvent.mouseLocation
         guard !geometry.screenFrame.contains(pointerLocation),
               let screen = NSScreen.screens.first(where: { $0.frame.contains(pointerLocation) }),

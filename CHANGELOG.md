@@ -6,14 +6,37 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-03
+
 ### Added
 
+- Multi-monitor physical notch display preference ("Display with notch") to pin
+  the notch surface to the built-in MacBook screen even when an external display
+  is set as primary.
 - In-app updates download and install from GitHub Releases. Check, Download,
-  then Restart to Update, the same two-step flow as T3 Code. Homebrew marks
-  the cask as self-updating.
+  then Restart to Update, matching the two-step flow from T3 Code. Homebrew
+  marks the cask as self-updating.
+- Recovery menu-bar item when the notch surface is unavailable, with Activity
+  Center, Settings, Setup, and Quit.
+- Terminal origin identification for Alacritty, Hyper, and Tabby terminals.
+- Structured logging across the hook relay, sockets, runtime, and
+  notifications.
+- Settings and onboarding banner when a hook sends an unsupported protocol
+  version, so a stale relay after upgrade is visible.
 
 ### Changed
 
+- Consolidated session index projection (`SessionIndex`) into a shared,
+  `Sendable` graph traversal consumed directly by Activity Center, eliminating
+  redundant hierarchy and cycle resolution.
+- Provider integration install and uninstall actions now run asynchronously on
+  background utility tasks with UI maintenance disabling.
+- Pointer display tracking throttles mouse move events with dispatch work item
+  cancellation to prevent high-polling mice from waking the main run loop.
+- Waiting reply prompt height observation uses SwiftUI `PreferenceKey` to
+  eliminate body evaluation state mutations.
+- Concurrency primitives in `AnswerModeAvailability` modernized from `NSLock`
+  to `OSAllocatedUnfairLock`.
 - Update checks use the Sparkle appcast instead of opening the GitHub releases
   page. Automatic checks default on, run at launch and once a day, and never
   download or install until you ask.
@@ -40,6 +63,14 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shows.
 - Activity Center project headings no longer expose the decorative folder as
   an unrelated VoiceOver action, and long session titles show in hover help.
+- Privacy mode no longer leaks working-directory names into notification
+  subtitles. Failure notifications withdraw when sessions resolve.
+- Launch no longer crashes when no screen is attached (clamshell / no
+  display).
+- Failed event-socket binds retry with backoff instead of staying down.
+- Persistence cleanup stops throwing when unlinking nonexistent sockets.
+- Notch panel frame stays strictly under AppKit control during layout
+  transitions.
 - Swift 6 builds no longer warn about notification logging or the hook relay
   test's trailing closure.
 - Retry after a Sparkle startup failure starts the updater again instead of
@@ -55,25 +86,6 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Long project names in the agent row truncate instead of overflowing the
   status indicator.
 - Thread-detail scroll fade clears when the scroller is at the bottom.
-
-## [0.2.1] - 2026-08-26
-
-### Added
-
-- Recovery menu-bar item when the notch surface is unavailable, with Activity
-  Center, Settings, Setup, and Quit.
-- Structured logging across the hook relay, sockets, runtime, and
-  notifications.
-- Settings and onboarding banner when a hook sends an unsupported protocol
-  version, so a stale relay after upgrade is visible.
-
-### Fixed
-
-- Privacy mode no longer leaks working-directory names into notification
-  subtitles. Failure notifications withdraw when sessions resolve.
-- Launch no longer crashes when no screen is attached (clamshell / no
-  display).
-- Failed event-socket binds retry with backoff instead of staying down.
 - Unknown `--provider` values warn on stderr instead of silently becoming
   Codex.
 - Codex commit-message helper sessions stay out of the activity list, notch

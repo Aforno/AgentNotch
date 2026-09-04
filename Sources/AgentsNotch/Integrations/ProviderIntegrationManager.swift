@@ -43,6 +43,7 @@ final class ProviderIntegrationManager {
     /// demoted by a no-op status recompute. Cleared when hooks disappear or
     /// on uninstall so reinstall cannot falsely report Connected.
     private(set) var hasReceivedEvent = false
+    private(set) var isPerformingMaintenance = false
     private var maintenanceGeneration = 0
 
     nonisolated private let store: ProviderHookStore
@@ -119,6 +120,12 @@ final class ProviderIntegrationManager {
         maintenanceGeneration &+= 1
         let generation = maintenanceGeneration
         let answering = answersFromNotch()
+        isPerformingMaintenance = true
+        defer {
+            if generation == maintenanceGeneration {
+                isPerformingMaintenance = false
+            }
+        }
         let preparation = await Task.detached(priority: .utility) { [store] in
             store.prepareForMonitoringOnDisk(answersFromNotch: answering)
         }.value
@@ -136,26 +143,59 @@ final class ProviderIntegrationManager {
         }
     }
 
-    func install() {
+    func install() async {
         maintenanceGeneration &+= 1
-        do {
-            try store.install(answersFromNotch: answersFromNotch())
+        let generation = maintenanceGeneration
+        let answering = answersFromNotch()
+        isPerformingMaintenance = true
+        defer {
+            if generation == maintenanceGeneration {
+                isPerformingMaintenance = false
+            }
+        }
+        let result = await Task.detached(priority: .utility) { [store] () -> Result<Void, Error> in
+            do {
+                try store.install(answersFromNotch: answering)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }.value
+        guard generation == maintenanceGeneration else { return }
+        switch result {
+        case .success:
             status = hasReceivedEvent ? .connected : .awaitingFirstEvent
             lastError = nil
-        } catch {
+        case let .failure(error):
             lastError = error.localizedDescription
             status = .unavailable("Installation failed")
         }
     }
 
-    func uninstall() {
+    func uninstall() async {
         maintenanceGeneration &+= 1
-        do {
-            try store.uninstall()
+        let generation = maintenanceGeneration
+        isPerformingMaintenance = true
+        defer {
+            if generation == maintenanceGeneration {
+                isPerformingMaintenance = false
+            }
+        }
+        let result = await Task.detached(priority: .utility) { [store] () -> Result<Void, Error> in
+            do {
+                try store.uninstall()
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }.value
+        guard generation == maintenanceGeneration else { return }
+        switch result {
+        case .success:
             hasReceivedEvent = false
             status = .notInstalled
             lastError = nil
-        } catch {
+        case let .failure(error):
             lastError = error.localizedDescription
             status = .unavailable("Removal failed")
         }
