@@ -65,7 +65,8 @@ enum DisplayPreference: String, CaseIterable, Identifiable {
 
 enum DisplayResolver {
     static func preferredScreen() -> NSScreen? {
-        let raw = UserDefaults.standard.string(forKey: "displayPreference") ?? DisplayPreference.primary.rawValue
+        let raw = UserDefaults.standard.string(forKey: AppPreferences.Key.displayPreference)
+            ?? DisplayPreference.primary.rawValue
         switch raw {
         case DisplayPreference.pointer.rawValue:
             let location = NSEvent.mouseLocation

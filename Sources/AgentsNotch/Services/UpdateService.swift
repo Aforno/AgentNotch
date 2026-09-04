@@ -6,7 +6,6 @@ import Sparkle
 @Observable
 @MainActor
 final class UpdateService {
-    static let automaticChecksDefaultsKey = "automaticallyCheckForUpdates"
     static let packagedOnlyMessage = "Automatic updates are only available in packaged production builds."
 
     private(set) var state: UpdateState = .idle
@@ -62,7 +61,7 @@ final class UpdateService {
             // Only latch after Sparkle accepts the session so Retry can start() again.
             started = true
             updater.automaticallyChecksForUpdates = UserDefaults.standard.bool(
-                forKey: Self.automaticChecksDefaultsKey
+                forKey: AppPreferences.Key.automaticallyCheckForUpdates
             )
             self.driver = driver
             self.updater = updater

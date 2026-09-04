@@ -90,7 +90,7 @@ struct HookRelayIdentity: Sendable {
     }
 
     private func answerTimeout(_ timeout: HookTimeout) -> HookTimeout {
-        switch timeout.unit {
+        switch timeout {
         case .seconds:
             return .seconds(AgentReplyPolicy.waitSeconds)
         case .milliseconds:

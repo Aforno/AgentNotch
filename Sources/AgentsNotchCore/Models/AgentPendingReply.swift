@@ -8,7 +8,6 @@ public enum AgentPromptKind: String, Codable, Sendable {
     case elicitation
 }
 
-/// A single choice on a waiting prompt.
 public struct AgentPromptOption: Codable, Hashable, Sendable, Identifiable {
     public var id: String
     public var label: String
@@ -92,23 +91,18 @@ public struct AgentReply: Codable, Hashable, Sendable {
     public var decision: AgentReplyDecision
     public var optionId: String?
     public var answers: [String: [String]]?
-    public var content: JSONValue?
 
     public init(
         replyId: UUID,
         decision: AgentReplyDecision,
         optionId: String? = nil,
-        answers: [String: [String]]? = nil,
-        content: JSONValue? = nil
+        answers: [String: [String]]? = nil
     ) {
         self.replyId = replyId
         self.decision = decision
         self.optionId = optionId
         self.answers = answers
-        self.content = content
     }
-
-    public var isDeny: Bool { decision == .deny }
 }
 
 public struct AgentReplyHello: Codable, Sendable {

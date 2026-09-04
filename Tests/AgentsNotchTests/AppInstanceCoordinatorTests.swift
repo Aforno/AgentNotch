@@ -32,7 +32,7 @@ final class AppInstanceCoordinatorTests: XCTestCase {
                 [RunningAgentNotchInstance(
                     processIdentifier: 30,
                     launchDate: Date(),
-                    activate: { true }
+                    activate: {}
                 )]
             },
             postActivationRequest: { activationRequestProcessIdentifiers.append($0) }
@@ -118,7 +118,7 @@ final class AppInstanceCoordinatorTests: XCTestCase {
                     RunningAgentNotchInstance(
                         processIdentifier: 10,
                         launchDate: Date(timeIntervalSince1970: 10),
-                        activate: { true }
+                        activate: {}
                     )
                 ]
             },
@@ -140,7 +140,6 @@ final class AppInstanceCoordinatorTests: XCTestCase {
             launchDate: Date(timeIntervalSince1970: launchedAt),
             activate: {
                 recorder.processIdentifiers.append(processIdentifier)
-                return true
             }
         )
     }

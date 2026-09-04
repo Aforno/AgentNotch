@@ -5,7 +5,7 @@ import Foundation
 struct RunningAgentNotchInstance {
     let processIdentifier: pid_t
     let launchDate: Date
-    let activate: () -> Bool
+    let activate: () -> Void
 }
 
 /// Exclusive lock so two overlapping launches cannot both become the owner.
@@ -73,13 +73,13 @@ final class AppInstanceCoordinator: NSObject {
 
     init(
         currentProcessIdentifier: pid_t = ProcessInfo.processInfo.processIdentifier,
-        bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "com.afonsoferreira.AgentNotch",
-        distributedCenter: DistributedNotificationCenter = .default(),
         runningInstances: (() -> [RunningAgentNotchInstance])? = nil,
         postActivationRequest: ((pid_t?) -> Void)? = nil,
         tryAcquireOwnership: (() -> Bool)? = nil,
         ownershipLock: FileInstanceOwnershipLock? = nil
     ) {
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.afonsoferreira.AgentNotch"
+        let distributedCenter = DistributedNotificationCenter.default()
         self.currentProcessIdentifier = currentProcessIdentifier
         self.distributedCenter = distributedCenter
         self.runningInstances = runningInstances ?? {
@@ -88,7 +88,7 @@ final class AppInstanceCoordinator: NSObject {
                     processIdentifier: application.processIdentifier,
                     launchDate: application.launchDate ?? .distantFuture,
                     activate: {
-                        application.activate(options: [.activateAllWindows])
+                        _ = application.activate(options: [.activateAllWindows])
                     }
                 )
             }
@@ -139,7 +139,7 @@ final class AppInstanceCoordinator: NSObject {
 
     private func handOff(to instance: RunningAgentNotchInstance) -> Bool {
         postActivationRequest(instance.processIdentifier)
-        _ = instance.activate()
+        instance.activate()
         return true
     }
 

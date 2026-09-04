@@ -14,7 +14,6 @@ if invocation.skipCompatibilityHook {
     exit(EXIT_SUCCESS)
 }
 
-/// Marks self-test events so the notch can distinguish them from real traffic.
 func stampSelfTest(_ event: inout AgentEvent) {
     guard invocation.isSelfTest else { return }
     var metadata = event.metadata ?? [:]

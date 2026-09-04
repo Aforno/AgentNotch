@@ -62,7 +62,10 @@ struct OnboardingView: View {
                     .buttonStyle(NotchPillButtonStyle())
                 Spacer()
                 Button(finishButtonTitle) {
-                    UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                    UserDefaults.standard.set(
+                        true,
+                        forKey: AppPreferences.Key.hasCompletedOnboarding
+                    )
                     onDone()
                 }
                 .buttonStyle(NotchPillButtonStyle())

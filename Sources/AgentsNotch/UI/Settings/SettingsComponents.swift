@@ -227,7 +227,6 @@ struct SettingsHeading: View {
     }
 }
 
-/// Section of title + detail rows, matching T3 Code's flat settings list.
 struct SettingsSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -245,7 +244,6 @@ struct SettingsSection<Content: View>: View {
     }
 }
 
-/// Title + optional detail on the left, control trailing on the right.
 struct SettingsControlRow<Control: View>: View {
     let title: String
     var detail: String?

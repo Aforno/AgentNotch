@@ -70,8 +70,6 @@ struct AgentListView: View {
                                 .foregroundStyle(NotchWindowPalette.quaternaryText)
                             Spacer()
                         }
-                        // A compact footer: the overflow hint should not cost
-                        // as much vertical space as a real session row.
                         .frame(height: DynamicIslandSpacing.overflowRowHeight)
                         .contentShape(Rectangle())
                     }
@@ -122,7 +120,6 @@ struct AgentListView: View {
         )
     }
 
-    /// Idle list opens Activity Center, which is where recent sessions live.
     private var emptyState: some View {
         Button(action: onOpenActivityCenter) {
             HStack(spacing: DynamicIslandSpacing.related) {

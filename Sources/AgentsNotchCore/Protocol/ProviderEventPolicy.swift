@@ -15,18 +15,6 @@ public enum ProviderEventPolicy {
         }
     }
 
-    public static func remapsParentScopedSubagent(
-        provider: AgentProvider,
-        payload: AgentHookPayload,
-        parentSessionId: String?
-    ) -> Bool {
-        GrokEventPolicy.remapsParentScopedSubagent(
-            provider: provider,
-            payload: payload,
-            parentSessionId: parentSessionId
-        )
-    }
-
     public static func isInteractiveTool(_ toolName: String?) -> Bool {
         ClaudeEventPolicy.isInteractiveTool(toolName)
     }

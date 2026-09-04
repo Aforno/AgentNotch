@@ -2,7 +2,6 @@ import AgentsNotchCore
 import AppKit
 import SwiftUI
 
-/// Shows a waiting prompt and the actions available from the notch.
 struct WaitingReplyView: View {
     let session: AgentSession
     let waitingCount: Int
@@ -11,7 +10,7 @@ struct WaitingReplyView: View {
     let onOpenDetail: () -> Void
     let onIdealHeightChange: (CGFloat) -> Void
 
-    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
     @FocusState private var isFocused: Bool
     @State private var isPointerInside = false
     @State private var requestsShortcutFocus = false

@@ -61,7 +61,6 @@ enum UnixSocketSupport {
         }
     }
 
-    /// Returns true when something is accepting connections on the AF_UNIX path.
     static func isPathAccepting(at path: String) -> Bool {
         guard FileManager.default.fileExists(atPath: path) else { return false }
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)

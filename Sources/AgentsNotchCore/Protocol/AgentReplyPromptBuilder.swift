@@ -1,7 +1,5 @@
 import Foundation
 
-/// Builds a notch prompt from a provider hook payload. The hook process adds
-/// `replyId` before it waits for an answer.
 public enum AgentReplyPromptBuilder {
     public static func make(
         payload: AgentHookPayload,

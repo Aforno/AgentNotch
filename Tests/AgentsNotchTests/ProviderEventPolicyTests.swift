@@ -23,14 +23,14 @@ final class ProviderEventPolicyTests: XCTestCase {
         }
         """#)
         XCTAssertTrue(
-            ProviderEventPolicy.remapsParentScopedSubagent(
+            GrokEventPolicy.remapsParentScopedSubagent(
                 provider: .grok,
                 payload: payload,
                 parentSessionId: nil
             )
         )
         XCTAssertFalse(
-            ProviderEventPolicy.remapsParentScopedSubagent(
+            GrokEventPolicy.remapsParentScopedSubagent(
                 provider: .codex,
                 payload: payload,
                 parentSessionId: nil

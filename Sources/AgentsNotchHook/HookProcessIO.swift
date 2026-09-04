@@ -19,7 +19,6 @@ enum HookProcessIO {
         var data = (try? handle.read(upToCount: cap)) ?? Data()
         if data.count >= cap {
             while let chunk = try? handle.read(upToCount: 65_536), !chunk.isEmpty {
-                // discard
             }
             if data.count > AgentHookInput.maximumBytes {
                 data = data.prefix(AgentHookInput.maximumBytes + 1)

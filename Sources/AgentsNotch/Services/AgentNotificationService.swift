@@ -51,17 +51,23 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
                 ? "\(waitingCount) agents need you"
                 : "\(session.provider.displayName) needs you",
             session: session,
-            soundEnabled: UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled")
+            soundEnabled: UserDefaults.standard.bool(
+                forKey: AppPreferences.Key.attentionNotificationSoundEnabled
+            )
         )
     }
 
     func deliverFailure(for session: AgentSession) {
-        guard UserDefaults.standard.bool(forKey: "failureNotificationsEnabled") else { return }
+        guard UserDefaults.standard.bool(forKey: AppPreferences.Key.failureNotificationsEnabled) else {
+            return
+        }
         deliver(
             id: "agent-failure-\(session.id)",
             title: "\(session.provider.displayName) failed",
             session: session,
-            soundEnabled: UserDefaults.standard.bool(forKey: "attentionNotificationSoundEnabled")
+            soundEnabled: UserDefaults.standard.bool(
+                forKey: AppPreferences.Key.attentionNotificationSoundEnabled
+            )
         )
     }
 
@@ -122,14 +128,14 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     }
 
     private func deliver(id: String, title: String, session: AgentSession, soundEnabled: Bool) {
-        guard UserDefaults.standard.bool(forKey: "attentionNotificationsEnabled"),
+        guard UserDefaults.standard.bool(forKey: AppPreferences.Key.attentionNotificationsEnabled),
               let center else { return }
 
         let content = UNMutableNotificationContent()
         content.title = title
         // Privacy mode must gate every user-derived field, including the
         // project name in the subtitle.
-        let isPrivate = UserDefaults.standard.bool(forKey: "privacyModeEnabled")
+        let isPrivate = UserDefaults.standard.bool(forKey: AppPreferences.Key.privacyModeEnabled)
         content.subtitle = isPrivate
             ? session.provider.displayName
             : projectName(for: session)

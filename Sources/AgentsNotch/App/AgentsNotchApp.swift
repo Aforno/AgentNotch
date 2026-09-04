@@ -37,25 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        var defaults: [String: Any] = [
-            "animationsEnabled": true,
-            "displayPreference": DisplayPreference.primary.rawValue,
-            "attentionNotificationsEnabled": false,
-            "attentionNotificationSoundEnabled": false,
-            "failureNotificationsEnabled": false,
-            "historyRetentionDays": SessionHistoryPolicy.maximumCompletedSessionRetentionDays,
-            "notchEnabled": true,
-            "showVirtualNotch": false,
-            "hasCompletedOnboarding": false,
-            "automaticallyCheckForUpdates": true,
-            "privacyModeEnabled": false,
-            "answerFromNotchEnabled": false,
-            "globalActivityShortcut": GlobalActivityShortcut.off.rawValue,
-        ]
-        #if DEBUG
-        defaults["debugMode"] = false
-        #endif
-        UserDefaults.standard.register(defaults: defaults)
+        AppPreferences.registerDefaults()
 
         NSApp.setActivationPolicy(.accessory)
         ProcessInfo.processInfo.disableAutomaticTermination(
@@ -76,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             shortcutController?.configure(rawValue: rawValue)
         }
         shortcutController.configure(
-            rawValue: UserDefaults.standard.string(forKey: "globalActivityShortcut")
+            rawValue: UserDefaults.standard.string(forKey: AppPreferences.Key.globalActivityShortcut)
                 ?? GlobalActivityShortcut.off.rawValue
         )
         panel.show()
@@ -90,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         Task { await runtime.start() }
-        if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+        if !UserDefaults.standard.bool(forKey: AppPreferences.Key.hasCompletedOnboarding) {
             showOnboarding()
         }
         canPresentWindows = true

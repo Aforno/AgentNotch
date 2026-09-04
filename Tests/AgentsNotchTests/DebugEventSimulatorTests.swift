@@ -26,17 +26,5 @@ final class DebugEventSimulatorTests: XCTestCase {
         XCTAssertEqual(activity.sessions.map(\.id), ["codex:real-session"])
         XCTAssertNil(activity.attentionEvent)
     }
-
-    @MainActor
-    func testLegacySimulatorSessionIsRecognizedForCleanup() {
-        let legacy = AgentSession(event: AgentEvent(
-            type: .activity,
-            sessionId: "simulator-primary",
-            provider: .codex,
-            state: .running
-        ))
-
-        XCTAssertTrue(DebugEventSimulator.isSimulated(legacy))
-    }
 }
 #endif

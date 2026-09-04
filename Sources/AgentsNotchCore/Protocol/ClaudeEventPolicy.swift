@@ -1,6 +1,5 @@
 import Foundation
 
-/// Claude Code interactive tools, permission prompts, and approval copy.
 public enum ClaudeEventPolicy {
     /// AskUserQuestion and ExitPlanMode pause for user input.
     public static func isInteractiveTool(_ toolName: String?) -> Bool {

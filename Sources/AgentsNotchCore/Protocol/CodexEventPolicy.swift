@@ -1,6 +1,5 @@
 import Foundation
 
-/// Codex plan snapshots and goal-tool workflow updates.
 public enum CodexEventPolicy {
     public static func planSnapshot(
         from payload: AgentHookPayload,

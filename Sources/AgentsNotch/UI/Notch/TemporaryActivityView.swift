@@ -4,7 +4,7 @@ import SwiftUI
 struct TemporaryActivityView: View {
     let session: AgentSession
     let waitingCount: Int
-    @AppStorage("privacyModeEnabled") private var privacyModeEnabled = false
+    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
 
     var body: some View {
         HStack(spacing: DynamicIslandSpacing.related) {

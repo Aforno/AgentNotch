@@ -16,24 +16,24 @@ final class NotchPanelControllerTests: XCTestCase {
     @MainActor
     func testSurfaceAvailabilityCallbackTracksPreferenceChanges() {
         let defaults = UserDefaults.standard
-        let originalNotchEnabled = defaults.object(forKey: "notchEnabled")
-        let originalVirtualNotch = defaults.object(forKey: "showVirtualNotch")
-        let originalDisplayPreference = defaults.object(forKey: "displayPreference")
+        let originalNotchEnabled = defaults.object(forKey: AppPreferences.Key.notchEnabled)
+        let originalVirtualNotch = defaults.object(forKey: AppPreferences.Key.showVirtualNotch)
+        let originalDisplayPreference = defaults.object(forKey: AppPreferences.Key.displayPreference)
         defer {
-            restore(originalNotchEnabled, forKey: "notchEnabled", in: defaults)
-            restore(originalVirtualNotch, forKey: "showVirtualNotch", in: defaults)
-            restore(originalDisplayPreference, forKey: "displayPreference", in: defaults)
+            restore(originalNotchEnabled, forKey: AppPreferences.Key.notchEnabled, in: defaults)
+            restore(originalVirtualNotch, forKey: AppPreferences.Key.showVirtualNotch, in: defaults)
+            restore(originalDisplayPreference, forKey: AppPreferences.Key.displayPreference, in: defaults)
         }
 
-        defaults.set(true, forKey: "notchEnabled")
-        defaults.set(true, forKey: "showVirtualNotch")
-        defaults.set(DisplayPreference.primary.rawValue, forKey: "displayPreference")
+        defaults.set(true, forKey: AppPreferences.Key.notchEnabled)
+        defaults.set(true, forKey: AppPreferences.Key.showVirtualNotch)
+        defaults.set(DisplayPreference.primary.rawValue, forKey: AppPreferences.Key.displayPreference)
 
         let controller = NotchPanelController(runtime: AppRuntime(monitorProviders: false))
         var availability: [Bool] = []
         controller.onSurfaceAvailabilityChanged = { availability.append($0) }
 
-        defaults.set(false, forKey: "notchEnabled")
+        defaults.set(false, forKey: AppPreferences.Key.notchEnabled)
         controller.refreshPreferences()
 
         XCTAssertEqual(availability, [true, false])
@@ -42,12 +42,12 @@ final class NotchPanelControllerTests: XCTestCase {
     @MainActor
     func testDisplayResolverRespectsNotchPreference() {
         let defaults = UserDefaults.standard
-        let originalDisplayPreference = defaults.object(forKey: "displayPreference")
+        let originalDisplayPreference = defaults.object(forKey: AppPreferences.Key.displayPreference)
         defer {
-            restore(originalDisplayPreference, forKey: "displayPreference", in: defaults)
+            restore(originalDisplayPreference, forKey: AppPreferences.Key.displayPreference, in: defaults)
         }
 
-        defaults.set(DisplayPreference.notch.rawValue, forKey: "displayPreference")
+        defaults.set(DisplayPreference.notch.rawValue, forKey: AppPreferences.Key.displayPreference)
         XCTAssertEqual(DisplayPreference.notch.title, "Display with notch")
 
         let preferred = DisplayResolver.preferredScreen()
@@ -60,18 +60,18 @@ final class NotchPanelControllerTests: XCTestCase {
     @MainActor
     func testPointerDisplayObservationTogglesWithPreference() {
         let defaults = UserDefaults.standard
-        let originalDisplayPreference = defaults.object(forKey: "displayPreference")
+        let originalDisplayPreference = defaults.object(forKey: AppPreferences.Key.displayPreference)
         defer {
-            restore(originalDisplayPreference, forKey: "displayPreference", in: defaults)
+            restore(originalDisplayPreference, forKey: AppPreferences.Key.displayPreference, in: defaults)
         }
 
-        defaults.set(DisplayPreference.pointer.rawValue, forKey: "displayPreference")
+        defaults.set(DisplayPreference.pointer.rawValue, forKey: AppPreferences.Key.displayPreference)
         let controller = NotchPanelController(runtime: AppRuntime(monitorProviders: false))
 
-        defaults.set(DisplayPreference.primary.rawValue, forKey: "displayPreference")
+        defaults.set(DisplayPreference.primary.rawValue, forKey: AppPreferences.Key.displayPreference)
         controller.refreshPreferences()
 
-        defaults.set(DisplayPreference.notch.rawValue, forKey: "displayPreference")
+        defaults.set(DisplayPreference.notch.rawValue, forKey: AppPreferences.Key.displayPreference)
         controller.refreshPreferences()
     }
 
