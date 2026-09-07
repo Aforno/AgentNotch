@@ -101,21 +101,21 @@ jobs:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          # Use the same time-based build number as nightly releases.
+          export AGENT_NOTCH_BUILD_NUMBER="$(date -u +%s)"
           if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
-            AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
-              ./script/package_release.sh --adhoc
+            ./script/package_release.sh --adhoc
             exit 0
           fi
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
           printf '%s' "$API_PRIVATE_KEY" > "$API_KEY_PATH"
           chmod 0600 "$API_KEY_PATH"
-          AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
-            ./script/package_release.sh \
-              --identity "$SIGNING_IDENTITY" \
-              --notarize \
-              --api-key-path "$API_KEY_PATH" \
-              --api-key-id "$API_KEY_ID" \
-              --api-issuer-id "$API_ISSUER_ID"
+          ./script/package_release.sh \
+            --identity "$SIGNING_IDENTITY" \
+            --notarize \
+            --api-key-path "$API_KEY_PATH" \
+            --api-key-id "$API_KEY_ID" \
+            --api-issuer-id "$API_ISSUER_ID"
           rm -f "$API_KEY_PATH"
           ./script/generate_appcast.sh
 
