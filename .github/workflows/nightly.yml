@@ -220,8 +220,8 @@ jobs:
         with:
           name: Agent-Notch-Nightly-macOS-arm64
           path: |
-            dist/Agent-Notch-*-macOS-arm64.zip
-            dist/Agent-Notch-*-macOS-arm64.zip.sha256
+            dist/Agent-Notch-Nightly-macOS-arm64.zip
+            dist/Agent-Notch-Nightly-macOS-arm64.zip.sha256
           retention-days: 7
 
       - name: Remove temporary signing keychain
