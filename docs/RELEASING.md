@@ -114,3 +114,19 @@ the signed release path:
 ```sh
 gh variable delete RELEASE_MODE --repo Aforno/AgentNotch
 ```
+
+## Nightly builds
+
+Automated nightly builds run via `.github/workflows/nightly.yml`:
+
+- Triggered daily at 02:00 UTC if commits landed on `main` within the last 24
+  hours, or manually via `workflow_dispatch`.
+- Builds and packages `Agent-Notch-$VERSION-macOS-arm64.zip` and
+  `Agent-Notch-Nightly-macOS-arm64.zip`.
+- Signs and notarizes if Developer ID credentials are configured in repository
+  secrets; falls back to ad-hoc signed preview if secrets are unavailable or if
+  opted out via `NIGHTLY_RELEASE_MODE=unsigned`.
+- Updates a rolling GitHub prerelease tagged `nightly` with SHA-256 checksums
+  and attaches build artifacts to the GitHub Actions run.
+- Does not modify `Casks/agent-notch.rb` or affect production in-app update
+  appcasts.

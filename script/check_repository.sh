@@ -23,6 +23,7 @@ required_files=(
   Casks/agent-notch.rb
   .github/workflows/ci.yml
   .github/workflows/release.yml
+  .github/workflows/nightly.yml
 )
 
 for required_file in "${required_files[@]}"; do

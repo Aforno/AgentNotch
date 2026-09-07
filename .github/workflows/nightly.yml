@@ -1,0 +1,221 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Build even if there are no new commits in the last 24h"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check for recent commits
+        id: check_commits
+        run: |
+          set -euo pipefail
+          FORCE="${{ inputs.force || false }}"
+          EVENT_NAME="${{ github.event_name }}"
+          if [[ "$EVENT_NAME" == "schedule" && "$FORCE" != "true" ]]; then
+            if [[ -z "$(git log --since="24 hours ago" --oneline -n 1)" ]]; then
+              echo "No commits on main in the last 24 hours. Skipping nightly build."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Install repository tooling
+        if: steps.check_commits.outputs.skip != 'true'
+        run: brew install ripgrep
+
+      - name: Verify repository hygiene
+        if: steps.check_commits.outputs.skip != 'true'
+        run: ./script/check_repository.sh
+
+      - name: Test release configuration
+        if: steps.check_commits.outputs.skip != 'true'
+        run: swift test -c release
+
+      - name: Determine signing mode
+        if: steps.check_commits.outputs.skip != 'true'
+        id: check_signing
+        env:
+          RELEASE_MODE: ${{ vars.RELEASE_MODE }}
+          NIGHTLY_MODE: ${{ vars.NIGHTLY_RELEASE_MODE }}
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ "${RELEASE_MODE:-}" == "unsigned-prerelease" || "${NIGHTLY_MODE:-}" == "unsigned" ]]; then
+            echo "Signing mode: ad-hoc (explicitly opted out)"
+            echo "can_sign=false" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${MACOS_CERTIFICATE:-}" && \
+                  -n "${MACOS_CERTIFICATE_PASSWORD:-}" && \
+                  -n "${MACOS_SIGNING_IDENTITY:-}" && \
+                  -n "${APPLE_API_KEY_ID:-}" && \
+                  -n "${APPLE_API_ISSUER_ID:-}" && \
+                  -n "${APPLE_API_PRIVATE_KEY:-}" ]]; then
+            echo "Signing mode: signed and notarized"
+            echo "can_sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Signing mode: ad-hoc (signing credentials not fully configured)"
+            echo "can_sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.check_commits.outputs.skip != 'true' && steps.check_signing.outputs.can_sign == 'true'
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/agent-notch-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+
+          printf '%s' "$CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          rm -f "$CERTIFICATE_PATH"
+
+      - name: Package release
+        if: steps.check_commits.outputs.skip != 'true'
+        env:
+          CAN_SIGN: ${{ steps.check_signing.outputs.can_sign }}
+          SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$CAN_SIGN" == "true" ]]; then
+            API_KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
+            printf '%s' "$API_PRIVATE_KEY" > "$API_KEY_PATH"
+            chmod 0600 "$API_KEY_PATH"
+            AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+              ./script/package_release.sh \
+                --identity "$SIGNING_IDENTITY" \
+                --notarize \
+                --api-key-path "$API_KEY_PATH" \
+                --api-key-id "$API_KEY_ID" \
+                --api-issuer-id "$API_ISSUER_ID"
+            rm -f "$API_KEY_PATH"
+          else
+            AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+              ./script/package_release.sh --adhoc
+          fi
+          cp "dist/Agent-Notch-$VERSION-macOS-arm64.zip" "dist/Agent-Notch-Nightly-macOS-arm64.zip"
+          (cd dist && shasum -a 256 "Agent-Notch-Nightly-macOS-arm64.zip" > "Agent-Notch-Nightly-macOS-arm64.zip.sha256")
+
+      - name: Publish rolling nightly GitHub release
+        if: steps.check_commits.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CAN_SIGN: ${{ steps.check_signing.outputs.can_sign }}
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          DATE="$(date -u +'%Y-%m-%d')"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          ARCHIVE="dist/Agent-Notch-$VERSION-macOS-arm64.zip"
+          NIGHTLY_ARCHIVE="dist/Agent-Notch-Nightly-macOS-arm64.zip"
+          NOTES_FILE="$RUNNER_TEMP/nightly-release-notes.md"
+
+          cat > "$NOTES_FILE" <<EOF
+          Automated nightly build for commit [\`${SHORT_SHA}\`](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) built on ${DATE}.
+
+          EOF
+
+          if [[ "$CAN_SIGN" == "true" ]]; then
+            cat >> "$NOTES_FILE" <<'EOF'
+          > [!NOTE]
+          > This nightly build is signed with Developer ID and notarized by Apple.
+          EOF
+          else
+            cat >> "$NOTES_FILE" <<'EOF'
+          > [!WARNING]
+          > This nightly build is ad-hoc signed and has not been notarized by Apple. macOS Gatekeeper may block or warn about it. Verify the published SHA-256 checksum before opening the app.
+          EOF
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f -a nightly -m "Agent Notch Nightly $DATE" "$GITHUB_SHA"
+          git push -f origin nightly
+
+          if gh release view nightly --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit nightly \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Agent Notch Nightly ($DATE)" \
+              --notes-file "$NOTES_FILE" \
+              --prerelease
+            gh release upload nightly \
+              --repo "$GITHUB_REPOSITORY" \
+              "$ARCHIVE" \
+              "$ARCHIVE.sha256" \
+              "$NIGHTLY_ARCHIVE" \
+              "$NIGHTLY_ARCHIVE.sha256" \
+              --clobber
+          else
+            gh release create nightly \
+              "$ARCHIVE" \
+              "$ARCHIVE.sha256" \
+              "$NIGHTLY_ARCHIVE" \
+              "$NIGHTLY_ARCHIVE.sha256" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Agent Notch Nightly ($DATE)" \
+              --notes-file "$NOTES_FILE" \
+              --prerelease
+          fi
+
+      - name: Upload nightly build artifacts
+        if: steps.check_commits.outputs.skip != 'true'
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99baeddf # v4.6.1
+        with:
+          name: Agent-Notch-Nightly-macOS-arm64
+          path: |
+            dist/Agent-Notch-*-macOS-arm64.zip
+            dist/Agent-Notch-*-macOS-arm64.zip.sha256
+          retention-days: 7
+
+      - name: Remove temporary signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/agent-notch-signing.keychain-db" || true
