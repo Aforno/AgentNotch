@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: "Build even if there are no new commits in the last 24h"
+        description: "Build even if HEAD is already published as a nightly"
         type: boolean
         default: true
 
@@ -28,20 +28,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for recent commits
+      - name: Check for unpublished commits
         id: check_commits
+        env:
+          FORCE: ${{ inputs.force || false }}
         run: |
           set -euo pipefail
-          FORCE="${{ inputs.force || false }}"
-          EVENT_NAME="${{ github.event_name }}"
-          if [[ "$EVENT_NAME" == "schedule" && "$FORCE" != "true" ]]; then
-            if [[ -z "$(git log --since="24 hours ago" --oneline -n 1)" ]]; then
-              echo "No commits on main in the last 24 hours. Skipping nightly build."
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+          # This marker advances only after all release assets are published.
+          PUBLISHED_SHA="$(git rev-parse --verify refs/tags/nightly-published^{commit} 2>/dev/null || true)"
+          if [[ "$FORCE" != "true" && "$PUBLISHED_SHA" == "$(git rev-parse HEAD)" ]]; then
+            echo "HEAD is already published as a nightly. Skipping nightly build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Install repository tooling
         if: steps.check_commits.outputs.skip != 'true'
@@ -125,21 +125,21 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
+          # Use the same time-based build number as stable releases.
+          export AGENT_NOTCH_BUILD_NUMBER="$(date -u +%s)"
           if [[ "$CAN_SIGN" == "true" ]]; then
             API_KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
             printf '%s' "$API_PRIVATE_KEY" > "$API_KEY_PATH"
             chmod 0600 "$API_KEY_PATH"
-            AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
-              ./script/package_release.sh \
-                --identity "$SIGNING_IDENTITY" \
-                --notarize \
-                --api-key-path "$API_KEY_PATH" \
-                --api-key-id "$API_KEY_ID" \
-                --api-issuer-id "$API_ISSUER_ID"
+            ./script/package_release.sh \
+              --identity "$SIGNING_IDENTITY" \
+              --notarize \
+              --api-key-path "$API_KEY_PATH" \
+              --api-key-id "$API_KEY_ID" \
+              --api-issuer-id "$API_ISSUER_ID"
             rm -f "$API_KEY_PATH"
           else
-            AGENT_NOTCH_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
-              ./script/package_release.sh --adhoc
+            ./script/package_release.sh --adhoc
           fi
           cp "dist/Agent-Notch-$VERSION-macOS-arm64.zip" "dist/Agent-Notch-Nightly-macOS-arm64.zip"
           (cd dist && shasum -a 256 "Agent-Notch-Nightly-macOS-arm64.zip" > "Agent-Notch-Nightly-macOS-arm64.zip.sha256")
@@ -151,10 +151,8 @@ jobs:
           CAN_SIGN: ${{ steps.check_signing.outputs.can_sign }}
         run: |
           set -euo pipefail
-          VERSION="$(tr -d '[:space:]' < VERSION)"
           DATE="$(date -u +'%Y-%m-%d')"
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          ARCHIVE="dist/Agent-Notch-$VERSION-macOS-arm64.zip"
           NIGHTLY_ARCHIVE="dist/Agent-Notch-Nightly-macOS-arm64.zip"
           NOTES_FILE="$RUNNER_TEMP/nightly-release-notes.md"
 
@@ -188,15 +186,11 @@ jobs:
               --prerelease
             gh release upload nightly \
               --repo "$GITHUB_REPOSITORY" \
-              "$ARCHIVE" \
-              "$ARCHIVE.sha256" \
               "$NIGHTLY_ARCHIVE" \
               "$NIGHTLY_ARCHIVE.sha256" \
               --clobber
           else
             gh release create nightly \
-              "$ARCHIVE" \
-              "$ARCHIVE.sha256" \
               "$NIGHTLY_ARCHIVE" \
               "$NIGHTLY_ARCHIVE.sha256" \
               --repo "$GITHUB_REPOSITORY" \
@@ -205,6 +199,20 @@ jobs:
               --notes-file "$NOTES_FILE" \
               --prerelease
           fi
+
+          # Remove assets left by older workflows that published versioned names.
+          ASSETS="$(gh release view nightly --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          while IFS= read -r asset; do
+            case "$asset" in
+              Agent-Notch-Nightly-macOS-arm64.zip|Agent-Notch-Nightly-macOS-arm64.zip.sha256) ;;
+              Agent-Notch-*-macOS-arm64.zip|Agent-Notch-*-macOS-arm64.zip.sha256)
+                gh release delete-asset nightly "$asset" --repo "$GITHUB_REPOSITORY" --yes
+                ;;
+            esac
+          done <<< "$ASSETS"
+
+          git tag -f nightly-published "$GITHUB_SHA"
+          git push -f origin refs/tags/nightly-published
 
       - name: Upload nightly build artifacts
         if: steps.check_commits.outputs.skip != 'true'
