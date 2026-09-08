@@ -12,7 +12,7 @@ final class SessionPersistScheduler {
     private var persistDeadlineTask: Task<Void, Never>?
     private var writeGeneration: UInt64 = 0
     /// Protects an unreadable history file when it could not be quarantined.
-    private(set) var writesAllowed = false
+    var writesAllowed = false
 
     init(
         persistence: SessionPersistence,
@@ -22,10 +22,6 @@ final class SessionPersistScheduler {
         self.persistence = persistence
         self.debounceDuration = debounceDuration
         self.maximumDelay = maximumDelay
-    }
-
-    func setWritesAllowed(_ allowed: Bool) {
-        writesAllowed = allowed
     }
 
     func cancelPending() {

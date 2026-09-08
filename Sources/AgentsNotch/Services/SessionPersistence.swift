@@ -85,19 +85,12 @@ actor SessionPersistence {
         }
     }
 
-    func save(_ sessions: [AgentSession]) -> String? {
+    /// Saves history, rejecting older snapshots when a generation is supplied.
+    func save(_ sessions: [AgentSession], generation: UInt64? = nil) -> String? {
         saveInvocationCount += 1
-        do {
-            try saveSynchronously(sessions)
-            return nil
-        } catch {
-            return "Could not save session history: \(error.localizedDescription)"
+        if generation != nil {
+            beforeOrderedSave?()
         }
-    }
-
-    func save(_ sessions: [AgentSession], generation: UInt64) -> String? {
-        saveInvocationCount += 1
-        beforeOrderedSave?()
         do {
             try saveSynchronously(sessions, generation: generation)
             return nil
@@ -106,20 +99,10 @@ actor SessionPersistence {
         }
     }
 
-    nonisolated func saveSynchronously(_ sessions: [AgentSession]) throws {
-        try writeSynchronously(sessions, generation: nil)
-    }
-
+    /// Shares the write lock with actor saves so termination can flush synchronously.
     nonisolated func saveSynchronously(
         _ sessions: [AgentSession],
-        generation: UInt64
-    ) throws {
-        try writeSynchronously(sessions, generation: generation)
-    }
-
-    private nonisolated func writeSynchronously(
-        _ sessions: [AgentSession],
-        generation: UInt64?
+        generation: UInt64? = nil
     ) throws {
         writeState.lock.lock()
         defer { writeState.lock.unlock() }

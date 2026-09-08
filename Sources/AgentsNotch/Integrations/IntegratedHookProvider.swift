@@ -1,8 +1,7 @@
 import AgentsNotchCore
 import Foundation
 
-/// Closed set of providers that install observer hooks. Adding a case without
-/// a timeout fails to compile.
+/// Providers with installable observer hooks and their configuration.
 enum IntegratedHookProvider: String, CaseIterable, Sendable {
     case codex
     case claudeCode = "claude-code"
@@ -20,7 +19,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
     func timeout(for eventName: String) -> HookTimeout {
         switch self {
         case .codex:
-            CodexHookConfiguration.timeout(for: eventName)
+            eventName == "SessionEnd" ? .seconds(3) : .seconds(5)
         case .geminiCLI:
             .milliseconds(5_000)
         case .claudeCode, .grok, .openCode, .cursor:

@@ -9,8 +9,8 @@ public enum AgentTaskTitle {
     public static func fromPrompt(_ prompt: String, limit: Int = 140) -> String? {
         let line = prompt
             .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .compactMap(displayable)
+            .lazy
+            .compactMap { displayable(String($0)) }
             .first ?? ""
         return concise(line, limit: limit)
     }
@@ -68,11 +68,7 @@ public enum AgentTaskTitle {
         "using the supplied git context below, generate a git commit message"
 
     private static func strippingImagePlaceholders(_ text: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: #"\[Image #\d+\]"#) else {
-            return text
-        }
-        let range = NSRange(text.startIndex..., in: text)
-        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        text.replacingOccurrences(of: #"\[Image #\d+\]"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

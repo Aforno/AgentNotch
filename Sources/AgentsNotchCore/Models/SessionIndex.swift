@@ -1,21 +1,11 @@
 import Foundation
 
-/// Immutable projection of the session graph used by the activity service.
-/// Keeping graph construction here prevents event reduction from also owning
-/// hierarchy traversal and notch presentation policy.
+/// Indexes session relationships, group activity, and notch presentation.
 public struct SessionIndex: Sendable {
     public struct GroupAggregate: Sendable {
         public let needsAttention: Bool
         public let isActive: Bool
         public let updatedAt: Date
-    }
-
-    private struct SessionGroups {
-        let hierarchicalSessions: [AgentSession]
-        let roots: [AgentSession]
-        let membersByRootID: [String: [AgentSession]]
-        let rootIDBySessionID: [String: String]
-        let aggregates: [String: GroupAggregate]
     }
 
     private struct GroupBuilder {
@@ -41,16 +31,6 @@ public struct SessionIndex: Sendable {
             }
             aggregates[root.id] = SessionIndex.aggregate(unvisited, fallback: root)
             hierarchicalSessions.append(contentsOf: unvisited)
-        }
-
-        var result: SessionGroups {
-            SessionGroups(
-                hierarchicalSessions: hierarchicalSessions,
-                roots: roots,
-                membersByRootID: membersByRootID,
-                rootIDBySessionID: rootIDBySessionID,
-                aggregates: aggregates
-            )
         }
     }
 
@@ -227,7 +207,7 @@ public struct SessionIndex: Sendable {
         sessions: [AgentSession],
         sessionsByID: [String: AgentSession],
         childrenByParentID: [String: [AgentSession]]
-    ) -> SessionGroups {
+    ) -> GroupBuilder {
         let naturalRoots = sessions.filter { session in
             guard let parentID = session.parentSessionId else { return true }
             return sessionsByID[parentID] == nil
@@ -257,7 +237,7 @@ public struct SessionIndex: Sendable {
                 members: hierarchy(from: session, childrenByParentID: childrenByParentID)
             )
         }
-        return builder.result
+        return builder
     }
 
     private static func uniqueProviders(in sessions: [AgentSession]) -> [AgentProvider] {

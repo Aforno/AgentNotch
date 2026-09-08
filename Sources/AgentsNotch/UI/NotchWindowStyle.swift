@@ -2,9 +2,7 @@ import AgentsNotchCore
 import AppKit
 import SwiftUI
 
-/// Shared surface vocabulary for every window that should feel like an extension
-/// of the notch itself: opaque near-black, borderless raised fills, hairline
-/// separators, and a white-opacity text ladder.
+/// Colors shared by the notch, Activity Center, and Settings windows.
 enum NotchWindowPalette {
     static let background = Color.black
 
@@ -12,15 +10,10 @@ enum NotchWindowPalette {
     static let raised = Color.white.opacity(0.055)
     static let raisedStrong = Color.white.opacity(0.1)
     static let raisedPressed = Color.white.opacity(0.135)
-    /// Pointer-over fill, one rung below `raisedStrong` so hover reads as a
-    /// hint rather than a selection.
     static let hover = Color.white.opacity(0.075)
 
     static let hairline = Color.white.opacity(0.08)
 
-    // Text ladder. Four rungs only — anything dimmer than `quaternaryText`
-    // is illegible on this surface, and `quaternaryText` itself must never be
-    // the sole carrier of meaning.
     static let primaryText = Color.white.opacity(0.92)
     static let secondaryText = Color.white.opacity(0.68)
     static let tertiaryText = Color.white.opacity(0.5)
@@ -63,17 +56,6 @@ enum NotchAccentContrast {
 
     static func relativeLuminance(red: CGFloat, green: CGFloat, blue: CGFloat) -> CGFloat {
         0.2126 * linearize(red) + 0.7152 * linearize(green) + 0.0722 * linearize(blue)
-    }
-
-    static func preferredContrastRatio(
-        for accent: NSColor,
-        fillOpacity: CGFloat = primaryFillOpacity
-    ) -> CGFloat {
-        let background = blendedRelativeLuminance(of: accent, fillOpacity: fillOpacity)
-        return max(
-            contrastRatio(foreground: 0, background: background),
-            contrastRatio(foreground: 1, background: background)
-        )
     }
 
     static func contrastRatio(foreground: CGFloat, background: CGFloat) -> CGFloat {

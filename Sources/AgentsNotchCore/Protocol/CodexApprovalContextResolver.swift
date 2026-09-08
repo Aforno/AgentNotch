@@ -1,11 +1,7 @@
 import Foundation
 
-/// Resolves whether a Codex permission hook is waiting on a person or on an
-/// automatic reviewer. Codex does not currently include `approvals_reviewer`
-/// in every PermissionRequest payload, so the matching turn context is used as
-/// a compatibility bridge: a fail-open, 4 MiB tail read of the transcript
-/// JSONL. Remove this when Codex includes the reviewer on the hook. Do not
-/// add a second transcript parser.
+/// Uses the hook's reviewer or the matching transcript turn to identify automatic
+/// approvals. Missing context leaves the permission request visible to the user.
 public enum CodexApprovalContextResolver {
     public static let maximumTranscriptTailBytes = 4 * 1_024 * 1_024
 
@@ -34,7 +30,7 @@ public enum CodexApprovalContextResolver {
         return !isAutomaticReviewer(reviewer)
     }
 
-    private static func reviewer(inTranscriptAt url: URL, matchingTurnId: String?) -> String? {
+    private static func reviewer(inTranscriptAt url: URL, matchingTurnId: String) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
 
@@ -63,7 +59,7 @@ public enum CodexApprovalContextResolver {
                 continue
             }
 
-            if let matchingTurnId, !context.matches(turnId: matchingTurnId) {
+            if !context.matches(turnId: matchingTurnId) {
                 continue
             }
 
@@ -114,17 +110,5 @@ private struct TurnContextPayload: Decodable {
 
     func matches(turnId: String) -> Bool {
         snakeTurnId == turnId || camelTurnId == turnId
-    }
-}
-
-private extension KeyedDecodingContainer {
-    /// Missing keys and non-string values are absent. Does not fail the record.
-    func lossyString(forKeys keys: Key...) -> String? {
-        for key in keys {
-            if let value = try? decodeIfPresent(String.self, forKey: key) {
-                return value
-            }
-        }
-        return nil
     }
 }

@@ -20,11 +20,16 @@ final class NotchAccentContrastTests: XCTestCase {
 
         for (accentName, accent) in accents {
             for (stateName, fillOpacity) in fillOpacities {
+                let foreground: CGFloat = NotchAccentContrast.usesDarkForeground(
+                    for: accent,
+                    fillOpacity: fillOpacity
+                ) ? 0 : 1
+                let background = NotchAccentContrast.blendedRelativeLuminance(
+                    of: accent,
+                    fillOpacity: fillOpacity
+                )
                 XCTAssertGreaterThanOrEqual(
-                    NotchAccentContrast.preferredContrastRatio(
-                        for: accent,
-                        fillOpacity: fillOpacity
-                    ),
+                    NotchAccentContrast.contrastRatio(foreground: foreground, background: background),
                     4.5,
                     "\(accentName) \(stateName)"
                 )
@@ -56,21 +61,6 @@ final class NotchAccentContrastTests: XCTestCase {
                 accent: yellow
             ),
             NotchWindowPalette.tertiaryText
-        )
-    }
-
-    func testBlendedLuminanceIsSourceTimesFillOpacityOverBlack() {
-        let white = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
-        let expected = NotchAccentContrast.relativeLuminance(red: 0.9, green: 0.9, blue: 0.9)
-        XCTAssertEqual(
-            NotchAccentContrast.blendedRelativeLuminance(of: white),
-            expected,
-            accuracy: 0.0001
-        )
-        XCTAssertEqual(
-            NotchAccentContrast.blendedRelativeLuminance(of: .black),
-            0,
-            accuracy: 0.0001
         )
     }
 }

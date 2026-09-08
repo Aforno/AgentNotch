@@ -1,6 +1,16 @@
 import Foundation
 
 extension KeyedDecodingContainer {
+    /// Returns the first string value, skipping missing, null, and non-string fields.
+    func lossyString(forKeys keys: Key...) -> String? {
+        for key in keys {
+            if let value = try? decodeIfPresent(String.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
+    }
+
     func decodeEither<T: Decodable>(
         _ type: T.Type,
         forKey first: Key,

@@ -15,26 +15,6 @@ public enum ProviderEventPolicy {
         }
     }
 
-    public static func isInteractiveTool(_ toolName: String?) -> Bool {
-        ClaudeEventPolicy.isInteractiveTool(toolName)
-    }
-
-    public static func interactiveToolActivity(for payload: AgentHookPayload) -> String {
-        ClaudeEventPolicy.interactiveToolActivity(for: payload)
-    }
-
-    public static func isWaitingNotification(_ type: String?) -> Bool {
-        ClaudeEventPolicy.isWaitingNotification(type)
-    }
-
-    public static func waitingNotificationActivity(for type: String?, message: String?) -> String {
-        ClaudeEventPolicy.waitingNotificationActivity(for: type, message: message)
-    }
-
-    public static func approvalActivity(for payload: AgentHookPayload) -> String {
-        ClaudeEventPolicy.approvalActivity(for: payload)
-    }
-
     public static func toolPresentation(
         payload: AgentHookPayload,
         completed: Bool,

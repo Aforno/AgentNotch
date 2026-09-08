@@ -154,7 +154,7 @@ final class AppRuntime {
         isRestoring = true
         // Loading decides whether replacing the current history is safe. Keep
         // writes disabled while restoration is still in flight.
-        persistScheduler.setWritesAllowed(false)
+        persistScheduler.writesAllowed = false
         startupEvents.removeAll(keepingCapacity: true)
         return lifecycleGeneration
     }
@@ -391,7 +391,7 @@ final class AppRuntime {
             }
         )
         guard let result else { return false }
-        persistScheduler.setWritesAllowed(result.writesAllowed)
+        persistScheduler.writesAllowed = result.writesAllowed
         if result.writesAllowed {
             persistenceError = result.persistenceError
             persistenceRecoveryNotice = result.persistenceRecoveryNotice

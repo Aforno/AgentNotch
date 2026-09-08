@@ -16,13 +16,6 @@ public enum AgentStepStatus: String, Codable, CaseIterable, Sendable {
         case .blocked: "Blocked"
         }
     }
-
-    public var isFinished: Bool {
-        switch self {
-        case .completed, .failed, .blocked: true
-        case .pending, .inProgress: false
-        }
-    }
 }
 
 public struct AgentStep: Codable, Identifiable, Hashable, Sendable {

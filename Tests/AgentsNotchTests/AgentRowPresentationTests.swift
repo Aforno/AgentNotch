@@ -229,39 +229,6 @@ final class AgentRowPresentationTests: XCTestCase {
         XCTAssertFalse(agentStatePresentation(for: .unknown).systemImage.isEmpty)
     }
 
-    func testActiveStatesShareOneHueAndAreSeparatedByGlyph() {
-        let active: [AgentState] = [.starting, .running, .executingTool, .thinking, .editing]
-        XCTAssertEqual(Set(active.map { agentStateColor(for: $0).description }).count, 1)
-
-        // Non-spinner active states still need distinct glyphs.
-        let glyphs = [AgentState.thinking, .editing].map { agentStatePresentation(for: $0).systemImage }
-        XCTAssertEqual(Set(glyphs).count, glyphs.count)
-    }
-
-    func testListHeightDoesNotReserveChromeRowWhenSessionsAreVisible() {
-        let first = session(id: "one", state: .running)
-        let second = session(id: "two", state: .running)
-
-        XCTAssertEqual(AgentListView.rowsHeight(for: []), DynamicIslandSpacing.rowHeight)
-        XCTAssertEqual(
-            AgentListView.rowsHeight(for: [first, second]),
-            DynamicIslandSpacing.rowHeight * 2
-        )
-    }
-
-    func testListControlsAlignWithMenuBarCenter() {
-        let menuBarHeight: CGFloat = 32
-        let topInset = menuBarHeight + DynamicIslandSpacing.expandedTop
-        let originalCenter = topInset + DynamicIslandSpacing.chromeHeight / 2
-
-        let offset = AgentListView.controlsVerticalOffset(
-            topInset: topInset,
-            menuBarHeight: menuBarHeight
-        )
-
-        XCTAssertEqual(originalCenter + offset, menuBarHeight / 2)
-    }
-
     private func session(
         id: String,
         parentID: String? = nil,

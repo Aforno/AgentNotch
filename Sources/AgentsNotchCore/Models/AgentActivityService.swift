@@ -149,7 +149,6 @@ public final class AgentActivityService {
             }
         }
 
-        var createdSession = false
         let advancesCurrentState: Bool
         if let existingIndex = sessionsByID[event.sessionId] {
             advancesCurrentState = sessions[existingIndex].apply(event)
@@ -157,7 +156,6 @@ public final class AgentActivityService {
             sessions.append(AgentSession(event: event))
             sessionsByID[event.sessionId] = sessions.count - 1
             advancesCurrentState = true
-            createdSession = true
         }
 
         // A parent may finish before a concurrently delivered child event. Do
@@ -187,7 +185,6 @@ public final class AgentActivityService {
         // refresh it even for a non-advancing event that only merged metadata,
         // workflow state, relationship context, history, or a pending reply.
         let affectsOrdering = advancesCurrentState
-            || createdSession
             || completedByParentRule
         if affectsOrdering {
             sessions.sort(by: Self.orderSessions)
@@ -234,10 +231,7 @@ public final class AgentActivityService {
     }
 
     public func removeSession(id: String) {
-        let previousCount = sessions.count
-        sessions.removeAll { $0.id == id }
-        guard sessions.count != previousCount else { return }
-        commitSessionChanges(attentionRefresh: .ifMissing)
+        removeSessions(ids: [id])
     }
 
     public func removeSessions(ids: Set<String>) {

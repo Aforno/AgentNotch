@@ -102,10 +102,10 @@ public enum AgentHookEventMapper {
             )
 
         case .preToolUse:
-            if ProviderEventPolicy.isInteractiveTool(payload.toolName) {
+            if ClaudeEventPolicy.isInteractiveTool(payload.toolName) {
                 return context.event(
                     type: .waiting,
-                    activity: ProviderEventPolicy.interactiveToolActivity(for: payload),
+                    activity: ClaudeEventPolicy.interactiveToolActivity(for: payload),
                     state: .waitingForUser
                 )
             }
@@ -134,7 +134,7 @@ public enum AgentHookEventMapper {
         case .permissionRequest where permissionRequestRequiresUserInput:
             return context.event(
                 type: .waiting,
-                activity: ProviderEventPolicy.approvalActivity(for: payload),
+                activity: ClaudeEventPolicy.approvalActivity(for: payload),
                 state: .waitingForUser
             )
 
@@ -152,7 +152,7 @@ public enum AgentHookEventMapper {
         case .elicitation:
             return context.event(
                 type: .waiting,
-                activity: ProviderEventPolicy.waitingNotificationActivity(
+                activity: ClaudeEventPolicy.waitingNotificationActivity(
                     for: "elicitation_dialog",
                     message: payload.notificationMessage
                 ),
@@ -166,10 +166,10 @@ public enum AgentHookEventMapper {
                 state: .running
             )
 
-        case .notification where ProviderEventPolicy.isWaitingNotification(payload.notificationType):
+        case .notification where ClaudeEventPolicy.isWaitingNotification(payload.notificationType):
             return context.event(
                 type: .waiting,
-                activity: ProviderEventPolicy.waitingNotificationActivity(
+                activity: ClaudeEventPolicy.waitingNotificationActivity(
                     for: payload.notificationType,
                     message: payload.notificationMessage
                 ),

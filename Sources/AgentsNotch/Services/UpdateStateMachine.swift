@@ -74,7 +74,7 @@ func reduceUpdateState(_ state: UpdateState, _ event: UpdateEvent) -> UpdateStat
 
     case let .downloadProgress(percent):
         if case let .downloading(version, _) = state {
-            return .downloading(version: version, percent: clampUpdateProgress(percent))
+            return .downloading(version: version, percent: min(1, max(0, percent)))
         }
         return state
 
@@ -90,9 +90,7 @@ func reduceUpdateState(_ state: UpdateState, _ event: UpdateEvent) -> UpdateStat
 
     case .downloadComplete:
         switch state {
-        case let .downloading(version, _):
-            return .downloaded(version: version)
-        case let .available(version):
+        case let .downloading(version, _), let .available(version):
             return .downloaded(version: version)
         default:
             return state
@@ -100,9 +98,7 @@ func reduceUpdateState(_ state: UpdateState, _ event: UpdateEvent) -> UpdateStat
 
     case .installStarted:
         switch state {
-        case let .downloaded(version):
-            return .installing(version: version)
-        case let .available(version):
+        case let .downloaded(version), let .available(version):
             return .installing(version: version)
         default:
             return state
@@ -130,8 +126,4 @@ func reduceUpdateState(_ state: UpdateState, _ event: UpdateEvent) -> UpdateStat
             return state
         }
     }
-}
-
-func clampUpdateProgress(_ percent: Double) -> Double {
-    min(1, max(0, percent))
 }

@@ -1,8 +1,6 @@
 import Foundation
 
-/// Codex keeps a generated conversation title in `session_index.jsonl`.
-/// Prompt hooks only carry the latest user message, so this bounded index
-/// read is the allowed disk walk for titles. It does not invent sessions.
+/// Looks up Codex conversation titles in the tail of `session_index.jsonl`.
 public enum CodexSessionTitleResolver {
     public static let maximumIndexTailBytes = 4 * 1_024 * 1_024
 
@@ -86,17 +84,5 @@ private struct SessionIndexRecord: Decodable {
         id = container.lossyString(forKeys: .id)
         // Prefer the historical snake_case spelling when both aliases exist.
         threadName = container.lossyString(forKeys: .thread_name, .threadName)
-    }
-}
-
-private extension KeyedDecodingContainer {
-    /// Missing keys and non-string values are absent. Does not fail the record.
-    func lossyString(forKeys keys: Key...) -> String? {
-        for key in keys {
-            if let value = try? decodeIfPresent(String.self, forKey: key) {
-                return value
-            }
-        }
-        return nil
     }
 }

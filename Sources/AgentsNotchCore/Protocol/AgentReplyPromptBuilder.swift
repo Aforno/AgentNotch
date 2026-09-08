@@ -5,11 +5,11 @@ public enum AgentReplyPromptBuilder {
         payload: AgentHookPayload,
         replyId: UUID
     ) -> AgentPendingReply? {
-        if ProviderEventPolicy.isInteractiveTool(payload.toolName) {
+        if ClaudeEventPolicy.isInteractiveTool(payload.toolName) {
             return interactivePrompt(payload: payload, replyId: replyId)
         }
         if HookEventName(rawEventName: payload.hookEventName) == .elicitation
-            || ProviderEventPolicy.isWaitingNotification(payload.notificationType)
+            || ClaudeEventPolicy.isWaitingNotification(payload.notificationType)
         {
             return elicitationPrompt(payload: payload, replyId: replyId)
         }
@@ -70,7 +70,7 @@ public enum AgentReplyPromptBuilder {
             ?? file
             ?? tool.map { "Allow \($0)?" }
         let prompt = command == nil
-            ? ProviderEventPolicy.approvalActivity(for: payload)
+            ? ClaudeEventPolicy.approvalActivity(for: payload)
             : "Allow this command?"
         return AgentPendingReply(
             replyId: replyId,
