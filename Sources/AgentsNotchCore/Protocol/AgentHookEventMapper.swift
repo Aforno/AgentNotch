@@ -66,6 +66,8 @@ public enum AgentHookEventMapper {
 
         let metadata = [
             "toolCallId": payload.toolCallId,
+            "promptId": payload.promptId,
+            "notificationType": payload.notificationType,
             // Store the canonical lifecycle name when the provider uses an
             // alias (e.g. Gemini BeforeAgent → UserPromptSubmit) so session
             // resume and other hookEvent gates stay provider-neutral.
@@ -170,6 +172,9 @@ public enum AgentHookEventMapper {
             return notificationEvent(payload, context: context)
 
         case .stop:
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
             return terminalEvent(
                 payload,
                 successActivity: completionActivity(from: payload.lastAssistantMessage),
@@ -178,6 +183,9 @@ public enum AgentHookEventMapper {
             )
 
         case .stopFailure:
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
             return context.event(
                 type: .failed,
                 activity: ProviderEventPolicy.stopFailureActivity(from: payload),
