@@ -72,6 +72,11 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 
     @discardableResult
     public mutating func apply(_ event: AgentEvent) -> Bool {
+        if shouldIgnoreGrokTurnSettlement(event) {
+            recordRecentEvent(event)
+            return false
+        }
+
         startedAt = min(startedAt, event.timestamp)
         let advancesCurrentState = AdvanceDecision(
             currentState: state,
@@ -328,6 +333,35 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         }
     }
 
+    private func shouldIgnoreGrokTurnSettlement(_ event: AgentEvent) -> Bool {
+        guard provider == .grok, event.provider == .grok else { return false }
+
+        // idle_prompt is an outcome-agnostic backstop. Once a real terminal
+        // report has already settled this turn, never let the delayed ping
+        // replace a success/failure outcome with a synthetic completion.
+        if event.isGrokIdlePrompt {
+            return state == .completed || state == .failed
+        }
+
+        guard event.isGrokTurnEnd,
+              let promptId = event.metadata?["promptId"]?.nonEmpty
+        else { return false }
+
+        let startedPromptIds = recentEvents.compactMap { recentEvent -> String? in
+            guard recentEvent.isUserPromptSubmit else { return nil }
+            return recentEvent.metadata?["promptId"]?.nonEmpty
+        }
+        guard let latestPromptId = startedPromptIds.first else {
+            // Grok can report an interrupted bash-mode turn without a matching
+            // UserPromptSubmit. An unseen prompt id must still settle.
+            return false
+        }
+
+        // Only a prompt id we positively recognize as an older turn is stale.
+        // Unknown ids still settle, matching Grok's documented host contract.
+        return promptId != latestPromptId && startedPromptIds.contains(promptId)
+    }
+
     private mutating func recordRecentEvent(_ event: AgentEvent) {
         recentEvents.append(event)
         recentEvents.sort { $0.timestamp > $1.timestamp }
@@ -565,5 +599,34 @@ private extension AgentEvent {
         if type == .started { return true }
         guard let hookEvent = metadata?["hookEvent"] else { return false }
         return HookEventName(rawEventName: hookEvent)?.resumesSession == true
+    }
+
+    var isUserPromptSubmit: Bool {
+        guard let hookEvent = metadata?["hookEvent"] else { return false }
+        return HookEventName(rawEventName: hookEvent) == .userPromptSubmit
+    }
+
+    var isGrokTurnEnd: Bool {
+        guard provider == .grok,
+              let hookEvent = metadata?["hookEvent"],
+              let eventName = HookEventName(rawEventName: hookEvent)
+        else { return false }
+        switch eventName {
+        case .stop, .stopFailure, .stopCancelled:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var isGrokIdlePrompt: Bool {
+        guard provider == .grok,
+              let hookEvent = metadata?["hookEvent"],
+              HookEventName(rawEventName: hookEvent) == .notification,
+              let notificationType = metadata?["notificationType"]
+        else { return false }
+        return notificationType
+            .replacingOccurrences(of: "-", with: "_")
+            .lowercased() == "idle_prompt"
     }
 }
