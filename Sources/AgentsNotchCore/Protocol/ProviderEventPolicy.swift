@@ -127,7 +127,23 @@ public enum ProviderEventPolicy {
         return tool.replacingOccurrences(of: "_", with: " ").lowercased()
     }
 
-    /// StopFailure activity: prefer the rendered error Grok already showed,
+    /// `idle_prompt` is a turn-end backstop, not a permission wait.
+    /// `task_complete` is the same settlement with a different label.
+    public static func isTurnSettledNotification(_ type: String?) -> Bool {
+        switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "idle_prompt", "task_complete": true
+        default: false
+        }
+    }
+
+    public static func settledNotificationActivity(for type: String?) -> String {
+        switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "task_complete": "Task completed"
+        default: "Turn ended"
+        }
+    }
+
+    /// StopFailure activity: prefer the rendered error the provider showed,
     /// then a friendly class name so `rate_limit` does not appear on the notch.
     public static func stopFailureActivity(from payload: AgentHookPayload) -> String {
         if let message = payload.lastAssistantMessage?.nonEmpty, !isStopFailureClass(message) {

@@ -30,7 +30,19 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
     var eventNames: [String] {
         switch self {
         case .codex:
-            ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop", "SessionEnd", "SubagentStart", "SubagentStop"]
+            [
+                "SessionStart",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "PermissionRequest",
+                "Stop",
+                "StopFailure",
+                "StopCancelled",
+                "SessionEnd",
+                "SubagentStart",
+                "SubagentStop",
+            ]
         case .claudeCode:
             [
                 "SessionStart",
@@ -45,6 +57,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
                 "ElicitationResult",
                 "Stop",
                 "StopFailure",
+                "StopCancelled",
                 "SessionEnd",
                 "SubagentStart",
                 "SubagentStop",

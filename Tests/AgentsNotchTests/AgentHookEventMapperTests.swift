@@ -783,7 +783,7 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertNotEqual(event.state, .waitingForUser)
     }
 
-    func testClaudeIdlePromptStillWaitsForInput() throws {
+    func testIdlePromptSettlesTheTurnForEveryProvider() throws {
         let payload = try decode("""
         {
           "session_id": "claude_idle",
@@ -793,9 +793,12 @@ final class AgentHookEventMapperTests: XCTestCase {
         }
         """)
 
-        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .claudeCode))
-        XCTAssertEqual(event.type, .waiting)
-        XCTAssertEqual(event.state, .waitingForUser)
+        for provider in [AgentProvider.claudeCode, .codex, .geminiCLI, .cursor] {
+            let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: provider))
+            XCTAssertEqual(event.type, .completed, "\(provider.rawValue)")
+            XCTAssertEqual(event.state, .completed, "\(provider.rawValue)")
+            XCTAssertEqual(event.activity, "Turn ended", "\(provider.rawValue)")
+        }
     }
 
     func testUpdatePlanProducesStructuredSteps() throws {

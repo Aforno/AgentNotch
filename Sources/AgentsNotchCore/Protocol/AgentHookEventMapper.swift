@@ -218,15 +218,13 @@ public enum AgentHookEventMapper {
         _ payload: AgentHookPayload,
         context: MappingContext
     ) -> AgentEvent? {
-        if context.provider == .grok,
-           GrokEventPolicy.isTurnSettledNotification(payload.notificationType)
-        {
-            if GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+        if ProviderEventPolicy.isTurnSettledNotification(payload.notificationType) {
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
                 return nil
             }
             return context.event(
                 type: .completed,
-                activity: GrokEventPolicy.settledNotificationActivity(for: payload),
+                activity: ProviderEventPolicy.settledNotificationActivity(for: payload.notificationType),
                 state: .completed
             )
         }
@@ -238,15 +236,6 @@ public enum AgentHookEventMapper {
                     message: payload.notificationMessage
                 ),
                 state: .waitingForUser
-            )
-        }
-        if payload.notificationType?.replacingOccurrences(of: "-", with: "_").lowercased()
-            == "task_complete"
-        {
-            return context.event(
-                type: .completed,
-                activity: "Task completed",
-                state: .completed
             )
         }
         return nil

@@ -14,10 +14,10 @@ final class ProviderEventPolicyTests: XCTestCase {
         )
     }
 
-    func testGrokIdlePromptIsATurnSettledNotification() {
-        XCTAssertTrue(GrokEventPolicy.isTurnSettledNotification("idle_prompt"))
-        XCTAssertTrue(GrokEventPolicy.isTurnSettledNotification("task_complete"))
-        XCTAssertFalse(GrokEventPolicy.isTurnSettledNotification("permission_prompt"))
+    func testIdlePromptIsATurnSettledNotification() {
+        XCTAssertTrue(ProviderEventPolicy.isTurnSettledNotification("idle_prompt"))
+        XCTAssertTrue(ProviderEventPolicy.isTurnSettledNotification("task_complete"))
+        XCTAssertFalse(ProviderEventPolicy.isTurnSettledNotification("permission_prompt"))
     }
 
     func testStopFailureAndCancelledOutcomesAreReadable() throws {

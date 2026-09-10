@@ -37,7 +37,9 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
   Turn settlement listens for `Stop`, `StopFailure`, `StopCancelled`, and the
   `idle_prompt` notification so a truncated stream or usage limit cannot leave
-  the spinner running.
+  the spinner running. The same `idle_prompt` mapping applies to every provider
+  that emits it. Thinking/running turns with no hook for 90 seconds settle as
+  completed even when the provider never sends a terminal event.
 - Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
   handlers for permission and elicitation events. Enabling Answer from the
   notch adds `--answer` handlers only for supported interactive events.

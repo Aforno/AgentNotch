@@ -344,6 +344,27 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         reconcilePlanWithTerminalState(at: timestamp)
     }
 
+    /// True when the session looks busy but no tool is in flight, so a missing
+    /// Stop/EOF can leave the spinner running forever.
+    public var canSettleFromSilence: Bool {
+        switch state {
+        case .starting, .thinking, .running: true
+        default: false
+        }
+    }
+
+    /// Ends a turn that went silent without a terminal hook. Tools in flight
+    /// and waiters are left alone.
+    public mutating func settleSilentTurn(at timestamp: Date) {
+        guard canSettleFromSilence else { return }
+        state = .completed
+        completedAt = timestamp
+        updatedAt = max(updatedAt, timestamp)
+        currentActivity = "Turn ended"
+        pendingReply = nil
+        reconcilePlanWithTerminalState(at: timestamp)
+    }
+
     /// Marks an active session as cold-start-unverified without inventing a
     /// completion. Recency and last activity text are preserved so a mid-task
     /// restart does not look like the work finished.

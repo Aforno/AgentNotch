@@ -8,10 +8,11 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Grok turns that end without a Stop event (usage limit, output limit, interrupt,
-  or max-turns) now settle the notch instead of leaving the spinner running.
-  StopCancelled is installed, StopFailure shows a readable error, and Grok's
-  idle_prompt notification is treated as a turn-end backstop.
+- Turns that end without a Stop/EOF hook (usage limit, output limit, interrupt,
+  or max-turns) no longer leave the spinner running. StopCancelled is installed
+  for Grok, Claude Code, and Codex; StopFailure shows a readable error;
+  idle_prompt is a turn-end backstop for every provider; and a 90-second silence
+  watch settles thinking/running turns that never emit a terminal hook.
 
 ## [0.2.1] - 2026-09-03
 

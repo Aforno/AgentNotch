@@ -234,6 +234,20 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testCodexInstallRegistersStopCancelledAndStopFailure() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .codex)
+        await manager.install()
+
+        let hooksURL = fixture.home.appendingPathComponent(".codex/hooks.json")
+        let root = try Self.readJSON(at: hooksURL)
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        XCTAssertTrue(hooks.keys.contains("StopCancelled"))
+        XCTAssertTrue(hooks.keys.contains("StopFailure"))
+    }
+
+    @MainActor
     func testGrokInstallRegistersStopCancelled() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -367,6 +381,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
             "ElicitationResult",
             "Stop",
             "StopFailure",
+            "StopCancelled",
             "SessionEnd",
             "SubagentStart",
             "SubagentStop",

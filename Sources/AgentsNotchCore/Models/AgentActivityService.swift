@@ -311,6 +311,67 @@ public final class AgentActivityService {
         commitSessionChanges(orderSessions: true, attentionRefresh: .always)
     }
 
+    /// How long a thinking/running/starting session may stay silent before the
+    /// notch assumes the turn ended without a Stop/EOF hook.
+    public static let silentTurnGrace: TimeInterval = 90
+
+    /// Soonest time a silent active turn becomes eligible to settle.
+    /// A parent with a tool in flight or a waiter underneath is omitted; the
+    /// next child hook reschedules the watch.
+    public func nextSilentTurnDeadline(
+        now: Date = Date(),
+        grace: TimeInterval = silentTurnGrace
+    ) -> Date? {
+        let cutoff = now.addingTimeInterval(-grace)
+        var earliest: Date?
+        for session in sessions where session.canSettleFromSilence {
+            if hasBlockingDescendant(of: session.id, cutoff: cutoff) { continue }
+            let deadline = session.updatedAt.addingTimeInterval(grace)
+            if earliest == nil || deadline < earliest! {
+                earliest = deadline
+            }
+        }
+        return earliest
+    }
+
+    /// Completes thinking/running/starting sessions that have had no hook for
+    /// `grace`. Skips a parent while a descendant is still working so a quiet
+    /// parent does not kill a working child. Live tool and waiting states are
+    /// never invented as complete.
+    @discardableResult
+    public func settleSilentTurns(
+        now: Date = Date(),
+        grace: TimeInterval = silentTurnGrace
+    ) -> Bool {
+        let cutoff = now.addingTimeInterval(-grace)
+        var settledParentIDs: [String] = []
+        for index in sessions.indices where sessions[index].canSettleFromSilence {
+            guard sessions[index].updatedAt <= cutoff else { continue }
+            if hasBlockingDescendant(of: sessions[index].id, cutoff: cutoff) { continue }
+            sessions[index].settleSilentTurn(at: now)
+            settledParentIDs.append(sessions[index].id)
+        }
+        guard !settledParentIDs.isEmpty else { return false }
+        for parentID in settledParentIDs {
+            completeActiveDescendants(of: parentID, as: .completed, at: now)
+        }
+        commitSessionChanges(orderSessions: true, attentionRefresh: .always)
+        return true
+    }
+
+    private func hasBlockingDescendant(of parentID: String, cutoff: Date) -> Bool {
+        index.descendantIDs(of: parentID).contains { descendantID in
+            guard let descendantIndex = sessionsByID[descendantID] else { return false }
+            let descendant = sessions[descendantIndex]
+            switch descendant.state {
+            case .executingTool, .editing, .waitingForUser:
+                return true
+            default:
+                return descendant.isActive && descendant.updatedAt > cutoff
+            }
+        }
+    }
+
     /// Completes sessions still stuck in `.unknown` after the reconnect grace
     /// period when no live hook arrived to confirm they are still running.
     public func completeUnknownSessions() {
