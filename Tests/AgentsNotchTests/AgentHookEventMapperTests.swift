@@ -779,26 +779,38 @@ final class AgentHookEventMapperTests: XCTestCase {
         let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
         XCTAssertEqual(event.type, .completed)
         XCTAssertEqual(event.state, .completed)
-        XCTAssertEqual(event.activity, "Turn ended")
-        XCTAssertNotEqual(event.state, .waitingForUser)
+        XCTAssertEqual(event.activity, "Waiting for your next prompt")
     }
 
-    func testIdlePromptSettlesTheTurnForEveryProvider() throws {
+    func testClaudeIdlePromptDoesNotSettleOrWait() throws {
         let payload = try decode("""
         {
           "session_id": "claude_idle",
           "cwd": "/tmp/AgentsNotch",
           "hook_event_name": "Notification",
-          "notification_type": "idle_prompt"
+          "notification_type": "idle_prompt",
+          "message": "Claude finished responding"
         }
         """)
 
         for provider in [AgentProvider.claudeCode, .codex, .geminiCLI, .cursor] {
-            let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: provider))
-            XCTAssertEqual(event.type, .completed, "\(provider.rawValue)")
-            XCTAssertEqual(event.state, .completed, "\(provider.rawValue)")
-            XCTAssertEqual(event.activity, "Turn ended", "\(provider.rawValue)")
+            XCTAssertNil(AgentHookEventMapper.map(payload, provider: provider), "\(provider.rawValue)")
         }
+    }
+
+    func testCodexInterruptSettlesTheTurn() throws {
+        let payload = try decode("""
+        {
+          "session_id": "thr_interrupt",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "Interrupt"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .codex))
+        XCTAssertEqual(event.type, .completed)
+        XCTAssertEqual(event.state, .completed)
+        XCTAssertEqual(event.activity, "Stopped")
     }
 
     func testUpdatePlanProducesStructuredSteps() throws {
@@ -1040,6 +1052,7 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(HookEventName.metadataName(for: "user_prompt_submit"), "user_prompt_submit")
         XCTAssertEqual(HookEventName(rawEventName: "StopCancelled"), .stopCancelled)
         XCTAssertEqual(HookEventName(rawEventName: "stop_cancelled"), .stopCancelled)
+        XCTAssertEqual(HookEventName(rawEventName: "Interrupt"), .stopCancelled)
         XCTAssertTrue(HookEventName.stop.isTerminal)
         XCTAssertTrue(HookEventName.stopFailure.isTerminal)
         XCTAssertTrue(HookEventName.stopCancelled.isTerminal)

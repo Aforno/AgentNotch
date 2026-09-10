@@ -218,13 +218,16 @@ public enum AgentHookEventMapper {
         _ payload: AgentHookPayload,
         context: MappingContext
     ) -> AgentEvent? {
-        if ProviderEventPolicy.isTurnSettledNotification(payload.notificationType) {
+        if ProviderEventPolicy.isTurnSettledNotification(
+            payload.notificationType,
+            provider: context.provider
+        ) {
             if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
                 return nil
             }
             return context.event(
                 type: .completed,
-                activity: ProviderEventPolicy.settledNotificationActivity(for: payload.notificationType),
+                activity: ProviderEventPolicy.settledNotificationActivity(from: payload),
                 state: .completed
             )
         }

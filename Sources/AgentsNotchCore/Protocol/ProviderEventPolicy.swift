@@ -127,19 +127,27 @@ public enum ProviderEventPolicy {
         return tool.replacingOccurrences(of: "_", with: " ").lowercased()
     }
 
-    /// `idle_prompt` is a turn-end backstop, not a permission wait.
-    /// `task_complete` is the same settlement with a different label.
-    public static func isTurnSettledNotification(_ type: String?) -> Bool {
+    /// Grok `idle_prompt` is a turn-end backstop when Stop never arrives.
+    /// Claude's `idle_prompt` is a delayed idle ping after Stop and must not
+    /// settle a turn. `task_complete` is an unambiguous completion label.
+    public static func isTurnSettledNotification(
+        _ type: String?,
+        provider: AgentProvider
+    ) -> Bool {
         switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "idle_prompt", "task_complete": true
+        case "idle_prompt": provider == .grok
+        case "task_complete": true
         default: false
         }
     }
 
-    public static func settledNotificationActivity(for type: String?) -> String {
-        switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "task_complete": "Task completed"
-        default: "Turn ended"
+    public static func settledNotificationActivity(from payload: AgentHookPayload) -> String {
+        if let message = payload.notificationMessage?.nonEmpty {
+            return concise(message, limit: 90)
+        }
+        switch payload.notificationType?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "task_complete": return "Task completed"
+        default: return "Turn ended"
         }
     }
 
@@ -156,7 +164,8 @@ public enum ProviderEventPolicy {
     }
 
     /// StopCancelled is a turn end without a genuine completion. Limit and
-    /// stall cases fail so the notch shows an error instead of a green check.
+    /// stall cases fail so the notch shows an error. Unknown reasons, including
+    /// Codex Interrupt, complete as Stopped.
     public static func stopCancelledOutcome(
         from payload: AgentHookPayload
     ) -> (type: AgentEventType, state: AgentState, activity: String) {
@@ -165,10 +174,8 @@ public enum ProviderEventPolicy {
             (.failed, .failed, "Turn limit reached")
         case "no_progress":
             (.failed, .failed, "Stopped: no progress")
-        case "user_interrupt", "permission_rejected", "permission_cancelled":
-            (.completed, .completed, "Stopped")
         default:
-            (.completed, .completed, "Turn ended")
+            (.completed, .completed, "Stopped")
         }
     }
 
@@ -179,6 +186,12 @@ public enum ProviderEventPolicy {
         case "authentication_failed": "Authentication failed"
         case "invalid_request": "Invalid request"
         case "server_error": "Server error"
+        case "overloaded": "Provider overloaded"
+        case "billing_error": "Billing error"
+        case "model_not_found": "Model not found"
+        case "oauth_org_not_allowed": "Organization not allowed"
+        case "account_on_hold": "Account on hold"
+        case "cloud_credential_error": "Cloud credential error"
         default: nil
         }
     }

@@ -16,8 +16,9 @@ public enum HookEventName: String, Sendable {
     case notification = "Notification"
     case stop = "Stop"
     case stopFailure = "StopFailure"
-    /// Grok-specific: a turn ended without a genuine completion (interrupt,
-    /// declined permission, max-turns, or no-progress). Claude has no equivalent.
+    /// Grok StopCancelled: a turn ended without a genuine completion (interrupt,
+    /// declined permission, max-turns, or no-progress). Codex Interrupt aliases
+    /// here. Claude Code has no equivalent event.
     case stopCancelled = "StopCancelled"
     case sessionEnd = "SessionEnd"
     case subagentStart = "SubagentStart"
@@ -49,7 +50,7 @@ public enum HookEventName: String, Sendable {
             self = .stop
         case "stopfailure":
             self = .stopFailure
-        case "stopcancelled":
+        case "stopcancelled", "interrupt":
             self = .stopCancelled
         case "sessionend":
             self = .sessionEnd

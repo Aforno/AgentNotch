@@ -46,8 +46,6 @@ final class AppRuntime {
     private var replyServer: UnixReplyServer?
     /// Completes sessions still in `.unknown` when no live hook confirms them.
     private var unknownGraceTask: Task<Void, Never>?
-    /// Completes thinking/running turns that went silent without a Stop hook.
-    private var silentTurnTask: Task<Void, Never>?
     private var historyPruneTask: Task<Void, Never>?
     private var socketRetryTask: Task<Void, Never>?
     private var replyRetryTask: Task<Void, Never>?
@@ -417,7 +415,6 @@ final class AppRuntime {
             process(event, notify: false)
         }
         scheduleUnknownSessionGracePeriod(generation: generation)
-        scheduleSilentTurnWatch(generation: generation)
         scheduleHistoryPrune()
     }
 
@@ -442,8 +439,6 @@ final class AppRuntime {
         activity.onSessionsChanged = nil
         unknownGraceTask?.cancel()
         unknownGraceTask = nil
-        silentTurnTask?.cancel()
-        silentTurnTask = nil
         historyPruneTask?.cancel()
         historyPruneTask = nil
         persistScheduler.cancelPending()
@@ -496,7 +491,6 @@ final class AppRuntime {
             lastEventReceivedAt[event.provider] = Date()
             integration(for: event.provider)?.noteEventReceived()
         }
-        scheduleSilentTurnWatch(generation: lifecycleGeneration)
         guard let session = activity.session(id: sessionID) else { return }
 
         let isInternalHelper = session.isInternalHelper
@@ -529,27 +523,6 @@ final class AppRuntime {
                   generation == self.lifecycleGeneration
             else { return }
             self.activity.completeUnknownSessions()
-        }
-    }
-
-    /// Settles thinking/running/starting turns that have had no hook for
-    /// `AgentActivityService.silentTurnGrace`. A live event reschedules.
-    private func scheduleSilentTurnWatch(generation: Int) {
-        silentTurnTask?.cancel()
-        guard let deadline = activity.nextSilentTurnDeadline() else {
-            silentTurnTask = nil
-            return
-        }
-        let delay = max(0, deadline.timeIntervalSinceNow)
-        silentTurnTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard let self,
-                  !Task.isCancelled,
-                  self.acceptsEvents,
-                  generation == self.lifecycleGeneration
-            else { return }
-            _ = self.activity.settleSilentTurns()
-            self.scheduleSilentTurnWatch(generation: generation)
         }
     }
 

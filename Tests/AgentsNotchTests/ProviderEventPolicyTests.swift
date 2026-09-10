@@ -14,10 +14,14 @@ final class ProviderEventPolicyTests: XCTestCase {
         )
     }
 
-    func testIdlePromptIsATurnSettledNotification() {
-        XCTAssertTrue(ProviderEventPolicy.isTurnSettledNotification("idle_prompt"))
-        XCTAssertTrue(ProviderEventPolicy.isTurnSettledNotification("task_complete"))
-        XCTAssertFalse(ProviderEventPolicy.isTurnSettledNotification("permission_prompt"))
+    func testIdlePromptIsATurnSettledNotificationOnlyForGrok() {
+        XCTAssertTrue(ProviderEventPolicy.isTurnSettledNotification("idle_prompt", provider: .grok))
+        XCTAssertFalse(ProviderEventPolicy.isTurnSettledNotification("idle_prompt", provider: .claudeCode))
+        XCTAssertFalse(ProviderEventPolicy.isTurnSettledNotification("idle_prompt", provider: .codex))
+        XCTAssertFalse(ProviderEventPolicy.isTurnSettledNotification("idle_prompt", provider: .geminiCLI))
+        XCTAssertFalse(ProviderEventPolicy.isTurnSettledNotification("idle_prompt", provider: .cursor))
+        XCTAssertTrue(ProviderEventPolicy.isTurnSettledNotification("task_complete", provider: .claudeCode))
+        XCTAssertFalse(ProviderEventPolicy.isTurnSettledNotification("permission_prompt", provider: .grok))
     }
 
     func testStopFailureAndCancelledOutcomesAreReadable() throws {
@@ -52,6 +56,29 @@ final class ProviderEventPolicyTests: XCTestCase {
         let outcome = ProviderEventPolicy.stopCancelledOutcome(from: maxTurns)
         XCTAssertEqual(outcome.state, .failed)
         XCTAssertEqual(outcome.activity, "Turn limit reached")
+
+        XCTAssertEqual(
+            ProviderEventPolicy.stopFailureActivity(from: try decode(#"""
+            {
+              "sessionId": "s",
+              "cwd": "/tmp",
+              "hookEventName": "stop_failure",
+              "error": "overloaded"
+            }
+            """#)),
+            "Provider overloaded"
+        )
+
+        let unknownCancel = try decode(#"""
+        {
+          "sessionId": "s",
+          "cwd": "/tmp",
+          "hookEventName": "stop_cancelled"
+        }
+        """#)
+        let unknownOutcome = ProviderEventPolicy.stopCancelledOutcome(from: unknownCancel)
+        XCTAssertEqual(unknownOutcome.state, .completed)
+        XCTAssertEqual(unknownOutcome.activity, "Stopped")
     }
 
     func testGrokParentScopedSubagentIsRemapped() throws {

@@ -31,15 +31,15 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
 - Codex maps plan and workflow tools, resolves titles from the last 4 MiB of
   `session_index.jsonl`, and uses a fail-open, bounded 4 MiB transcript-tail
   read only when a permission payload omits `approvals_reviewer`. Remove that
-  bridge when Codex supplies the reviewer directly.
+  bridge when Codex supplies the reviewer directly. `Interrupt` settles a user
+  interrupt. Codex has no `StopCancelled` or `StopFailure` event.
 - Grok becomes visible on its first agent turn, strips `<user_query>` wrappers,
   resolves missing title/hierarchy from its session tree, and skips duplicate
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
-  Turn settlement listens for `Stop`, `StopFailure`, `StopCancelled`, and the
+  Turn settlement listens for `Stop`, `StopFailure`, `StopCancelled`, and Grok's
   `idle_prompt` notification so a truncated stream or usage limit cannot leave
-  the spinner running. The same `idle_prompt` mapping applies to every provider
-  that emits it. Thinking/running turns with no hook for 90 seconds settle as
-  completed even when the provider never sends a terminal event.
+  the spinner running. Claude's `idle_prompt` is a delayed idle ping after Stop
+  and is ignored.
 - Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
   handlers for permission and elicitation events. Enabling Answer from the
   notch adds `--answer` handlers only for supported interactive events.

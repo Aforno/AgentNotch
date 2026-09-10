@@ -19,7 +19,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
     func timeout(for eventName: String) -> HookTimeout {
         switch self {
         case .codex:
-            eventName == "SessionEnd" ? .seconds(3) : .seconds(5)
+            eventName == "SessionEnd" || eventName == "Interrupt" ? .seconds(3) : .seconds(5)
         case .geminiCLI:
             .milliseconds(5_000)
         case .claudeCode, .grok, .openCode, .cursor:
@@ -37,8 +37,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
                 "PostToolUse",
                 "PermissionRequest",
                 "Stop",
-                "StopFailure",
-                "StopCancelled",
+                "Interrupt",
                 "SessionEnd",
                 "SubagentStart",
                 "SubagentStop",
@@ -57,7 +56,6 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
                 "ElicitationResult",
                 "Stop",
                 "StopFailure",
-                "StopCancelled",
                 "SessionEnd",
                 "SubagentStart",
                 "SubagentStop",
