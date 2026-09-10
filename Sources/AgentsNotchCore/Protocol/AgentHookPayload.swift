@@ -79,6 +79,7 @@ public struct AgentHookPayload: Decodable, Sendable {
 
         // OpenCode / Claude aliases
         case subagentIdSnake = "subagent_id"
+        case subagentType
         case subagentTypeSnake = "subagent_type"
     }
 
@@ -135,7 +136,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         agentId = try values.decodeEitherIfPresent(String.self, forKey: .agentId, or: .agentIdSnake)
             ?? values.decodeIfPresent(String.self, forKey: .subagentIdSnake)
         agentType = try values.decodeEitherIfPresent(String.self, forKey: .agentType, or: .agentTypeSnake)
-            ?? values.decodeIfPresent(String.self, forKey: .subagentTypeSnake)
+            ?? values.decodeEitherIfPresent(String.self, forKey: .subagentType, or: .subagentTypeSnake)
         parentSessionId = try values.decodeEitherIfPresent(
             String.self,
             forKey: .parentSessionId,

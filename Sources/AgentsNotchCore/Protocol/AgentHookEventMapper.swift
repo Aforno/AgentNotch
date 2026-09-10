@@ -166,15 +166,8 @@ public enum AgentHookEventMapper {
                 state: .running
             )
 
-        case .notification where ClaudeEventPolicy.isWaitingNotification(payload.notificationType):
-            return context.event(
-                type: .waiting,
-                activity: ClaudeEventPolicy.waitingNotificationActivity(
-                    for: payload.notificationType,
-                    message: payload.notificationMessage
-                ),
-                state: .waitingForUser
-            )
+        case .notification:
+            return notificationEvent(payload, context: context)
 
         case .stop:
             return terminalEvent(
@@ -187,9 +180,19 @@ public enum AgentHookEventMapper {
         case .stopFailure:
             return context.event(
                 type: .failed,
-                activity: payload.error.map { ProviderEventPolicy.concise($0, limit: 90) }
-                    ?? "Turn failed",
+                activity: ProviderEventPolicy.stopFailureActivity(from: payload),
                 state: .failed
+            )
+
+        case .stopCancelled:
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
+            let outcome = ProviderEventPolicy.stopCancelledOutcome(from: payload)
+            return context.event(
+                type: outcome.type,
+                activity: outcome.activity,
+                state: outcome.state
             )
 
         case .sessionEnd:
@@ -206,9 +209,47 @@ public enum AgentHookEventMapper {
         case .subagentStop:
             return subagentEvent(payload, started: false, context: context)
 
-        case .notification, nil:
+        case nil:
             return nil
         }
+    }
+
+    private static func notificationEvent(
+        _ payload: AgentHookPayload,
+        context: MappingContext
+    ) -> AgentEvent? {
+        if context.provider == .grok,
+           GrokEventPolicy.isTurnSettledNotification(payload.notificationType)
+        {
+            if GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
+            return context.event(
+                type: .completed,
+                activity: GrokEventPolicy.settledNotificationActivity(for: payload),
+                state: .completed
+            )
+        }
+        if ClaudeEventPolicy.isWaitingNotification(payload.notificationType) {
+            return context.event(
+                type: .waiting,
+                activity: ClaudeEventPolicy.waitingNotificationActivity(
+                    for: payload.notificationType,
+                    message: payload.notificationMessage
+                ),
+                state: .waitingForUser
+            )
+        }
+        if payload.notificationType?.replacingOccurrences(of: "-", with: "_").lowercased()
+            == "task_complete"
+        {
+            return context.event(
+                type: .completed,
+                activity: "Task completed",
+                state: .completed
+            )
+        }
+        return nil
     }
 
     private static func sessionStartEvent(

@@ -35,6 +35,9 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
 - Grok becomes visible on its first agent turn, strips `<user_query>` wrappers,
   resolves missing title/hierarchy from its session tree, and skips duplicate
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
+  Turn settlement listens for `Stop`, `StopFailure`, `StopCancelled`, and the
+  `idle_prompt` notification so a truncated stream or usage limit cannot leave
+  the spinner running.
 - Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
   handlers for permission and elicitation events. Enabling Answer from the
   notch adds `--answer` handlers only for supported interactive events.

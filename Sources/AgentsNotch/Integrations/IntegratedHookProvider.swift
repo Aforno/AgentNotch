@@ -50,7 +50,21 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
                 "SubagentStop",
             ]
         case .grok:
-            ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied", "Notification", "Stop", "StopFailure", "SessionEnd", "SubagentStart", "SubagentStop"]
+            [
+                "SessionStart",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "PermissionDenied",
+                "Notification",
+                "Stop",
+                "StopFailure",
+                "StopCancelled",
+                "SessionEnd",
+                "SubagentStart",
+                "SubagentStop",
+            ]
         case .geminiCLI:
             ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"]
         case .cursor:

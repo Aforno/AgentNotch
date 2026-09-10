@@ -6,6 +6,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Grok turns that end without a Stop event (usage limit, output limit, interrupt,
+  or max-turns) now settle the notch instead of leaving the spinner running.
+  StopCancelled is installed, StopFailure shows a readable error, and Grok's
+  idle_prompt notification is treated as a turn-end backstop.
+
 ## [0.2.1] - 2026-09-03
 
 ### Added

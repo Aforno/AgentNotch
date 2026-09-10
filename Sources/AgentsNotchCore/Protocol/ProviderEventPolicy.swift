@@ -127,6 +127,50 @@ public enum ProviderEventPolicy {
         return tool.replacingOccurrences(of: "_", with: " ").lowercased()
     }
 
+    /// StopFailure activity: prefer the rendered error Grok already showed,
+    /// then a friendly class name so `rate_limit` does not appear on the notch.
+    public static func stopFailureActivity(from payload: AgentHookPayload) -> String {
+        if let message = payload.lastAssistantMessage?.nonEmpty, !isStopFailureClass(message) {
+            return concise(message, limit: 90)
+        }
+        return stopFailureActivity(forClass: payload.error)
+            ?? payload.error.map { concise($0, limit: 90) }
+            ?? payload.lastAssistantMessage.map { concise($0, limit: 90) }
+            ?? "Turn failed"
+    }
+
+    /// StopCancelled is a turn end without a genuine completion. Limit and
+    /// stall cases fail so the notch shows an error instead of a green check.
+    public static func stopCancelledOutcome(
+        from payload: AgentHookPayload
+    ) -> (type: AgentEventType, state: AgentState, activity: String) {
+        switch payload.reason?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "max_turns":
+            (.failed, .failed, "Turn limit reached")
+        case "no_progress":
+            (.failed, .failed, "Stopped: no progress")
+        case "user_interrupt", "permission_rejected", "permission_cancelled":
+            (.completed, .completed, "Stopped")
+        default:
+            (.completed, .completed, "Turn ended")
+        }
+    }
+
+    private static func stopFailureActivity(forClass error: String?) -> String? {
+        switch error?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "rate_limit": "Usage limit reached"
+        case "max_output_tokens": "Output limit reached"
+        case "authentication_failed": "Authentication failed"
+        case "invalid_request": "Invalid request"
+        case "server_error": "Server error"
+        default: nil
+        }
+    }
+
+    private static func isStopFailureClass(_ value: String) -> Bool {
+        stopFailureActivity(forClass: value) != nil
+    }
+
     public static func concise(_ text: String, limit: Int) -> String {
         let line = text
             .split(whereSeparator: \.isNewline)

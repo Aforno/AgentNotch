@@ -686,6 +686,118 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.activity, "API unavailable")
     }
 
+    func testGrokStopFailureRateLimitShowsUsageLimit() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_limit",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "stop_failure",
+          "error": "rate_limit"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.type, .failed)
+        XCTAssertEqual(event.state, .failed)
+        XCTAssertEqual(event.activity, "Usage limit reached")
+    }
+
+    func testGrokStopFailurePrefersRenderedErrorOverClassName() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_limit",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "StopFailure",
+          "error": "max_output_tokens",
+          "lastAssistantMessage": "Generation stopped at the output limit."
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.type, .failed)
+        XCTAssertEqual(event.activity, "Generation stopped at the output limit.")
+    }
+
+    func testGrokStopCancelledMaxTurnsFailsTheSession() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_turns",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "stop_cancelled",
+          "reason": "max_turns"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.type, .failed)
+        XCTAssertEqual(event.state, .failed)
+        XCTAssertEqual(event.activity, "Turn limit reached")
+    }
+
+    func testGrokStopCancelledInterruptCompletesTheSession() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_stop",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "StopCancelled",
+          "reason": "user_interrupt"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.type, .completed)
+        XCTAssertEqual(event.state, .completed)
+        XCTAssertEqual(event.activity, "Stopped")
+    }
+
+    func testGrokNestedStopCancelledDoesNotCompleteTheParent() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_parent",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "stop_cancelled",
+          "reason": "max_turns",
+          "subagentType": "explore"
+        }
+        """)
+
+        XCTAssertEqual(payload.agentType, "explore")
+        XCTAssertNil(AgentHookEventMapper.map(payload, provider: .grok))
+    }
+
+    func testGrokIdlePromptSettlesTheTurnInsteadOfWaiting() throws {
+        let payload = try decode("""
+        {
+          "sessionId": "grok_idle",
+          "cwd": "/tmp/AgentsNotch",
+          "hookEventName": "notification",
+          "notificationType": "idle_prompt",
+          "message": "Waiting for your next prompt"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .grok))
+        XCTAssertEqual(event.type, .completed)
+        XCTAssertEqual(event.state, .completed)
+        XCTAssertEqual(event.activity, "Turn ended")
+        XCTAssertNotEqual(event.state, .waitingForUser)
+    }
+
+    func testClaudeIdlePromptStillWaitsForInput() throws {
+        let payload = try decode("""
+        {
+          "session_id": "claude_idle",
+          "cwd": "/tmp/AgentsNotch",
+          "hook_event_name": "Notification",
+          "notification_type": "idle_prompt"
+        }
+        """)
+
+        let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .claudeCode))
+        XCTAssertEqual(event.type, .waiting)
+        XCTAssertEqual(event.state, .waitingForUser)
+    }
+
     func testUpdatePlanProducesStructuredSteps() throws {
         let payload = try decode("""
         {
@@ -923,7 +1035,11 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(HookEventName.metadataName(for: "BeforeAgent"), "UserPromptSubmit")
         XCTAssertEqual(HookEventName.metadataName(for: "UserPromptSubmit"), "UserPromptSubmit")
         XCTAssertEqual(HookEventName.metadataName(for: "user_prompt_submit"), "user_prompt_submit")
+        XCTAssertEqual(HookEventName(rawEventName: "StopCancelled"), .stopCancelled)
+        XCTAssertEqual(HookEventName(rawEventName: "stop_cancelled"), .stopCancelled)
         XCTAssertTrue(HookEventName.stop.isTerminal)
+        XCTAssertTrue(HookEventName.stopFailure.isTerminal)
+        XCTAssertTrue(HookEventName.stopCancelled.isTerminal)
         XCTAssertTrue(HookEventName.sessionEnd.isTerminal)
         XCTAssertFalse(HookEventName.userPromptSubmit.isTerminal)
         XCTAssertTrue(HookEventName.userPromptSubmit.resumesSession)

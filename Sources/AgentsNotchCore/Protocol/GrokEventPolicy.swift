@@ -19,11 +19,39 @@ public enum GrokEventPolicy {
 
     public static func shouldPublishWorkflowState(_ payload: AgentHookPayload) -> Bool {
         switch HookEventName(rawEventName: payload.hookEventName) {
-        case .subagentStart, .subagentStop, .sessionEnd, .stop:
+        case .subagentStart, .subagentStop, .sessionEnd, .stop, .stopFailure, .stopCancelled:
             return true
         default:
             return payload.toolName?.lowercased() == "workflow"
         }
+    }
+
+    /// Grok's `idle_prompt` is a turn-end backstop, not a permission wait.
+    /// `task_complete` is the same settlement with a different label.
+    public static func isTurnSettledNotification(_ type: String?) -> Bool {
+        switch normalizedKey(type) {
+        case "idle_prompt", "task_complete": true
+        default: false
+        }
+    }
+
+    /// Nested Grok turn-end reports use the parent's session id. Completing
+    /// them would stop the parent spinner while the main turn is still going.
+    public static func shouldIgnoreNestedTurnEnd(_ payload: AgentHookPayload) -> Bool {
+        payload.agentType?.nonEmpty != nil
+            && payload.agentId?.nonEmpty == nil
+            && payload.parentSessionId?.nonEmpty == nil
+    }
+
+    public static func settledNotificationActivity(for payload: AgentHookPayload) -> String {
+        switch normalizedKey(payload.notificationType) {
+        case "task_complete": "Task completed"
+        default: "Turn ended"
+        }
+    }
+
+    private static func normalizedKey(_ value: String?) -> String {
+        value?.replacingOccurrences(of: "-", with: "_").lowercased() ?? ""
     }
 
     public static func shouldResolveSessionContext(_ payload: AgentHookPayload) -> Bool {
