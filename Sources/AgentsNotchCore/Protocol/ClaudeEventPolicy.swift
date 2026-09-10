@@ -29,7 +29,7 @@ public enum ClaudeEventPolicy {
 
     public static func isWaitingNotification(_ type: String?) -> Bool {
         switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
-        case "permission_prompt", "idle_prompt", "agent_needs_input",
+        case "permission_prompt", "agent_needs_input",
              "elicitation_dialog", "elicitation_url_dialog",
              "toolpermission", "tool_permission":
             return true

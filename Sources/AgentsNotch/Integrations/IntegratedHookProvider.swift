@@ -19,7 +19,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
     func timeout(for eventName: String) -> HookTimeout {
         switch self {
         case .codex:
-            eventName == "SessionEnd" ? .seconds(3) : .seconds(5)
+            eventName == "SessionEnd" || eventName == "Interrupt" ? .seconds(3) : .seconds(5)
         case .geminiCLI:
             .milliseconds(5_000)
         case .claudeCode, .grok, .openCode, .cursor:
@@ -30,7 +30,18 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
     var eventNames: [String] {
         switch self {
         case .codex:
-            ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop", "SessionEnd", "SubagentStart", "SubagentStop"]
+            [
+                "SessionStart",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "PermissionRequest",
+                "Stop",
+                "Interrupt",
+                "SessionEnd",
+                "SubagentStart",
+                "SubagentStop",
+            ]
         case .claudeCode:
             [
                 "SessionStart",
@@ -50,7 +61,21 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
                 "SubagentStop",
             ]
         case .grok:
-            ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionDenied", "Notification", "Stop", "StopFailure", "SessionEnd", "SubagentStart", "SubagentStop"]
+            [
+                "SessionStart",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "PermissionDenied",
+                "Notification",
+                "Stop",
+                "StopFailure",
+                "StopCancelled",
+                "SessionEnd",
+                "SubagentStart",
+                "SubagentStop",
+            ]
         case .geminiCLI:
             ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"]
         case .cursor:

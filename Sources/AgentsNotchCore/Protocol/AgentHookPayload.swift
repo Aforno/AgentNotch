@@ -26,6 +26,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var workspaceRoot: String?
     public var hookEventName: String
     public var turnId: String?
+    public var promptId: String?
     public var approvalsReviewer: String?
     public var prompt: String?
     public var source: String?
@@ -46,7 +47,7 @@ public struct AgentHookPayload: Decodable, Sendable {
     private enum CodingKeys: String, CodingKey {
         // Grok camelCase
         case sessionId, transcriptPath, cwd, workspaceRoot, hookEventName
-        case turnId, approvalsReviewer, prompt, source, reason, status
+        case turnId, promptId, approvalsReviewer, prompt, source, reason, status
         case toolName, toolUseId, toolCallId, toolInput, agentId, agentType, parentSessionId
         case description, lastAssistantMessage, notificationType
         case notificationMessage = "message"
@@ -79,6 +80,7 @@ public struct AgentHookPayload: Decodable, Sendable {
 
         // OpenCode / Claude aliases
         case subagentIdSnake = "subagent_id"
+        case subagentType
         case subagentTypeSnake = "subagent_type"
     }
 
@@ -116,6 +118,7 @@ public struct AgentHookPayload: Decodable, Sendable {
             or: .hookEventNameSnake
         )
         turnId = try values.decodeEitherIfPresent(String.self, forKey: .turnId, or: .turnIdSnake)
+        promptId = try values.decodeIfPresent(String.self, forKey: .promptId)
         approvalsReviewer = try values.decodeEitherIfPresent(
             String.self,
             forKey: .approvalsReviewer,
@@ -135,7 +138,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         agentId = try values.decodeEitherIfPresent(String.self, forKey: .agentId, or: .agentIdSnake)
             ?? values.decodeIfPresent(String.self, forKey: .subagentIdSnake)
         agentType = try values.decodeEitherIfPresent(String.self, forKey: .agentType, or: .agentTypeSnake)
-            ?? values.decodeIfPresent(String.self, forKey: .subagentTypeSnake)
+            ?? values.decodeEitherIfPresent(String.self, forKey: .subagentType, or: .subagentTypeSnake)
         parentSessionId = try values.decodeEitherIfPresent(
             String.self,
             forKey: .parentSessionId,

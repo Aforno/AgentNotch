@@ -234,6 +234,64 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testCodexInstallRegistersInterruptAndNotGrokOnlyEvents() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .codex)
+        await manager.install()
+
+        let hooksURL = fixture.home.appendingPathComponent(".codex/hooks.json")
+        let root = try Self.readJSON(at: hooksURL)
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        XCTAssertTrue(hooks.keys.contains("Interrupt"))
+        XCTAssertTrue(hooks.keys.contains("Stop"))
+        XCTAssertFalse(hooks.keys.contains("StopCancelled"))
+        XCTAssertFalse(hooks.keys.contains("StopFailure"))
+    }
+
+    @MainActor
+    func testGrokInstallRegistersStopCancelled() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .grok)
+        await manager.install()
+
+        let hooksURL = fixture.home
+            .appendingPathComponent(".grok/hooks", isDirectory: true)
+            .appendingPathComponent("agentnotch.json")
+        let root = try Self.readJSON(at: hooksURL)
+        let hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        XCTAssertTrue(hooks.keys.contains("StopCancelled"))
+        XCTAssertTrue(hooks.keys.contains("StopFailure"))
+        XCTAssertTrue(hooks.keys.contains("Notification"))
+    }
+
+    @MainActor
+    func testGrokMonitoringRepairsMissingStopCancelled() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .grok)
+        await manager.install()
+
+        let hooksURL = fixture.home
+            .appendingPathComponent(".grok/hooks", isDirectory: true)
+            .appendingPathComponent("agentnotch.json")
+        var root = try Self.readJSON(at: hooksURL)
+        var hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        hooks.removeValue(forKey: "StopCancelled")
+        root["hooks"] = hooks
+        try Self.writeJSON(root, to: hooksURL)
+
+        await manager.prepareForMonitoring()
+
+        let updated = try Self.readJSON(at: hooksURL)
+        let updatedHooks = try XCTUnwrap(updated["hooks"] as? [String: Any])
+        XCTAssertTrue(updatedHooks.keys.contains("StopCancelled"))
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertNil(manager.lastError)
+    }
+
+    @MainActor
     func testMonitoringRefreshesAnInstalledRelayWithoutChangingHooks() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -576,6 +634,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     func testIntegratedProvidersDeclareTimeouts() {
         XCTAssertEqual(IntegratedHookProvider.geminiCLI.timeout(for: "BeforeAgent"), .milliseconds(5_000))
         XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "SessionEnd"), .seconds(3))
+        XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "Interrupt"), .seconds(3))
         XCTAssertEqual(IntegratedHookProvider.claudeCode.timeout(for: "PermissionRequest"), .seconds(5))
     }
 

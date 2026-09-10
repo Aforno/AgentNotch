@@ -19,11 +19,19 @@ public enum GrokEventPolicy {
 
     public static func shouldPublishWorkflowState(_ payload: AgentHookPayload) -> Bool {
         switch HookEventName(rawEventName: payload.hookEventName) {
-        case .subagentStart, .subagentStop, .sessionEnd, .stop:
+        case .subagentStart, .subagentStop, .sessionEnd, .stop, .stopFailure, .stopCancelled:
             return true
         default:
             return payload.toolName?.lowercased() == "workflow"
         }
+    }
+
+    /// Nested Grok turn-end reports use the parent's session id. Completing
+    /// them would stop the parent spinner while the main turn is still going.
+    public static func shouldIgnoreNestedTurnEnd(_ payload: AgentHookPayload) -> Bool {
+        payload.agentType?.nonEmpty != nil
+            && payload.agentId?.nonEmpty == nil
+            && payload.parentSessionId?.nonEmpty == nil
     }
 
     public static func shouldResolveSessionContext(_ payload: AgentHookPayload) -> Bool {

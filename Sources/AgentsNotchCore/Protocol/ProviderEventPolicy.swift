@@ -127,6 +127,79 @@ public enum ProviderEventPolicy {
         return tool.replacingOccurrences(of: "_", with: " ").lowercased()
     }
 
+    /// Grok `idle_prompt` is a turn-end backstop when Stop never arrives.
+    /// Claude's `idle_prompt` is a delayed idle ping after Stop and must not
+    /// settle a turn. `task_complete` is an unambiguous completion label.
+    public static func isTurnSettledNotification(
+        _ type: String?,
+        provider: AgentProvider
+    ) -> Bool {
+        switch type?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "idle_prompt": provider == .grok
+        case "task_complete": true
+        default: false
+        }
+    }
+
+    public static func settledNotificationActivity(from payload: AgentHookPayload) -> String {
+        if let message = payload.notificationMessage?.nonEmpty {
+            return concise(message, limit: 90)
+        }
+        switch payload.notificationType?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "task_complete": return "Task completed"
+        default: return "Turn ended"
+        }
+    }
+
+    /// StopFailure activity: prefer the rendered error the provider showed,
+    /// then a friendly class name so `rate_limit` does not appear on the notch.
+    public static func stopFailureActivity(from payload: AgentHookPayload) -> String {
+        if let message = payload.lastAssistantMessage?.nonEmpty, !isStopFailureClass(message) {
+            return concise(message, limit: 90)
+        }
+        return stopFailureActivity(forClass: payload.error)
+            ?? payload.error.map { concise($0, limit: 90) }
+            ?? payload.lastAssistantMessage.map { concise($0, limit: 90) }
+            ?? "Turn failed"
+    }
+
+    /// StopCancelled is a turn end without a genuine completion. Limit and
+    /// stall cases fail so the notch shows an error. Unknown reasons, including
+    /// Codex Interrupt, complete as Stopped.
+    public static func stopCancelledOutcome(
+        from payload: AgentHookPayload
+    ) -> (type: AgentEventType, state: AgentState, activity: String) {
+        switch payload.reason?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "max_turns":
+            (.failed, .failed, "Turn limit reached")
+        case "no_progress":
+            (.failed, .failed, "Stopped: no progress")
+        default:
+            (.completed, .completed, "Stopped")
+        }
+    }
+
+    private static func stopFailureActivity(forClass error: String?) -> String? {
+        switch error?.replacingOccurrences(of: "-", with: "_").lowercased() {
+        case "rate_limit": "Usage limit reached"
+        case "max_output_tokens": "Output limit reached"
+        case "authentication_failed": "Authentication failed"
+        case "invalid_request": "Invalid request"
+        case "server_error": "Server error"
+        case "overloaded": "Provider overloaded"
+        case "billing_error": "Billing error"
+        case "model_not_found": "Model not found"
+        case "oauth_org_not_allowed": "Organization not allowed"
+        case "account_on_hold": "Account on hold"
+        case "cloud_credential_error": "Cloud credential error"
+        default: nil
+        }
+    }
+
+    private static func isStopFailureClass(_ value: String) -> Bool {
+        stopFailureActivity(forClass: value) != nil
+    }
+
     public static func concise(_ text: String, limit: Int) -> String {
         let line = text
             .split(whereSeparator: \.isNewline)

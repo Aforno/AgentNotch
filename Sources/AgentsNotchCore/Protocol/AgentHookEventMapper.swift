@@ -66,6 +66,8 @@ public enum AgentHookEventMapper {
 
         let metadata = [
             "toolCallId": payload.toolCallId,
+            "promptId": payload.promptId,
+            "notificationType": payload.notificationType,
             // Store the canonical lifecycle name when the provider uses an
             // alias (e.g. Gemini BeforeAgent → UserPromptSubmit) so session
             // resume and other hookEvent gates stay provider-neutral.
@@ -166,17 +168,13 @@ public enum AgentHookEventMapper {
                 state: .running
             )
 
-        case .notification where ClaudeEventPolicy.isWaitingNotification(payload.notificationType):
-            return context.event(
-                type: .waiting,
-                activity: ClaudeEventPolicy.waitingNotificationActivity(
-                    for: payload.notificationType,
-                    message: payload.notificationMessage
-                ),
-                state: .waitingForUser
-            )
+        case .notification:
+            return notificationEvent(payload, context: context)
 
         case .stop:
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
             return terminalEvent(
                 payload,
                 successActivity: completionActivity(from: payload.lastAssistantMessage),
@@ -185,11 +183,24 @@ public enum AgentHookEventMapper {
             )
 
         case .stopFailure:
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
             return context.event(
                 type: .failed,
-                activity: payload.error.map { ProviderEventPolicy.concise($0, limit: 90) }
-                    ?? "Turn failed",
+                activity: ProviderEventPolicy.stopFailureActivity(from: payload),
                 state: .failed
+            )
+
+        case .stopCancelled:
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
+            let outcome = ProviderEventPolicy.stopCancelledOutcome(from: payload)
+            return context.event(
+                type: outcome.type,
+                activity: outcome.activity,
+                state: outcome.state
             )
 
         case .sessionEnd:
@@ -206,9 +217,39 @@ public enum AgentHookEventMapper {
         case .subagentStop:
             return subagentEvent(payload, started: false, context: context)
 
-        case .notification, nil:
+        case nil:
             return nil
         }
+    }
+
+    private static func notificationEvent(
+        _ payload: AgentHookPayload,
+        context: MappingContext
+    ) -> AgentEvent? {
+        if ProviderEventPolicy.isTurnSettledNotification(
+            payload.notificationType,
+            provider: context.provider
+        ) {
+            if context.provider == .grok, GrokEventPolicy.shouldIgnoreNestedTurnEnd(payload) {
+                return nil
+            }
+            return context.event(
+                type: .completed,
+                activity: ProviderEventPolicy.settledNotificationActivity(from: payload),
+                state: .completed
+            )
+        }
+        if ClaudeEventPolicy.isWaitingNotification(payload.notificationType) {
+            return context.event(
+                type: .waiting,
+                activity: ClaudeEventPolicy.waitingNotificationActivity(
+                    for: payload.notificationType,
+                    message: payload.notificationMessage
+                ),
+                state: .waitingForUser
+            )
+        }
+        return nil
     }
 
     private static func sessionStartEvent(

@@ -6,6 +6,14 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Grok turns that end without Stop (usage limit, output limit, interrupt, or
+  max-turns) no longer leave the spinner running. StopCancelled and Grok's
+  idle_prompt settle the turn; StopFailure shows a readable error. Codex
+  Interrupt settles a user interrupt. Claude idle_prompt is not treated as
+  attention.
+
 ## [0.2.1] - 2026-09-03
 
 ### Added
