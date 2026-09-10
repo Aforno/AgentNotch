@@ -38,8 +38,12 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   Claude/Cursor compatibility hooks when the native Grok relay is installed.
   Turn settlement listens for `Stop`, `StopFailure`, `StopCancelled`, and Grok's
   `idle_prompt` notification so a truncated stream or usage limit cannot leave
-  the spinner running. Claude's `idle_prompt` is a delayed idle ping after Stop
-  and is ignored.
+  the spinner running. Grok `promptId` values are retained on hook events so a
+  delayed turn-end report for a known older prompt cannot settle a newer turn.
+  An unseen prompt id still settles, covering interrupted bash-mode work.
+  `idle_prompt` is only a backstop: it does not replace a terminal outcome that
+  Agent Notch already observed. Claude's `idle_prompt` is a delayed idle ping
+  after Stop and is ignored.
 - Claude Code uses exec-form `command`/`args` and asynchronous empty-stdout
   handlers for permission and elicitation events. Enabling Answer from the
   notch adds `--answer` handlers only for supported interactive events.
