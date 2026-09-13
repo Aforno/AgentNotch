@@ -195,6 +195,45 @@ final class HookRelayIntegrationTests: XCTestCase {
         )
     }
 
+    func testAntigravityEventFlagMapsPayloadWithoutHookEventName() async throws {
+        let binary = try locateHookBinary()
+        let root = try makeTemporaryRoot("antigravity")
+        let eventSocket = root.appendingPathComponent("agent.sock")
+
+        let eventReceived = expectation(description: "antigravity tool event received")
+        let receivedEventBox = EventBox()
+        let server = UnixSocketServer(socketURL: eventSocket) { event in
+            if event.type == .toolStarted {
+                receivedEventBox.store(event)
+                eventReceived.fulfill()
+            }
+        }
+        try server.start()
+        defer { server.stop() }
+
+        let payload = Data("""
+        {"conversationId":"agy-relay","workspacePaths":["/tmp/AgentsNotch"],"toolCall":{"name":"run_command","args":{"CommandLine":"swift test"}}}
+        """.utf8)
+        let hooks = try HookRelayIntegrationTests.spawnHook(
+            binary: binary,
+            arguments: [
+                binary.path,
+                "--provider", "antigravity",
+                "--event", "PreToolUse",
+                "--socket", eventSocket.path,
+            ],
+            payload: payload
+        )
+
+        await fulfillment(of: [eventReceived, hooks.exited], timeout: 10)
+        XCTAssertEqual(hooks.process.terminationStatus, 0)
+        XCTAssertEqual(String(decoding: hooks.stdoutBox.value, as: UTF8.self), "{}\n")
+        let event = try XCTUnwrap(receivedEventBox.load())
+        XCTAssertEqual(event.sessionId, "antigravity:agy-relay")
+        XCTAssertEqual(event.provider, .antigravity)
+        XCTAssertEqual(event.activity, "Running swift test")
+    }
+
     func testUnknownProviderWarningIsVisibleOnStderr() async throws {
         let binary = try locateHookBinary()
         let root = try makeTemporaryRoot("unknown-provider")

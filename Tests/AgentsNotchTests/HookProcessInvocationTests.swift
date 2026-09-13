@@ -46,6 +46,25 @@ final class HookProcessInvocationTests: XCTestCase {
         XCTAssertEqual(invocation.configuredProvider, .codex)
     }
 
+    func testEventNameArgumentIsHonored() {
+        let invocation = HookProcessInvocation.parse(
+            arguments: ["AgentsNotchHook", "--provider", "antigravity", "--event", "PreToolUse"],
+            environment: [:],
+            warn: { _ in XCTFail("known provider must not warn") }
+        )
+        XCTAssertEqual(invocation.configuredProvider, .antigravity)
+        XCTAssertEqual(invocation.eventName, "PreToolUse")
+    }
+
+    func testDanglingEventFlagIsIgnored() {
+        let invocation = HookProcessInvocation.parse(
+            arguments: ["AgentsNotchHook", "--provider", "antigravity", "--event"],
+            environment: [:],
+            warn: { _ in XCTFail("dangling --event must not warn") }
+        )
+        XCTAssertNil(invocation.eventName)
+    }
+
     func testSocketPathArgumentsAreHonored() {
         let invocation = HookProcessInvocation.parse(
             arguments: [

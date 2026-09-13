@@ -17,7 +17,7 @@ final class AppRuntimeTests: XCTestCase {
 
         XCTAssertEqual(
             runtime.integrations.map(\.provider),
-            [.codex, .claudeCode, .grok, .geminiCLI, .openCode, .cursor]
+            [.codex, .claudeCode, .grok, .geminiCLI, .antigravity, .openCode, .cursor]
         )
     }
 

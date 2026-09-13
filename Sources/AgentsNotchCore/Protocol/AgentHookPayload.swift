@@ -43,6 +43,8 @@ public struct AgentHookPayload: Decodable, Sendable {
     public var notificationMessage: String?
     public var error: String?
     public var timestamp: Date?
+    /// Antigravity PreInvocation sequence. 0 is the first model call.
+    public var invocationNum: Int?
 
     private enum CodingKeys: String, CodingKey {
         // Grok camelCase
@@ -78,10 +80,22 @@ public struct AgentHookPayload: Decodable, Sendable {
         case conversationIdSnake = "conversation_id"
         case parentConversationIdSnake = "parent_conversation_id"
 
+        // Antigravity
+        case conversationIdCamel = "conversationId"
+        case workspacePaths
+        case toolCall
+        case terminationReason
+        case invocationNum
+
         // OpenCode / Claude aliases
         case subagentIdSnake = "subagent_id"
         case subagentType
         case subagentTypeSnake = "subagent_type"
+    }
+
+    private struct NestedToolCall: Decodable {
+        var name: String?
+        var args: JSONValue?
     }
 
     public init(from decoder: Decoder) throws {
@@ -90,7 +104,7 @@ public struct AgentHookPayload: Decodable, Sendable {
             String.self,
             forKey: .sessionId,
             or: .sessionIdSnake
-        ) {
+        ) ?? values.decodeIfPresent(String.self, forKey: .conversationIdCamel) {
             sessionId = decodedSessionId
         } else {
             sessionId = try values.decode(String.self, forKey: .conversationIdSnake)
@@ -106,17 +120,20 @@ public struct AgentHookPayload: Decodable, Sendable {
             or: .workspaceRootSnake
         )
         let workspaceRoots = try values.decodeIfPresent([String].self, forKey: .workspaceRootsSnake)
+        let workspacePaths = try values.decodeIfPresent([String].self, forKey: .workspacePaths)
         // A present empty cwd (Cursor sends "") must not block workspace_root
         // / workspace_roots. decodeIfPresent only falls through on nil.
         cwd = try values.decodeIfPresent(String.self, forKey: .cwd)?.nonEmpty
             ?? workspaceRoot?.nonEmpty
             ?? workspaceRoots?.lazy.compactMap(\.nonEmpty).first
+            ?? workspacePaths?.lazy.compactMap(\.nonEmpty).first
             ?? ""
-        hookEventName = try values.decodeEither(
+        // Antigravity omits hookEventName; the relay fills it from --event.
+        hookEventName = try values.decodeEitherIfPresent(
             String.self,
             forKey: .hookEventName,
             or: .hookEventNameSnake
-        )
+        ) ?? ""
         turnId = try values.decodeEitherIfPresent(String.self, forKey: .turnId, or: .turnIdSnake)
         promptId = try values.decodeIfPresent(String.self, forKey: .promptId)
         approvalsReviewer = try values.decodeEitherIfPresent(
@@ -128,6 +145,7 @@ public struct AgentHookPayload: Decodable, Sendable {
         source = try values.decodeIfPresent(String.self, forKey: .source)
         reason = try values.decodeIfPresent(String.self, forKey: .reason)
             ?? values.decodeIfPresent(String.self, forKey: .status)
+            ?? values.decodeIfPresent(String.self, forKey: .terminationReason)
         toolName = try values.decodeEitherIfPresent(String.self, forKey: .toolName, or: .toolNameSnake)
         let camelToolUseId = try values.decodeIfPresent(String.self, forKey: .toolUseId)?.nonEmpty
         let camelToolCallId = try values.decodeIfPresent(String.self, forKey: .toolCallId)?.nonEmpty
@@ -135,6 +153,11 @@ public struct AgentHookPayload: Decodable, Sendable {
         let snakeToolCallId = try values.decodeIfPresent(String.self, forKey: .toolCallIdSnake)?.nonEmpty
         toolCallId = camelToolUseId ?? camelToolCallId ?? snakeToolUseId ?? snakeToolCallId
         toolInput = try values.decodeEitherIfPresent(JSONValue.self, forKey: .toolInput, or: .toolInputSnake)
+        if let toolCall = try values.decodeIfPresent(NestedToolCall.self, forKey: .toolCall) {
+            if toolName == nil { toolName = toolCall.name }
+            if toolInput == nil { toolInput = toolCall.args }
+        }
+        invocationNum = try values.decodeIfPresent(Int.self, forKey: .invocationNum)
         agentId = try values.decodeEitherIfPresent(String.self, forKey: .agentId, or: .agentIdSnake)
             ?? values.decodeIfPresent(String.self, forKey: .subagentIdSnake)
         agentType = try values.decodeEitherIfPresent(String.self, forKey: .agentType, or: .agentTypeSnake)

@@ -10,7 +10,10 @@ let input = HookProcessIO.readStdin()
 let invocation = HookProcessInvocation.parse()
 
 if invocation.skipCompatibilityHook {
-    HookProcessIO.writePassiveResponse(for: invocation.configuredProvider)
+    HookProcessIO.writePassiveResponse(
+        for: invocation.configuredProvider,
+        eventName: invocation.eventName
+    )
     exit(EXIT_SUCCESS)
 }
 
@@ -26,7 +29,10 @@ if input.isEmpty {
 }
 
 do {
-    let payload = try AgentHookInput.decode(input)
+    var payload = try AgentHookInput.decode(input)
+    if payload.hookEventName.nonEmpty == nil, let eventName = invocation.eventName?.nonEmpty {
+        payload.hookEventName = eventName
+    }
     let enriched = ProviderHookEnricher.enrich(payload, provider: invocation.provider)
     var answered = false
     if var event = AgentHookEventMapper.map(
@@ -105,4 +111,4 @@ do {
         "Could not decode hook payload (\(input.count) bytes) for provider \(invocation.provider.rawValue, privacy: .public): \(String(describing: error), privacy: .public)"
     )
 }
-HookProcessIO.writePassiveResponse(for: invocation.provider)
+HookProcessIO.writePassiveResponse(for: invocation.provider, eventName: invocation.eventName)

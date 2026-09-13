@@ -1,6 +1,6 @@
 # Provider icon attribution
 
-The Codex, Grok, OpenCode, Gemini, and Cursor vector marks in
+The Codex, Grok, OpenCode, Gemini, Antigravity, and Cursor vector marks in
 `Sources/AgentsNotch/Resources/ProviderIcons.xcassets` were sourced or adapted from
 [`@lobehub/icons-static-svg` 1.94.0](https://www.npmjs.com/package/@lobehub/icons-static-svg),
 which is distributed under the MIT License. The Claude Code mark reproduces

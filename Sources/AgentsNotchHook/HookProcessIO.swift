@@ -28,10 +28,18 @@ enum HookProcessIO {
     }
 
     /// Claude expects no stdout for passive hook runs; every other provider
-    /// receives an empty JSON object. Keep this contract in sync with
-    /// docs/PROTOCOL.md.
-    static func writePassiveResponse(for provider: AgentProvider, to descriptor: Int32 = STDOUT_FILENO) {
+    /// receives an empty JSON object, except Antigravity Stop which requires
+    /// `{"decision":"stop"}`. Keep this contract in sync with docs/PROTOCOL.md.
+    static func writePassiveResponse(
+        for provider: AgentProvider,
+        eventName: String? = nil,
+        to descriptor: Int32 = STDOUT_FILENO
+    ) {
         guard provider != .claudeCode else { return }
+        if provider == .antigravity {
+            writeStdout(AntigravityEventPolicy.passiveResponse(eventName: eventName), to: descriptor)
+            return
+        }
         writeStdout(Data("{}\n".utf8), to: descriptor)
     }
 
@@ -71,6 +79,7 @@ enum HookProcessIO {
 struct HookProcessInvocation: Sendable {
     let configuredProvider: AgentProvider
     let provider: AgentProvider
+    let eventName: String?
     let socketURL: URL
     let replySocketURL: URL
     let answersFromNotch: Bool
@@ -94,6 +103,7 @@ struct HookProcessInvocation: Sendable {
             AgentProvider.grok.rawValue,
             AgentProvider.openCode.rawValue,
             AgentProvider.geminiCLI.rawValue,
+            AgentProvider.antigravity.rawValue,
             AgentProvider.cursor.rawValue,
         ]
         var explicitProvider: AgentProvider?
@@ -106,6 +116,10 @@ struct HookProcessInvocation: Sendable {
             }
         }
         let configuredProvider = explicitProvider ?? .codex
+        var eventName: String?
+        if let index = arguments.firstIndex(of: "--event"), arguments.indices.contains(index + 1) {
+            eventName = arguments[index + 1]
+        }
         let grokHookEvent = environment["GROK_HOOK_EVENT"]
         let provider = GrokHookRouting.resolvedProvider(
             explicit: explicitProvider,
@@ -133,6 +147,7 @@ struct HookProcessInvocation: Sendable {
         return HookProcessInvocation(
             configuredProvider: configuredProvider,
             provider: provider,
+            eventName: eventName,
             socketURL: socketURL,
             replySocketURL: replySocketURL,
             answersFromNotch: arguments.contains("--answer"),

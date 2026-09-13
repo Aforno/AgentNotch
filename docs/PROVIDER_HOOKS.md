@@ -14,13 +14,16 @@ waits for a `reply.sock` registration ACK before it sends the actionable waiting
 the provider decision JSON. If the app is unavailable or no answer arrives, the
 hook writes the passive response and the provider shows its own prompt. Claude
 permission handlers become synchronous only while this setting is enabled.
-Grok, Gemini, Cursor, and OpenCode do not wait for a decision. Gemini's
-Notification hook only reports status. Cursor has no approval hook, and the
-OpenCode plugin does not wait.
+Grok, Gemini, Antigravity, Cursor, and OpenCode do not wait for a decision.
+Gemini's Notification hook only reports status. Antigravity does not install
+PreToolUse: that hook requires `decision` (`allow`/`deny`/`ask`) and `{}`
+denies the tool. Stop writes `{"decision":"stop"}` so the turn can end.
+Cursor has no approval hook, and the OpenCode plugin does not wait.
 
-Passive stdout is provider-specific. Claude Code receives empty stdout. The
-other integrated providers receive `{}` followed by a newline. Keep this in
-sync with `HookProcessIO.writePassiveResponse` and its tests.
+Passive stdout is provider-specific. Claude Code receives empty stdout.
+Antigravity Stop writes `{"decision":"stop"}`. The other integrated providers
+receive `{}` followed by a newline. Keep this in sync with
+`HookProcessIO.writePassiveResponse` and its tests.
 
 ## Compatibility and enrichment
 
@@ -52,6 +55,18 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   approval.
 - Gemini CLI Before/After lifecycle aliases map to the same protocol event
   types.
+- Antigravity uses a named `agentnotch` hook in `~/.agents/hooks.json`.
+  Payloads are camelCase (`conversationId`, `workspacePaths`, nested
+  `toolCall`) and omit the event name; the installed command passes `--event`.
+  PreInvocation 0 becomes SessionStart. PostToolUse matchers use `.*` (`*` is
+  not valid regex). Do not install PreToolUse: it is a permission gate.
+  ACP native tools send `target_file` / `absolute_path`; those map onto
+  `file_path`. JSON lifecycle hooks are gated in the harness
+  (`enable_json_hooks` / `json-hooks-enabled`). If the host launches
+  Antigravity without that flag, hook discovery is skipped and Agent Notch
+  never receives events. Install also removes a leftover `agentnotch` entry
+  from `~/.gemini/config/hooks.json`, which the customization engine does
+  not scan.
 - OpenCode's generated plugin converts its events to `AgentHookPayload` first.
 
 Disk walks stay behind `ProviderHookEnricher`. Provider-owned reads are limited
@@ -66,6 +81,7 @@ approval bridge above. They must never invent a live session.
 | Claude Code | `~/.claude/settings.json` |
 | Grok | `~/.grok/hooks/agentnotch.json` |
 | Gemini CLI | `~/.gemini/settings.json` |
+| Antigravity | `~/.agents/hooks.json` |
 | Cursor | `~/.cursor/hooks.json` |
 | OpenCode | `~/.config/opencode/plugins/agentnotch.js` |
 
