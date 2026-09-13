@@ -28,7 +28,7 @@ public enum HookEventName: String, Sendable {
         switch Self.normalizedKey(rawEventName) {
         case "sessionstart":
             self = .sessionStart
-        case "userpromptsubmit", "beforesubmitprompt", "beforeagent":
+        case "userpromptsubmit", "beforesubmitprompt", "beforeagent", "preinvocation":
             self = .userPromptSubmit
         case "pretooluse", "beforetool":
             self = .preToolUse

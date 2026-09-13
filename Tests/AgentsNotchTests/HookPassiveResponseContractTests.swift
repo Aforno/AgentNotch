@@ -28,7 +28,7 @@ final class HookPassiveResponseContractTests: XCTestCase {
     }
 
     func testPassiveResponseIsEmptyJSONObjectForMostProviders() throws {
-        for provider in [AgentProvider.codex, .grok, .openCode, .geminiCLI, .cursor] {
+        for provider in [AgentProvider.codex, .grok, .openCode, .geminiCLI, .antigravity, .cursor] {
             let output = capture { HookProcessIO.writePassiveResponse(for: provider, to: $0) }
             XCTAssertEqual(String(decoding: output, as: UTF8.self), "{}\n", "provider \(provider.rawValue)")
         }

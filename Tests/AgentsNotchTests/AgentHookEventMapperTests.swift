@@ -793,7 +793,7 @@ final class AgentHookEventMapperTests: XCTestCase {
         }
         """)
 
-        for provider in [AgentProvider.claudeCode, .codex, .geminiCLI, .cursor] {
+        for provider in [AgentProvider.claudeCode, .codex, .geminiCLI, .antigravity, .cursor] {
             XCTAssertNil(AgentHookEventMapper.map(payload, provider: provider), "\(provider.rawValue)")
         }
     }
@@ -1042,7 +1042,134 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(completed.activity, "Gemini integration complete")
     }
 
+    func testAntigravityPayloadAliasesAndLifecycle() throws {
+        let missingEvent = try decode("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "invocationNum": 0
+        }
+        """)
+        XCTAssertEqual(missingEvent.sessionId, "agy-conversation")
+        XCTAssertEqual(missingEvent.cwd, "/tmp/AgentsNotch")
+        XCTAssertEqual(missingEvent.hookEventName, "")
+        XCTAssertEqual(missingEvent.invocationNum, 0)
+
+        let started = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "invocationNum": 0
+        }
+        """, eventName: "PreInvocation")
+        XCTAssertEqual(started.type, .started)
+        XCTAssertEqual(started.sessionId, "antigravity:agy-conversation")
+        XCTAssertEqual(started.task, "AgentsNotch")
+        XCTAssertEqual(started.workingDirectory, "/tmp/AgentsNotch")
+        XCTAssertEqual(started.metadata?["hookEvent"], "SessionStart")
+
+        let thinking = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "invocationNum": 2
+        }
+        """, eventName: "PreInvocation")
+        XCTAssertEqual(thinking.type, .activity)
+        XCTAssertEqual(thinking.state, .thinking)
+        XCTAssertEqual(thinking.metadata?["hookEvent"], "UserPromptSubmit")
+
+        let running = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "toolCall": {
+            "name": "run_command",
+            "args": { "CommandLine": "swift test", "Cwd": "/tmp/AgentsNotch" }
+          }
+        }
+        """, eventName: "PreToolUse")
+        XCTAssertEqual(running.type, .toolStarted)
+        XCTAssertEqual(running.state, .executingTool)
+        XCTAssertEqual(running.activity, "Running swift test")
+
+        let editing = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "toolCall": {
+            "name": "replace_file_content",
+            "args": { "TargetFile": "/tmp/AgentsNotch/Sources/App.swift" }
+          }
+        }
+        """, eventName: "PreToolUse")
+        XCTAssertEqual(editing.type, .fileChanged)
+        XCTAssertEqual(editing.file, "/tmp/AgentsNotch/Sources/App.swift")
+        XCTAssertEqual(editing.activity, "Editing App.swift")
+
+        let question = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "toolCall": {
+            "name": "ask_question",
+            "args": {
+              "questions": [{ "question": "Which package manager?", "options": ["spm", "cocoapods"] }]
+            }
+          }
+        }
+        """, eventName: "PreToolUse")
+        XCTAssertEqual(question.type, .waiting)
+        XCTAssertEqual(question.activity, "Which package manager?")
+        XCTAssertNil(question.pendingReply)
+
+        let failedTool = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "toolCall": { "name": "run_command", "args": { "CommandLine": "false" } },
+          "error": "exit status 1"
+        }
+        """, eventName: "PostToolUse")
+        XCTAssertEqual(failedTool.type, .toolCompleted)
+        XCTAssertEqual(failedTool.activity, "Tool failed: exit status 1")
+
+        let completed = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "terminationReason": "model_stop",
+          "error": "",
+          "fullyIdle": true
+        }
+        """, eventName: "Stop")
+        XCTAssertEqual(completed.type, .completed)
+        XCTAssertEqual(completed.activity, "Task completed")
+
+        let failed = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "terminationReason": "error",
+          "error": "Model request failed"
+        }
+        """, eventName: "Stop")
+        XCTAssertEqual(failed.type, .failed)
+        XCTAssertEqual(failed.activity, "Model request failed")
+
+        let turnLimit = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "terminationReason": "max_steps_exceeded"
+        }
+        """, eventName: "Stop")
+        XCTAssertEqual(turnLimit.type, .failed)
+        XCTAssertEqual(turnLimit.activity, "Turn limit reached")
+    }
+
     func testHookEventNameCanonicalizesAliasesAndClassifiesLifecycle() {
+        XCTAssertEqual(HookEventName(rawEventName: "PreInvocation"), .userPromptSubmit)
         XCTAssertEqual(HookEventName(rawEventName: "BeforeAgent"), .userPromptSubmit)
         XCTAssertEqual(HookEventName(rawEventName: "before_submit_prompt"), .userPromptSubmit)
         XCTAssertEqual(HookEventName(rawEventName: "AfterAgent"), .stop)
@@ -1065,6 +1192,13 @@ final class AgentHookEventMapperTests: XCTestCase {
 
     private func decode(_ json: String) throws -> AgentHookPayload {
         try JSONDecoder().decode(AgentHookPayload.self, from: Data(json.utf8))
+    }
+
+    private func mapAntigravity(_ json: String, eventName: String) throws -> AgentEvent {
+        var payload = try decode(json)
+        payload.hookEventName = eventName
+        let enriched = ProviderHookEnricher.enrich(payload, provider: .antigravity)
+        return try XCTUnwrap(AgentHookEventMapper.map(enriched.payload, provider: .antigravity))
     }
 
     private func temporaryTranscript(_ contents: String) throws -> URL {

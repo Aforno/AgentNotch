@@ -8,8 +8,8 @@ Dock icon. No menu-bar extra.
 Pre-1.0 public beta. The local protocol is versioned. The UI and provider hook
 mappings can still change before 1.0.
 
-It talks to Codex, Claude Code, Grok, Gemini CLI, OpenCode, and Cursor. Every
-integration sends the same `AgentEvent` values to a local socket.
+It talks to Codex, Claude Code, Grok, Gemini CLI, Antigravity, OpenCode, and
+Cursor. Every integration sends the same `AgentEvent` values to a local socket.
 
 ## Install
 
@@ -71,8 +71,8 @@ leave the simulator, the Debug tab, and that wiring out.
 
 ## Provider integrations
 
-Open Settings → Integrations and install Codex, Claude, Grok, Gemini, OpenCode,
-Cursor, or any mix of them. Agent Notch:
+Open Settings → Integrations and install Codex, Claude, Grok, Gemini,
+Antigravity, OpenCode, Cursor, or any mix of them. Agent Notch:
 
 1. copies its small relay to `~/.agentnotch/bin/agentnotch-hook`;
 2. installs an observer-only hook or plugin through the provider's supported
@@ -87,6 +87,7 @@ Config files:
 - Claude Code: `~/.claude/settings.json`
 - Grok: `~/.grok/hooks/agentnotch.json`
 - Gemini CLI: `~/.gemini/settings.json`
+- Antigravity: `~/.gemini/config/hooks.json`
 - Cursor: `~/.cursor/hooks.json`
 - OpenCode: `~/.config/opencode/plugins/agentnotch.js`
 
@@ -97,8 +98,8 @@ By default, provider hooks do not return decisions, inject context, or block
 tools. Enabling Settings → Alerts & Privacy → Answer from the notch makes Codex
 and Claude Code permission hooks wait up to 120 seconds for a supported answer.
 Claude's `AskUserQuestion` and `ExitPlanMode` hooks also wait, but unrelated
-`PreToolUse` events remain asynchronous observers. Grok, Gemini, Cursor, and
-OpenCode remain display-only. If the reply socket is unavailable or no answer
+`PreToolUse` events remain asynchronous observers. Grok, Gemini, Antigravity,
+Cursor, and OpenCode remain display-only. If the reply socket is unavailable or no answer
 arrives, the provider shows its own prompt and Agent Notch still observes the wait.
 
 They subscribe to each provider's documented session, prompt, tool, permission,
@@ -109,8 +110,10 @@ Answer from the notch adds synchronous handlers only for provider events the
 notch can answer faithfully.
 
 The relay accepts the snake_case payload used by Codex, Claude Code, Gemini CLI,
-and Cursor, and Grok's camelCase payload. The OpenCode bridge converts plugin
-events to that same observer payload.
+and Cursor, and Grok's camelCase payload. Antigravity uses camelCase
+(`conversationId`, nested `toolCall`) and omits the event name on stdin; the
+installed command passes `--event`. The OpenCode bridge converts plugin events
+to that same observer payload.
 
 The only transcript read is a fail-open, size-capped Codex approval bridge. Do
 not add another parser.
@@ -131,6 +134,7 @@ ignored. No agent task has started.
 - [Claude Code hooks reference](https://code.claude.com/docs/en/hooks)
 - [Grok hooks reference](https://docs.x.ai/build/features/hooks)
 - [Gemini CLI hooks reference](https://geminicli.com/docs/hooks/reference/)
+- [Antigravity hooks reference](https://antigravity.google/docs/hooks)
 - [OpenCode plugins reference](https://opencode.ai/docs/plugins/)
 - [Cursor hooks reference](https://cursor.com/docs/hooks)
 

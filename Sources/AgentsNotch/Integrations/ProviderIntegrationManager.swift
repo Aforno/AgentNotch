@@ -79,6 +79,8 @@ final class ProviderIntegrationManager {
             "Open /hooks in Codex once to review and trust the installed lifecycle hooks."
         case .openCode:
             "Restart OpenCode after installing the plugin, then start a new session."
+        case .antigravity:
+            "Restart Antigravity after installing, then start a new conversation."
         default:
             nil
         }

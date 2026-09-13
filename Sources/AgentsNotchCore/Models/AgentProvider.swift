@@ -16,6 +16,7 @@ public struct AgentProvider: RawRepresentable, Codable, Hashable, Sendable, Iden
         case .grok: "Grok"
         case .openCode: "OpenCode"
         case .geminiCLI: "Gemini"
+        case .antigravity: "Antigravity"
         case .cursor: "Cursor"
         default: rawValue.replacingOccurrences(of: "-", with: " ").capitalized
         }
@@ -26,6 +27,7 @@ public struct AgentProvider: RawRepresentable, Codable, Hashable, Sendable, Iden
     public static let grok = AgentProvider(rawValue: "grok")
     public static let openCode = AgentProvider(rawValue: "opencode")
     public static let geminiCLI = AgentProvider(rawValue: "gemini-cli")
+    public static let antigravity = AgentProvider(rawValue: "antigravity")
     public static let cursor = AgentProvider(rawValue: "cursor")
 
     /// Session IDs are stored as `provider:nativeId`. Live hooks already emit

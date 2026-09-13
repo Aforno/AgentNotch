@@ -408,3 +408,108 @@ struct OpenCodePluginInstall: HookInstallStrategy {
         )
     }
 }
+
+/// Antigravity's `hooks.json` maps named hooks to events. PreToolUse/PostToolUse
+/// use matcher groups; PreInvocation/Stop are handler lists.
+struct AntigravityHooksInstall: HookInstallStrategy {
+    static let hookName = "agentnotch"
+    private static let matcherEvents: Set<String> = ["PreToolUse", "PostToolUse"]
+
+    let profile: IntegratedHookProvider
+    let homeDirectoryURL: URL
+
+    var hooksURL: URL { profile.hooksURL(homeDirectoryURL: homeDirectoryURL) }
+    var eventNames: [String] { profile.eventNames }
+
+    func timeout(for eventName: String) -> HookTimeout {
+        profile.timeout(for: eventName)
+    }
+
+    func install(io: HookConfigurationIO, relay: HookRelayIdentity) throws {
+        let configuration = try io.readRoot(at: hooksURL)
+        var root = configuration.root
+        if root[Self.hookName] != nil, root[Self.hookName] as? [String: Any] == nil {
+            throw ProviderIntegrationError.invalidHookEvent(Self.hookName, hooksURL.path)
+        }
+        var hook = (root[Self.hookName] as? [String: Any]) ?? [:]
+        for eventName in eventNames {
+            hook[eventName] = entriesToInstall(for: eventName, relay: relay)
+        }
+        root[Self.hookName] = hook
+        try io.writeRoot(root, to: hooksURL, expectedData: configuration.originalData)
+        guard containsCurrentRelay(io: io, relay: relay) else {
+            throw ProviderIntegrationError.incompleteInstallation
+        }
+    }
+
+    func uninstall(io: HookConfigurationIO, relay: HookRelayIdentity) throws {
+        guard io.fileExists(at: hooksURL) else { return }
+        let configuration = try io.readRoot(at: hooksURL)
+        var root = configuration.root
+        guard let hook = root[Self.hookName] as? [String: Any],
+              hasOwnedHandler(in: hook, relay: relay)
+        else { return }
+        root.removeValue(forKey: Self.hookName)
+        try io.writeRoot(root, to: hooksURL, expectedData: configuration.originalData)
+    }
+
+    func containsCurrentRelay(io: HookConfigurationIO, relay: HookRelayIdentity) -> Bool {
+        guard let hook = namedHook(io: io) else { return false }
+        return eventNames.allSatisfy { eventName in
+            handlers(in: hook, eventName: eventName).contains {
+                relay.identity(of: $0, eventName: eventName) == .current
+            }
+        }
+    }
+
+    func looksInstalled(io: HookConfigurationIO, relay: HookRelayIdentity) -> Bool {
+        containsCurrentRelay(io: io, relay: relay)
+            || namedHook(io: io).map { hasOwnedHandler(in: $0, relay: relay) } == true
+    }
+
+    func updateIfNeeded(io: HookConfigurationIO, relay: HookRelayIdentity) throws {
+        guard !containsCurrentRelay(io: io, relay: relay) else { return }
+        try install(io: io, relay: relay)
+    }
+
+    private func namedHook(io: HookConfigurationIO) -> [String: Any]? {
+        guard let configuration = try? io.readRoot(at: hooksURL) else { return nil }
+        return configuration.root[Self.hookName] as? [String: Any]
+    }
+
+    private func hasOwnedHandler(in hook: [String: Any], relay: HookRelayIdentity) -> Bool {
+        hook.keys.contains { eventName in
+            handlers(in: hook, eventName: eventName).contains {
+                relay.identity(of: $0, eventName: eventName).isOwned
+            }
+        }
+    }
+
+    private func handlers(in hook: [String: Any], eventName: String) -> [[String: Any]] {
+        guard let entries = hook[eventName] as? [[String: Any]] else { return [] }
+        if usesMatcherGroups(eventName) {
+            return entries.flatMap { $0["hooks"] as? [[String: Any]] ?? [] }
+        }
+        return entries
+    }
+
+    private func entriesToInstall(for eventName: String, relay: HookRelayIdentity) -> [[String: Any]] {
+        let handler = relay.commandHandler(
+            timeout: timeout(for: eventName),
+            claudeExecForm: false,
+            eventName: eventName,
+            includeEventName: true
+        )
+        if usesMatcherGroups(eventName) {
+            return [[
+                "matcher": "*",
+                "hooks": [handler],
+            ]]
+        }
+        return [handler]
+    }
+
+    private func usesMatcherGroups(_ eventName: String) -> Bool {
+        Self.matcherEvents.contains(eventName)
+    }
+}

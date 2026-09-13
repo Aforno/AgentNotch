@@ -21,9 +21,17 @@ struct HookRelayIdentity: Sendable {
     }
 
     var quotedCommand: String {
+        quotedCommand(eventName: nil)
+    }
+
+    func quotedCommand(eventName: String?) -> String {
         let path = relayURL.path.replacingOccurrences(of: "'", with: "'\\''")
         let providerName = provider.rawValue.replacingOccurrences(of: "'", with: "'\\''")
         var command = "'\(path)' --provider '\(providerName)'"
+        if let eventName, !eventName.isEmpty {
+            let escapedEvent = eventName.replacingOccurrences(of: "'", with: "'\\''")
+            command += " --event '\(escapedEvent)'"
+        }
         if sendsDecisions {
             command += " --answer"
         }
@@ -43,7 +51,8 @@ struct HookRelayIdentity: Sendable {
         timeout: HookTimeout,
         claudeExecForm: Bool,
         eventName: String,
-        blocking: Bool? = nil
+        blocking: Bool? = nil,
+        includeEventName: Bool = false
     ) -> [String: Any] {
         let isBlocking = blocking ?? (sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName))
         let resolvedTimeout = isBlocking ? answerTimeout(timeout) : timeout
@@ -58,7 +67,7 @@ struct HookRelayIdentity: Sendable {
         }
         return [
             "type": "command",
-            "command": quotedCommand,
+            "command": quotedCommand(eventName: includeEventName ? eventName : nil),
             "timeout": resolvedTimeout.jsonValue,
         ]
     }
@@ -121,6 +130,14 @@ struct HookRelayIdentity: Sendable {
         let command = handler["command"] as? String ?? ""
         let hasAnswerFlag = args.contains("--answer") || command.contains(" --answer")
         guard hasAnswerFlag == sendsDecisions else { return false }
+        if provider == .antigravity {
+            let eventForms = [
+                "--event '\(eventName)'",
+                "--event \"\(eventName)\"",
+                "--event \(eventName)",
+            ]
+            return eventForms.contains(where: command.contains)
+        }
         guard provider == .claudeCode else { return true }
         let isBlocking = blocking
             ?? (sendsDecisions && AgentReplyPolicy.waitsForAnswer(eventName: eventName))

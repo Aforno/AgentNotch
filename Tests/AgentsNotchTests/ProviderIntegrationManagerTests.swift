@@ -632,6 +632,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
 
     @MainActor
     func testIntegratedProvidersDeclareTimeouts() {
+        XCTAssertEqual(IntegratedHookProvider.antigravity.timeout(for: "PreToolUse"), .seconds(5))
         XCTAssertEqual(IntegratedHookProvider.geminiCLI.timeout(for: "BeforeAgent"), .milliseconds(5_000))
         XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "SessionEnd"), .seconds(3))
         XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "Interrupt"), .seconds(3))
@@ -659,6 +660,88 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(relay.identity(of: current, eventName: "SessionStart"), .current)
         XCTAssertEqual(relay.identity(of: legacy, eventName: "SessionStart"), .legacy)
         XCTAssertEqual(relay.identity(of: foreign, eventName: "SessionStart"), .none)
+    }
+
+    @MainActor
+    func testAntigravityInstallWritesNamedHookAndPreservesSiblings() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let hooksURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        try FileManager.default.createDirectory(
+            at: hooksURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.writeJSON([
+            "my-linter-hook": [
+                "PostToolUse": [[
+                    "matcher": "run_command",
+                    "hooks": [[
+                        "type": "command",
+                        "command": "./scripts/lint.sh",
+                    ]],
+                ]],
+            ],
+        ], to: hooksURL)
+
+        let manager = fixture.manager(provider: .antigravity)
+        await manager.install()
+        await manager.install()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertEqual(
+            manager.trustInstructions,
+            "Restart Antigravity after installing, then start a new conversation."
+        )
+        let installed = try Self.readJSON(at: hooksURL)
+        XCTAssertNotNil(installed["my-linter-hook"])
+        let hook = try XCTUnwrap(installed["agentnotch"] as? [String: Any])
+        let expected = ["PreInvocation", "PreToolUse", "PostToolUse", "Stop"]
+        XCTAssertEqual(Set(hook.keys), Set(expected))
+
+        let preInvocation = try XCTUnwrap(hook["PreInvocation"] as? [[String: Any]])
+        XCTAssertEqual(preInvocation.count, 1)
+        XCTAssertNil(preInvocation.first?["hooks"])
+        XCTAssertEqual(preInvocation.first?["timeout"] as? Int, 5)
+        XCTAssertTrue(
+            (preInvocation.first?["command"] as? String)?
+                .contains("--provider 'antigravity' --event 'PreInvocation'") == true
+        )
+
+        let preToolUse = try XCTUnwrap(hook["PreToolUse"] as? [[String: Any]])
+        XCTAssertEqual(preToolUse.count, 1)
+        XCTAssertEqual(preToolUse.first?["matcher"] as? String, "*")
+        let preToolHandlers = try XCTUnwrap(preToolUse.first?["hooks"] as? [[String: Any]])
+        XCTAssertEqual(preToolHandlers.count, 1)
+        XCTAssertTrue(
+            (preToolHandlers.first?["command"] as? String)?
+                .contains("--provider 'antigravity' --event 'PreToolUse'") == true
+        )
+
+        await manager.uninstall()
+
+        XCTAssertEqual(manager.status, .notInstalled)
+        let removed = try Self.readJSON(at: hooksURL)
+        XCTAssertNil(removed["agentnotch"])
+        XCTAssertNotNil(removed["my-linter-hook"])
+    }
+
+    @MainActor
+    func testAntigravityInstallRefusesToReplaceInvalidNamedHook() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let hooksURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        try FileManager.default.createDirectory(
+            at: hooksURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let original = Data("{\"agentnotch\":[\"preserve me\"],\"other\":{}}".utf8)
+        try original.write(to: hooksURL)
+
+        let manager = fixture.manager(provider: .antigravity)
+        await manager.install()
+
+        XCTAssertEqual(manager.status, .unavailable("Installation failed"))
+        XCTAssertEqual(try Data(contentsOf: hooksURL), original)
     }
 
     @MainActor

@@ -71,6 +71,10 @@ final class OriginActivationServiceTests: XCTestCase {
 
         XCTAssertTrue(OriginActivationService.canOpenApplication(for: allowed))
         XCTAssertFalse(OriginActivationService.canOpenApplication(for: rejected))
+        XCTAssertTrue(OriginActivationService.isAllowedApplicationURL(
+            URL(string: "https://antigravity.google/conversation/1")!,
+            for: .antigravity
+        ))
     }
 
     @MainActor

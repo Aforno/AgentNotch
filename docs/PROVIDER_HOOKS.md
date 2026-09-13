@@ -14,9 +14,10 @@ waits for a `reply.sock` registration ACK before it sends the actionable waiting
 the provider decision JSON. If the app is unavailable or no answer arrives, the
 hook writes the passive response and the provider shows its own prompt. Claude
 permission handlers become synchronous only while this setting is enabled.
-Grok, Gemini, Cursor, and OpenCode do not wait for a decision. Gemini's
-Notification hook only reports status. Cursor has no approval hook, and the
-OpenCode plugin does not wait.
+Grok, Gemini, Antigravity, Cursor, and OpenCode do not wait for a decision.
+Gemini's Notification hook only reports status. Antigravity PreToolUse and Stop
+hooks write `{}` so they fail open instead of gating tools or continuing a
+turn. Cursor has no approval hook, and the OpenCode plugin does not wait.
 
 Passive stdout is provider-specific. Claude Code receives empty stdout. The
 other integrated providers receive `{}` followed by a newline. Keep this in
@@ -52,6 +53,11 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
   approval.
 - Gemini CLI Before/After lifecycle aliases map to the same protocol event
   types.
+- Antigravity uses a named `agentnotch` hook in `~/.gemini/config/hooks.json`.
+  Payloads are camelCase (`conversationId`, `workspacePaths`, nested
+  `toolCall`) and omit the event name; the installed command passes `--event`.
+  PreInvocation 0 becomes SessionStart. `ask_question` and `ask_permission`
+  PreToolUse events show waiting status without returning a decision.
 - OpenCode's generated plugin converts its events to `AgentHookPayload` first.
 
 Disk walks stay behind `ProviderHookEnricher`. Provider-owned reads are limited
@@ -66,6 +72,7 @@ approval bridge above. They must never invent a live session.
 | Claude Code | `~/.claude/settings.json` |
 | Grok | `~/.grok/hooks/agentnotch.json` |
 | Gemini CLI | `~/.gemini/settings.json` |
+| Antigravity | `~/.gemini/config/hooks.json` |
 | Cursor | `~/.cursor/hooks.json` |
 | OpenCode | `~/.config/opencode/plugins/agentnotch.js` |
 

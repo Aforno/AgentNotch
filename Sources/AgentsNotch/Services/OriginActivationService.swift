@@ -150,6 +150,7 @@ struct OriginActivationService {
         case .claudeCode: ["claude.ai"]
         case .grok: ["grok.com", "x.com"]
         case .geminiCLI: ["gemini.google.com"]
+        case .antigravity: ["antigravity.google"]
         case .openCode: ["opencode.ai"]
         case .cursor: ["cursor.com"]
         default: []

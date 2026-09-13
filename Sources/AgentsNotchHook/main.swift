@@ -26,7 +26,10 @@ if input.isEmpty {
 }
 
 do {
-    let payload = try AgentHookInput.decode(input)
+    var payload = try AgentHookInput.decode(input)
+    if payload.hookEventName.nonEmpty == nil, let eventName = invocation.eventName?.nonEmpty {
+        payload.hookEventName = eventName
+    }
     let enriched = ProviderHookEnricher.enrich(payload, provider: invocation.provider)
     var answered = false
     if var event = AgentHookEventMapper.map(

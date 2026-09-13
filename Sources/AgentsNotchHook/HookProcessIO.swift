@@ -71,6 +71,7 @@ enum HookProcessIO {
 struct HookProcessInvocation: Sendable {
     let configuredProvider: AgentProvider
     let provider: AgentProvider
+    let eventName: String?
     let socketURL: URL
     let replySocketURL: URL
     let answersFromNotch: Bool
@@ -94,6 +95,7 @@ struct HookProcessInvocation: Sendable {
             AgentProvider.grok.rawValue,
             AgentProvider.openCode.rawValue,
             AgentProvider.geminiCLI.rawValue,
+            AgentProvider.antigravity.rawValue,
             AgentProvider.cursor.rawValue,
         ]
         var explicitProvider: AgentProvider?
@@ -106,6 +108,10 @@ struct HookProcessInvocation: Sendable {
             }
         }
         let configuredProvider = explicitProvider ?? .codex
+        var eventName: String?
+        if let index = arguments.firstIndex(of: "--event"), arguments.indices.contains(index + 1) {
+            eventName = arguments[index + 1]
+        }
         let grokHookEvent = environment["GROK_HOOK_EVENT"]
         let provider = GrokHookRouting.resolvedProvider(
             explicit: explicitProvider,
@@ -133,6 +139,7 @@ struct HookProcessInvocation: Sendable {
         return HookProcessInvocation(
             configuredProvider: configuredProvider,
             provider: provider,
+            eventName: eventName,
             socketURL: socketURL,
             replySocketURL: replySocketURL,
             answersFromNotch: arguments.contains("--answer"),

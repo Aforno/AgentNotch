@@ -6,6 +6,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Observer-only Google Antigravity integration. Install writes a named
+  `agentnotch` hook to `~/.gemini/config/hooks.json` and maps PreInvocation,
+  PreToolUse, PostToolUse, and Stop. The observer writes `{}` and does not
+  return PreToolUse or Stop decisions.
+
 ### Fixed
 
 - Grok turns that end without Stop (usage limit, output limit, interrupt, or
