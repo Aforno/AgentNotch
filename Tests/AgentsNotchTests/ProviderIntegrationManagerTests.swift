@@ -695,8 +695,9 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let installed = try Self.readJSON(at: hooksURL)
         XCTAssertNotNil(installed["my-linter-hook"])
         let hook = try XCTUnwrap(installed["agentnotch"] as? [String: Any])
-        let expected = ["PreInvocation", "PreToolUse", "PostToolUse", "Stop"]
+        let expected = ["PreInvocation", "PostToolUse", "Stop"]
         XCTAssertEqual(Set(hook.keys), Set(expected))
+        XCTAssertNil(hook["PreToolUse"], "PreToolUse is a gating hook; observers must not install it")
 
         let preInvocation = try XCTUnwrap(hook["PreInvocation"] as? [[String: Any]])
         XCTAssertEqual(preInvocation.count, 1)
@@ -707,14 +708,14 @@ final class ProviderIntegrationManagerTests: XCTestCase {
                 .contains("--provider 'antigravity' --event 'PreInvocation'") == true
         )
 
-        let preToolUse = try XCTUnwrap(hook["PreToolUse"] as? [[String: Any]])
-        XCTAssertEqual(preToolUse.count, 1)
-        XCTAssertEqual(preToolUse.first?["matcher"] as? String, "*")
-        let preToolHandlers = try XCTUnwrap(preToolUse.first?["hooks"] as? [[String: Any]])
-        XCTAssertEqual(preToolHandlers.count, 1)
+        let postToolUse = try XCTUnwrap(hook["PostToolUse"] as? [[String: Any]])
+        XCTAssertEqual(postToolUse.count, 1)
+        XCTAssertEqual(postToolUse.first?["matcher"] as? String, ".*")
+        let postToolHandlers = try XCTUnwrap(postToolUse.first?["hooks"] as? [[String: Any]])
+        XCTAssertEqual(postToolHandlers.count, 1)
         XCTAssertTrue(
-            (preToolHandlers.first?["command"] as? String)?
-                .contains("--provider 'antigravity' --event 'PreToolUse'") == true
+            (postToolHandlers.first?["command"] as? String)?
+                .contains("--provider 'antigravity' --event 'PostToolUse'") == true
         )
 
         await manager.uninstall()
@@ -742,6 +743,35 @@ final class ProviderIntegrationManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertEqual(try Data(contentsOf: hooksURL), original)
+    }
+
+    @MainActor
+    func testAntigravityUpdateRemovesLeftoverPreToolUseGatingHook() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .antigravity)
+        await manager.install()
+
+        let hooksURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        var root = try Self.readJSON(at: hooksURL)
+        var hook = try XCTUnwrap(root["agentnotch"] as? [String: Any])
+        hook["PreToolUse"] = [[
+            "matcher": "*",
+            "hooks": [[
+                "type": "command",
+                "command": "'\(manager.installedRelayURL.path)' --provider 'antigravity' --event 'PreToolUse'",
+                "timeout": 5,
+            ]],
+        ]]
+        root["agentnotch"] = hook
+        try Self.writeJSON(root, to: hooksURL)
+
+        await manager.prepareForMonitoring()
+
+        let updated = try Self.readJSON(at: hooksURL)
+        let updatedHook = try XCTUnwrap(updated["agentnotch"] as? [String: Any])
+        XCTAssertNil(updatedHook["PreToolUse"])
+        XCTAssertEqual(Set(updatedHook.keys), ["PreInvocation", "PostToolUse", "Stop"])
     }
 
     @MainActor

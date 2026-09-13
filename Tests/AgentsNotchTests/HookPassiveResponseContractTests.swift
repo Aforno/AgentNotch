@@ -34,6 +34,18 @@ final class HookPassiveResponseContractTests: XCTestCase {
         }
     }
 
+    func testAntigravityStopWritesRequiredDecision() {
+        let stop = capture {
+            HookProcessIO.writePassiveResponse(for: .antigravity, eventName: "Stop", to: $0)
+        }
+        XCTAssertEqual(String(decoding: stop, as: UTF8.self), "{\"decision\":\"stop\"}\n")
+
+        let postTool = capture {
+            HookProcessIO.writePassiveResponse(for: .antigravity, eventName: "PostToolUse", to: $0)
+        }
+        XCTAssertEqual(String(decoding: postTool, as: UTF8.self), "{}\n")
+    }
+
     func testPassiveResponseIsSilentForClaudeCode() {
         let output = capture { HookProcessIO.writePassiveResponse(for: .claudeCode, to: $0) }
         XCTAssertTrue(output.isEmpty, "Claude Code hooks must not write to stdout when passive")

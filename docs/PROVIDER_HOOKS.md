@@ -15,13 +15,15 @@ the provider decision JSON. If the app is unavailable or no answer arrives, the
 hook writes the passive response and the provider shows its own prompt. Claude
 permission handlers become synchronous only while this setting is enabled.
 Grok, Gemini, Antigravity, Cursor, and OpenCode do not wait for a decision.
-Gemini's Notification hook only reports status. Antigravity PreToolUse and Stop
-hooks write `{}` so they fail open instead of gating tools or continuing a
-turn. Cursor has no approval hook, and the OpenCode plugin does not wait.
+Gemini's Notification hook only reports status. Antigravity does not install
+PreToolUse: that hook requires `decision` (`allow`/`deny`/`ask`) and `{}`
+denies the tool. Stop writes `{"decision":"stop"}` so the turn can end.
+Cursor has no approval hook, and the OpenCode plugin does not wait.
 
-Passive stdout is provider-specific. Claude Code receives empty stdout. The
-other integrated providers receive `{}` followed by a newline. Keep this in
-sync with `HookProcessIO.writePassiveResponse` and its tests.
+Passive stdout is provider-specific. Claude Code receives empty stdout.
+Antigravity Stop writes `{"decision":"stop"}`. The other integrated providers
+receive `{}` followed by a newline. Keep this in sync with
+`HookProcessIO.writePassiveResponse` and its tests.
 
 ## Compatibility and enrichment
 
@@ -56,8 +58,8 @@ sync with `HookProcessIO.writePassiveResponse` and its tests.
 - Antigravity uses a named `agentnotch` hook in `~/.gemini/config/hooks.json`.
   Payloads are camelCase (`conversationId`, `workspacePaths`, nested
   `toolCall`) and omit the event name; the installed command passes `--event`.
-  PreInvocation 0 becomes SessionStart. `ask_question` and `ask_permission`
-  PreToolUse events show waiting status without returning a decision.
+  PreInvocation 0 becomes SessionStart. PostToolUse matchers use `.*` (`*` is
+  not valid regex). Do not install PreToolUse: it is a permission gate.
 - OpenCode's generated plugin converts its events to `AgentHookPayload` first.
 
 Disk walks stay behind `ProviderHookEnricher`. Provider-owned reads are limited

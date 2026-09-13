@@ -80,7 +80,9 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
         case .geminiCLI:
             ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"]
         case .antigravity:
-            ["PreInvocation", "PreToolUse", "PostToolUse", "Stop"]
+            // PreToolUse is a gating hook: `{}` is an unknown decision and
+            // denies the tool. Observe completions via PostToolUse instead.
+            ["PreInvocation", "PostToolUse", "Stop"]
         case .cursor:
             ["sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse", "postToolUseFailure", "stop", "sessionEnd"]
         case .openCode:

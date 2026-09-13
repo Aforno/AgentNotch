@@ -10,8 +10,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Observer-only Google Antigravity integration. Install writes a named
   `agentnotch` hook to `~/.gemini/config/hooks.json` and maps PreInvocation,
-  PreToolUse, PostToolUse, and Stop. The observer writes `{}` and does not
-  return PreToolUse or Stop decisions.
+  PostToolUse, and Stop. PreToolUse is omitted because a missing `decision`
+  denies the tool. Stop writes `{"decision":"stop"}`. PostToolUse matches
+  `.*` because `*` is not valid regex.
 
 ### Fixed
 

@@ -28,10 +28,18 @@ enum HookProcessIO {
     }
 
     /// Claude expects no stdout for passive hook runs; every other provider
-    /// receives an empty JSON object. Keep this contract in sync with
-    /// docs/PROTOCOL.md.
-    static func writePassiveResponse(for provider: AgentProvider, to descriptor: Int32 = STDOUT_FILENO) {
+    /// receives an empty JSON object, except Antigravity Stop which requires
+    /// `{"decision":"stop"}`. Keep this contract in sync with docs/PROTOCOL.md.
+    static func writePassiveResponse(
+        for provider: AgentProvider,
+        eventName: String? = nil,
+        to descriptor: Int32 = STDOUT_FILENO
+    ) {
         guard provider != .claudeCode else { return }
+        if provider == .antigravity {
+            writeStdout(AntigravityEventPolicy.passiveResponse(eventName: eventName), to: descriptor)
+            return
+        }
         writeStdout(Data("{}\n".utf8), to: descriptor)
     }
 

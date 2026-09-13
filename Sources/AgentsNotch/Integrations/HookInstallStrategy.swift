@@ -409,11 +409,13 @@ struct OpenCodePluginInstall: HookInstallStrategy {
     }
 }
 
-/// Antigravity's `hooks.json` maps named hooks to events. PreToolUse/PostToolUse
-/// use matcher groups; PreInvocation/Stop are handler lists.
+/// Antigravity's `hooks.json` maps named hooks to events. PostToolUse uses
+/// matcher groups; PreInvocation/Stop are handler lists. `*` is not a valid
+/// matcher regex (`Invalid matcher regex`); match all with `.*`.
 struct AntigravityHooksInstall: HookInstallStrategy {
     static let hookName = "agentnotch"
-    private static let matcherEvents: Set<String> = ["PreToolUse", "PostToolUse"]
+    static let matchAllTools = ".*"
+    private static let matcherEvents: Set<String> = ["PostToolUse"]
 
     let profile: IntegratedHookProvider
     let homeDirectoryURL: URL
@@ -431,7 +433,7 @@ struct AntigravityHooksInstall: HookInstallStrategy {
         if root[Self.hookName] != nil, root[Self.hookName] as? [String: Any] == nil {
             throw ProviderIntegrationError.invalidHookEvent(Self.hookName, hooksURL.path)
         }
-        var hook = (root[Self.hookName] as? [String: Any]) ?? [:]
+        var hook: [String: Any] = [:]
         for eventName in eventNames {
             hook[eventName] = entriesToInstall(for: eventName, relay: relay)
         }
@@ -455,6 +457,8 @@ struct AntigravityHooksInstall: HookInstallStrategy {
 
     func containsCurrentRelay(io: HookConfigurationIO, relay: HookRelayIdentity) -> Bool {
         guard let hook = namedHook(io: io) else { return false }
+        let configuredEvents = Set(hook.keys.filter { $0 != "enabled" })
+        guard configuredEvents == Set(eventNames) else { return false }
         return eventNames.allSatisfy { eventName in
             handlers(in: hook, eventName: eventName).contains {
                 relay.identity(of: $0, eventName: eventName) == .current
@@ -502,7 +506,7 @@ struct AntigravityHooksInstall: HookInstallStrategy {
         )
         if usesMatcherGroups(eventName) {
             return [[
-                "matcher": "*",
+                "matcher": Self.matchAllTools,
                 "hooks": [handler],
             ]]
         }

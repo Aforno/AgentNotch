@@ -112,8 +112,9 @@ notch can answer faithfully.
 The relay accepts the snake_case payload used by Codex, Claude Code, Gemini CLI,
 and Cursor, and Grok's camelCase payload. Antigravity uses camelCase
 (`conversationId`, nested `toolCall`) and omits the event name on stdin; the
-installed command passes `--event`. The OpenCode bridge converts plugin events
-to that same observer payload.
+installed command passes `--event`. PreToolUse is not installed: Antigravity
+treats `{}` as a deny. Stop writes `{"decision":"stop"}`. The OpenCode bridge
+converts plugin events to that same observer payload.
 
 The only transcript read is a fail-open, size-capped Codex approval bridge. Do
 not add another parser.

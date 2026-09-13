@@ -24,6 +24,17 @@ public enum AntigravityEventPolicy {
         }
     }
 
+    /// Stop requires `decision` (`stop` ends the turn; `continue`/`block`
+    /// keep it running). `{}` fails protojson unmarshal and can hang Stop.
+    public static func passiveResponse(eventName: String?) -> Data {
+        switch HookEventName(rawEventName: eventName ?? "") {
+        case .stop:
+            Data("{\"decision\":\"stop\"}\n".utf8)
+        default:
+            Data("{}\n".utf8)
+        }
+    }
+
     public static func waitingActivity(for payload: AgentHookPayload) -> String {
         switch payload.toolName.map(ProviderEventPolicy.toolIdentifier) {
         case "ask_question":
