@@ -9,10 +9,12 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Observer-only Google Antigravity integration. Install writes a named
-  `agentnotch` hook to `~/.gemini/config/hooks.json` and maps PreInvocation,
+  `agentnotch` hook to `~/.agents/hooks.json` and maps PreInvocation,
   PostToolUse, and Stop. PreToolUse is omitted because a missing `decision`
   denies the tool. Stop writes `{"decision":"stop"}`. PostToolUse matches
-  `.*` because `*` is not valid regex.
+  `.*` because `*` is not valid regex. ACP tools that pass `target_file` or
+  `absolute_path` map onto `file_path`. A leftover `agentnotch` entry in
+  `~/.gemini/config/hooks.json` is removed on install and uninstall.
 
 ### Fixed
 

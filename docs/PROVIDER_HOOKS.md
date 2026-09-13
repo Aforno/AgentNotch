@@ -55,11 +55,18 @@ receive `{}` followed by a newline. Keep this in sync with
   approval.
 - Gemini CLI Before/After lifecycle aliases map to the same protocol event
   types.
-- Antigravity uses a named `agentnotch` hook in `~/.gemini/config/hooks.json`.
+- Antigravity uses a named `agentnotch` hook in `~/.agents/hooks.json`.
   Payloads are camelCase (`conversationId`, `workspacePaths`, nested
   `toolCall`) and omit the event name; the installed command passes `--event`.
   PreInvocation 0 becomes SessionStart. PostToolUse matchers use `.*` (`*` is
   not valid regex). Do not install PreToolUse: it is a permission gate.
+  ACP native tools send `target_file` / `absolute_path`; those map onto
+  `file_path`. JSON lifecycle hooks are gated in the harness
+  (`enable_json_hooks` / `json-hooks-enabled`). If the host launches
+  Antigravity without that flag, hook discovery is skipped and Agent Notch
+  never receives events. Install also removes a leftover `agentnotch` entry
+  from `~/.gemini/config/hooks.json`, which the customization engine does
+  not scan.
 - OpenCode's generated plugin converts its events to `AgentHookPayload` first.
 
 Disk walks stay behind `ProviderHookEnricher`. Provider-owned reads are limited
@@ -74,7 +81,7 @@ approval bridge above. They must never invent a live session.
 | Claude Code | `~/.claude/settings.json` |
 | Grok | `~/.grok/hooks/agentnotch.json` |
 | Gemini CLI | `~/.gemini/settings.json` |
-| Antigravity | `~/.gemini/config/hooks.json` |
+| Antigravity | `~/.agents/hooks.json` |
 | Cursor | `~/.cursor/hooks.json` |
 | OpenCode | `~/.config/opencode/plugins/agentnotch.js` |
 

@@ -666,7 +666,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     func testAntigravityInstallWritesNamedHookAndPreservesSiblings() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
-        let hooksURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        let hooksURL = fixture.home.appendingPathComponent(".agents/hooks.json")
         try FileManager.default.createDirectory(
             at: hooksURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -691,6 +691,11 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(
             manager.trustInstructions,
             "Restart Antigravity after installing, then start a new conversation."
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: fixture.home.appendingPathComponent(".gemini/config/hooks.json").path
+            )
         )
         let installed = try Self.readJSON(at: hooksURL)
         XCTAssertNotNil(installed["my-linter-hook"])
@@ -730,7 +735,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     func testAntigravityInstallRefusesToReplaceInvalidNamedHook() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
-        let hooksURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        let hooksURL = fixture.home.appendingPathComponent(".agents/hooks.json")
         try FileManager.default.createDirectory(
             at: hooksURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -752,7 +757,7 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let manager = fixture.manager(provider: .antigravity)
         await manager.install()
 
-        let hooksURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        let hooksURL = fixture.home.appendingPathComponent(".agents/hooks.json")
         var root = try Self.readJSON(at: hooksURL)
         var hook = try XCTUnwrap(root["agentnotch"] as? [String: Any])
         hook["PreToolUse"] = [[
@@ -772,6 +777,71 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         let updatedHook = try XCTUnwrap(updated["agentnotch"] as? [String: Any])
         XCTAssertNil(updatedHook["PreToolUse"])
         XCTAssertEqual(Set(updatedHook.keys), ["PreInvocation", "PostToolUse", "Stop"])
+    }
+
+    @MainActor
+    func testAntigravityInstallMigratesLegacyGeminiConfigPath() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .antigravity)
+        let legacyURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        try FileManager.default.createDirectory(
+            at: legacyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.writeJSON([
+            "my-linter-hook": ["enabled": true],
+            "agentnotch": [
+                "PreInvocation": [[
+                    "type": "command",
+                    "command": "'\(manager.installedRelayURL.path)' --provider 'antigravity' --event 'PreInvocation'",
+                    "timeout": 5,
+                ]],
+            ],
+        ], to: legacyURL)
+
+        await manager.install()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        let hooksURL = fixture.home.appendingPathComponent(".agents/hooks.json")
+        let installed = try Self.readJSON(at: hooksURL)
+        XCTAssertNotNil(installed["agentnotch"])
+        let leftover = try Self.readJSON(at: legacyURL)
+        XCTAssertNil(leftover["agentnotch"])
+        XCTAssertNotNil(leftover["my-linter-hook"])
+
+        await manager.uninstall()
+
+        XCTAssertEqual(manager.status, .notInstalled)
+        let removed = try Self.readJSON(at: hooksURL)
+        XCTAssertNil(removed["agentnotch"])
+        let leftoverAfterUninstall = try Self.readJSON(at: legacyURL)
+        XCTAssertNil(leftoverAfterUninstall["agentnotch"])
+        XCTAssertNotNil(leftoverAfterUninstall["my-linter-hook"])
+    }
+
+    @MainActor
+    func testAntigravityUpdateMigratesLegacyGeminiConfigPath() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .antigravity)
+        await manager.install()
+
+        let hooksURL = fixture.home.appendingPathComponent(".agents/hooks.json")
+        let legacyURL = fixture.home.appendingPathComponent(".gemini/config/hooks.json")
+        try FileManager.default.createDirectory(
+            at: legacyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.moveItem(at: hooksURL, to: legacyURL)
+
+        await manager.prepareForMonitoring()
+
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        let installed = try Self.readJSON(at: hooksURL)
+        XCTAssertNotNil(installed["agentnotch"])
+        let leftover = try Self.readJSON(at: legacyURL)
+        XCTAssertNil(leftover["agentnotch"])
     }
 
     @MainActor

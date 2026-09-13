@@ -1107,6 +1107,47 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(editing.file, "/tmp/AgentsNotch/Sources/App.swift")
         XCTAssertEqual(editing.activity, "Editing App.swift")
 
+        let acpCreate = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "toolCall": {
+            "name": "client_create_file",
+            "args": { "target_file": "/tmp/AgentsNotch/Sources/New.swift" }
+          }
+        }
+        """, eventName: "PostToolUse")
+        XCTAssertEqual(acpCreate.type, .toolCompleted)
+        XCTAssertEqual(acpCreate.file, "/tmp/AgentsNotch/Sources/New.swift")
+        XCTAssertEqual(acpCreate.activity, "Finished editing")
+
+        let acpEdit = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "toolCall": {
+            "name": "client_edit_file",
+            "args": { "target_file": "/tmp/AgentsNotch/Sources/App.swift" }
+          }
+        }
+        """, eventName: "PostToolUse")
+        XCTAssertEqual(acpEdit.file, "/tmp/AgentsNotch/Sources/App.swift")
+        XCTAssertEqual(acpEdit.activity, "Finished editing")
+
+        let acpView = try mapAntigravity("""
+        {
+          "conversationId": "agy-conversation",
+          "workspacePaths": ["/tmp/AgentsNotch"],
+          "toolCall": {
+            "name": "client_view_file",
+            "args": { "absolute_path": "/tmp/AgentsNotch/Sources/App.swift" }
+          }
+        }
+        """, eventName: "PostToolUse")
+        XCTAssertEqual(acpView.type, .toolCompleted)
+        XCTAssertNil(acpView.file)
+        XCTAssertEqual(acpView.activity, "Finished view file")
+
         let question = try mapAntigravity("""
         {
           "conversationId": "agy-conversation",

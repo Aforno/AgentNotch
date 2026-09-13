@@ -87,7 +87,7 @@ Config files:
 - Claude Code: `~/.claude/settings.json`
 - Grok: `~/.grok/hooks/agentnotch.json`
 - Gemini CLI: `~/.gemini/settings.json`
-- Antigravity: `~/.gemini/config/hooks.json`
+- Antigravity: `~/.agents/hooks.json`
 - Cursor: `~/.cursor/hooks.json`
 - OpenCode: `~/.config/opencode/plugins/agentnotch.js`
 
@@ -113,7 +113,8 @@ The relay accepts the snake_case payload used by Codex, Claude Code, Gemini CLI,
 and Cursor, and Grok's camelCase payload. Antigravity uses camelCase
 (`conversationId`, nested `toolCall`) and omits the event name on stdin; the
 installed command passes `--event`. PreToolUse is not installed: Antigravity
-treats `{}` as a deny. Stop writes `{"decision":"stop"}`. The OpenCode bridge
+treats `{}` as a deny. Stop writes `{"decision":"stop"}`. ACP file tools pass
+`target_file` or `absolute_path`; those map onto `file_path`. The OpenCode bridge
 converts plugin events to that same observer payload.
 
 The only transcript read is a fail-open, size-capped Codex approval bridge. Do

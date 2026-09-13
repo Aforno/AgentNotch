@@ -110,7 +110,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
                 .appendingPathComponent("settings.json")
         case .antigravity:
             homeDirectoryURL
-                .appendingPathComponent(".gemini/config", isDirectory: true)
+                .appendingPathComponent(".agents", isDirectory: true)
                 .appendingPathComponent("hooks.json")
         case .openCode:
             homeDirectoryURL
