@@ -195,17 +195,11 @@ private struct SettingsPaneSelector: View {
                     selection = candidate
                 } label: {
                     Label(candidate.title, systemImage: candidate.symbol)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(selection == candidate ? 0.92 : 0.5))
                         .padding(.horizontal, 10)
                         .frame(height: 26)
-                        .background(
-                            selection == candidate ? NotchWindowPalette.raisedStrong : .clear,
-                            in: RoundedRectangle(cornerRadius: NotchWindowMetrics.controlRadius, style: .continuous)
-                        )
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SettingsPaneTabStyle(isSelected: selection == candidate))
                 .accessibilityAddTraits(selection == candidate ? .isSelected : [])
             }
             Spacer()
@@ -213,5 +207,31 @@ private struct SettingsPaneSelector: View {
         .padding(.horizontal, NotchWindowMetrics.contentInset)
         .padding(.vertical, 10)
         .background(NotchWindowPalette.background)
+    }
+}
+
+/// Selected tabs keep their raised fill; unselected ones light up on hover so
+/// the tab strip answers the pointer like the rest of the app.
+private struct SettingsPaneTabStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        NotchHoverSurface(
+            isPressed: configuration.isPressed,
+            rest: isSelected ? NotchWindowPalette.raisedStrong : .clear,
+            hover: isSelected ? NotchWindowPalette.raisedPressed : NotchWindowPalette.hover,
+            pressed: NotchWindowPalette.raisedPressed
+        ) { fill in
+            configuration.label
+                .font(NotchWindowFont.control)
+                .foregroundStyle(.white.opacity(isSelected ? 0.92 : 0.6))
+                .background(
+                    fill,
+                    in: RoundedRectangle(
+                        cornerRadius: NotchWindowMetrics.controlRadius,
+                        style: .continuous
+                    )
+                )
+        }
     }
 }

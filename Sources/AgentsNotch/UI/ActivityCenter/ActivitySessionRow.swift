@@ -59,7 +59,7 @@ struct ActivitySessionRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.task)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(NotchWindowFont.bodyEmphasis)
                     .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.82))
                     .lineLimit(1)
 
@@ -79,11 +79,11 @@ struct ActivitySessionRow: View {
             VStack(alignment: .trailing, spacing: 3) {
                 StateIndicator(state: session.state, size: 9)
                 Text(session.updatedAt, style: .relative)
-                    .font(.system(size: 9))
+                    .font(NotchWindowFont.footnote)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
                     .lineLimit(1)
             }
-            .frame(minWidth: 48, alignment: .trailing)
+            .frame(minWidth: 56, alignment: .trailing)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)

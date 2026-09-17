@@ -47,6 +47,8 @@ enum NotchLayoutMetrics {
     static let detailPreferredWidth: CGFloat = 440
     static let maximumDetailContentHeight: CGFloat = 420
     static let minimumDetailContentHeight: CGFloat = 164
+    static let maximumWaitingContentHeight: CGFloat = 300
+    static let minimumWaitingContentHeight: CGFloat = 96
 
     static func expandedWidth(
         preferred: CGFloat,
@@ -62,10 +64,40 @@ enum NotchLayoutMetrics {
         screenHeight: CGFloat,
         notchHeight: CGFloat
     ) -> CGFloat {
-        let available = max(0, screenHeight - notchHeight - DynamicIslandSpacing.screenEdge)
-        return min(
-            max(measured, minimumDetailContentHeight),
-            min(maximumDetailContentHeight, available)
+        contentHeight(
+            measured: measured,
+            minimum: minimumDetailContentHeight,
+            maximum: maximumDetailContentHeight,
+            screenHeight: screenHeight,
+            notchHeight: notchHeight
         )
+    }
+
+    /// The waiting prompt scrolls once it passes its maximum, so this caps the
+    /// window rather than the content. Same contract as `detailContentHeight`.
+    static func waitingContentHeight(
+        measured: CGFloat,
+        screenHeight: CGFloat,
+        notchHeight: CGFloat
+    ) -> CGFloat {
+        contentHeight(
+            measured: measured,
+            minimum: minimumWaitingContentHeight,
+            maximum: maximumWaitingContentHeight,
+            screenHeight: screenHeight,
+            notchHeight: notchHeight
+        )
+    }
+
+    /// Grow with the content, stop at `maximum`, and never exceed the display.
+    private static func contentHeight(
+        measured: CGFloat,
+        minimum: CGFloat,
+        maximum: CGFloat,
+        screenHeight: CGFloat,
+        notchHeight: CGFloat
+    ) -> CGFloat {
+        let available = max(0, screenHeight - notchHeight - DynamicIslandSpacing.screenEdge)
+        return min(max(measured, minimum), min(maximum, available))
     }
 }

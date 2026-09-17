@@ -84,6 +84,48 @@ final class NotchLayoutMetricsTests: XCTestCase {
         )
     }
 
+    func testWaitingHeightHoldsItsFloorForShortPrompts() {
+        XCTAssertEqual(
+            NotchLayoutMetrics.waitingContentHeight(
+                measured: 60,
+                screenHeight: 900,
+                notchHeight: 32
+            ),
+            NotchLayoutMetrics.minimumWaitingContentHeight
+        )
+    }
+
+    func testWaitingHeightTracksContentUntilMaximum() {
+        XCTAssertEqual(
+            NotchLayoutMetrics.waitingContentHeight(
+                measured: 210,
+                screenHeight: 900,
+                notchHeight: 32
+            ),
+            210
+        )
+        // Past the maximum the prompt scrolls rather than growing the window.
+        XCTAssertEqual(
+            NotchLayoutMetrics.waitingContentHeight(
+                measured: 640,
+                screenHeight: 900,
+                notchHeight: 32
+            ),
+            NotchLayoutMetrics.maximumWaitingContentHeight
+        )
+    }
+
+    func testWaitingHeightClampsToShortDisplay() {
+        XCTAssertEqual(
+            NotchLayoutMetrics.waitingContentHeight(
+                measured: 640,
+                screenHeight: 200,
+                notchHeight: 32
+            ),
+            152
+        )
+    }
+
     func testInsetCornerRadiusTracksOuterGeometry() {
         XCTAssertEqual(
             DynamicIslandSpacing.insetCornerRadius(outerRadius: 21),

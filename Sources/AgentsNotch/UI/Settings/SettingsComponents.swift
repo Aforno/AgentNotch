@@ -90,14 +90,12 @@ struct AttentionSettingsSection: View {
                 isOn: soundEnabled
             )
             .disabled(!notificationsEnabled.wrappedValue)
-            .opacity(notificationsEnabled.wrappedValue ? 1 : 0.45)
             SettingsToggleRow(
                 title: "Failure notifications",
                 detail: "Also notify when an agent fails. Routine activity stays collapsed.",
                 isOn: failureNotificationsEnabled
             )
             .disabled(!notificationsEnabled.wrappedValue)
-            .opacity(notificationsEnabled.wrappedValue ? 1 : 0.45)
             SettingsToggleRow(
                 title: "Answer from the notch",
                 detail: "Show Deny and Allow on Codex and Claude permission prompts. Other providers stay observers.",
@@ -170,7 +168,7 @@ struct SettingsUpdateControl: View {
             ProgressView().controlSize(.small)
         case .upToDate:
             Label("Up to date", systemImage: "checkmark.circle.fill")
-                .font(.caption)
+                .font(NotchWindowFont.caption)
                 .foregroundStyle(.green)
         case let .available(version):
             Button("Download \(version)") { updates.download() }
@@ -249,6 +247,8 @@ struct SettingsControlRow<Control: View>: View {
     var detail: String?
     @ViewBuilder let control: Control
 
+    @Environment(\.isEnabled) private var isEnabled
+
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
@@ -268,6 +268,10 @@ struct SettingsControlRow<Control: View>: View {
                 .layoutPriority(1)
         }
         .padding(.vertical, 10)
+        // One dim for the whole row, sized so disabled text lands on the next
+        // rung of the ladder (title reads secondary, detail reads tertiary)
+        // rather than dropping out of legibility entirely.
+        .opacity(isEnabled ? 1 : 0.7)
     }
 }
 
@@ -311,7 +315,7 @@ struct SettingsMessage: View {
 
     var body: some View {
         Label(text, systemImage: symbol)
-            .font(.caption)
+            .font(NotchWindowFont.caption)
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)

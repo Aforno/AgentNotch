@@ -120,6 +120,8 @@ struct AgentListView: View {
         )
     }
 
+    /// State on the left, the action it offers on the right. Without the
+    /// separator the two labels ran together as one sentence.
     private var emptyState: some View {
         Button(action: onOpenActivityCenter) {
             HStack(spacing: DynamicIslandSpacing.related) {
@@ -129,9 +131,16 @@ struct AgentListView: View {
                 Text("No active agents")
                     .font(NotchWindowFont.bodyEmphasis)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
-                Text("Browse recent")
+                Text("·")
                     .font(NotchWindowFont.footnote)
-                    .foregroundStyle(NotchWindowPalette.tertiaryText)
+                    .foregroundStyle(NotchWindowPalette.quaternaryText)
+                HStack(spacing: DynamicIslandSpacing.tight) {
+                    Text("Browse recent")
+                        .font(NotchWindowFont.footnoteEmphasis)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .foregroundStyle(NotchWindowPalette.secondaryText)
             }
             .padding(.horizontal, 6)
             .frame(height: DynamicIslandSpacing.chromeHeight)

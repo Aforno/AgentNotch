@@ -15,6 +15,8 @@ struct WaitingReplyView: View {
     @State private var isPointerInside = false
     @State private var requestsShortcutFocus = false
     @State private var isWindowKey = false
+    @State private var headerHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
 
     private var shortcutsActive: Bool {
         requestsShortcutFocus && isPointerInside && isWindowKey && isFocused
@@ -23,31 +25,25 @@ struct WaitingReplyView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
             header
+                .padding(.horizontal, DynamicIslandSpacing.outer)
+                .onHeightChange { height in
+                    headerHeight = height
+                    reportIdealHeight()
+                }
             if privacyModeEnabled {
                 Text("Approve in the source app")
                     .font(NotchWindowFont.bodyEmphasis)
                     .foregroundStyle(NotchWindowPalette.secondaryText)
+                    .padding(.horizontal, DynamicIslandSpacing.outer)
+                    .onHeightChange { height in
+                        contentHeight = height
+                        reportIdealHeight()
+                    }
             } else {
-                promptBlock
-                actions
+                scrollingContent
             }
         }
-        .padding(.horizontal, DynamicIslandSpacing.outer)
         .padding(.bottom, DynamicIslandSpacing.standard)
-        .background {
-            GeometryReader { geometry in
-                Color.clear.preference(
-                    key: WaitingReplyContentHeightKey.self,
-                    value: geometry.size.height
-                )
-            }
-        }
-        .onPreferenceChange(WaitingReplyContentHeightKey.self) { height in
-            guard height > 0 else { return }
-            MainActor.assumeIsolated {
-                onIdealHeightChange(height)
-            }
-        }
         .focusable()
         .focused($isFocused)
         .focusEffectDisabled()
@@ -113,6 +109,38 @@ struct WaitingReplyView: View {
     }
 
     private var pending: AgentPendingReply? { session.pendingReply }
+
+    /// A long prompt, a detail block, and a wide option grid can together
+    /// outgrow the notch's maximum height. Scrolling keeps every action
+    /// reachable; the faded edge is the only cue, since indicators are hidden.
+    private var scrollingContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DynamicIslandSpacing.related) {
+                promptBlock
+                actions
+            }
+            .padding(.horizontal, DynamicIslandSpacing.outer)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .notchScrollContent()
+            .onHeightChange { height in
+                contentHeight = height
+                reportIdealHeight()
+            }
+        }
+        .scrollIndicators(.never)
+        .notchScrollEdgeFade()
+    }
+
+    /// Chrome is the header plus the two fixed gaps the body adds around it.
+    private func reportIdealHeight() {
+        guard headerHeight > 0, contentHeight > 0 else { return }
+        onIdealHeightChange(
+            headerHeight
+                + DynamicIslandSpacing.related
+                + contentHeight
+                + DynamicIslandSpacing.standard
+        )
+    }
 
     private var header: some View {
         HStack(spacing: DynamicIslandSpacing.related) {
@@ -448,13 +476,5 @@ private extension View {
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
-    }
-}
-
-private struct WaitingReplyContentHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        let next = nextValue()
-        if next > 0 { value = next }
     }
 }
