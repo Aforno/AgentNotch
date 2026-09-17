@@ -13,14 +13,17 @@ struct AgentDetailView: View {
     let outerCornerRadius: CGFloat
     let onIdealHeightChange: (CGFloat) -> Void
     @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
-    @State private var measuredContentHeight: CGFloat = 0
-    @State private var viewportHeight: CGFloat = 0
-    @State private var contentMinY: CGFloat = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var headerHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+    @State private var actionsHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: DynamicIslandSpacing.standard) {
             header
+                .onHeightChange { height in
+                    headerHeight = height
+                    reportIdealHeight()
+                }
             scrollingContent
             originActions
         }
@@ -112,44 +115,15 @@ struct AgentDetailView: View {
             }
             .padding(.horizontal, DynamicIslandSpacing.outer)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                GeometryReader { contentGeometry in
-                    let contentHeight = contentGeometry.size.height
-                    let minY = contentGeometry.frame(in: .named(AgentDetailScrollSpace.name)).minY
-                    Color.clear
-                        .onAppear {
-                            reportIdealHeight(contentHeight)
-                            contentMinY = minY
-                        }
-                        .onChange(of: minY) { _, value in
-                            contentMinY = value
-                        }
-                        // Recreate the probe when measured height or chrome
-                        // changes so `onAppear` re-runs on MainActor. Swift 6.0
-                        // treats `onPreferenceChange` as `@Sendable`.
-                        .id(AgentDetailHeightSignal(
-                            contentHeight: contentHeight,
-                            originActionCount: originDestinations.count
-                        ))
-                }
+            .notchScrollContent()
+            .onHeightChange { height in
+                contentHeight = height
+                reportIdealHeight()
             }
         }
-        .coordinateSpace(name: AgentDetailScrollSpace.name)
         .scrollIndicators(.never)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            GeometryReader { viewport in
-                Color.clear
-                    .onAppear { viewportHeight = viewport.size.height }
-                    .onChange(of: viewport.size.height) { _, height in
-                        viewportHeight = height
-                    }
-            }
-        }
-        // Scroll indicators are hidden, so a clipped edge would otherwise be
-        // the only hint that more content exists. Fade it instead.
-        .mask(scrollEdgeMask)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: showsBottomFade)
+        .notchScrollEdgeFade()
     }
 
     @ViewBuilder
@@ -218,51 +192,30 @@ struct AgentDetailView: View {
                 }
             }
             .padding(.horizontal, DynamicIslandSpacing.outer)
+            .onHeightChange { height in
+                actionsHeight = height
+                reportIdealHeight()
+            }
         }
-    }
-
-    private var isScrollable: Bool {
-        viewportHeight > 0 && measuredContentHeight > viewportHeight + 1
-    }
-
-    private var distanceFromBottom: CGFloat {
-        measuredContentHeight + contentMinY - viewportHeight
-    }
-
-    private var showsBottomFade: Bool {
-        isScrollable && distanceFromBottom > 4
-    }
-
-    private var scrollEdgeMask: LinearGradient {
-        let fadeStart: CGFloat = showsBottomFade ? 0.9 : 1
-        return LinearGradient(
-            stops: [
-                .init(color: .black, location: 0),
-                .init(color: .black, location: fadeStart),
-                .init(color: showsBottomFade ? .clear : .black, location: 1),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
     }
 
     private var originDestinations: [OriginOpenDestination] {
         OriginActivationService.destinations(for: session)
     }
 
-    private func reportIdealHeight(_ contentHeight: CGFloat) {
-        guard contentHeight > 0 else { return }
-        measuredContentHeight = contentHeight
-        let fixedChromeHeight: CGFloat = originDestinations.isEmpty ? 56 : 98
-        onIdealHeightChange(contentHeight + fixedChromeHeight)
+    /// Chrome is the header, the origin actions when present, and the fixed
+    /// gaps the body puts between them. Measured rather than assumed, so a
+    /// header that wraps cannot leave the pane mis-sized.
+    private func reportIdealHeight() {
+        guard headerHeight > 0, contentHeight > 0 else { return }
+        let hasActions = !originDestinations.isEmpty
+        let gapCount: CGFloat = hasActions ? 2 : 1
+        onIdealHeightChange(
+            headerHeight
+                + contentHeight
+                + (hasActions ? actionsHeight : 0)
+                + DynamicIslandSpacing.standard * gapCount
+                + DynamicIslandSpacing.outer
+        )
     }
-}
-
-private enum AgentDetailScrollSpace {
-    static let name = "agentDetailScroll"
-}
-
-private struct AgentDetailHeightSignal: Hashable {
-    var contentHeight: CGFloat
-    var originActionCount: Int
 }

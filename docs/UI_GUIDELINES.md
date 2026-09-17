@@ -7,6 +7,18 @@ point radii, and state colors from `agentStateColor(for:)`. Do not use
 look. Settings rows are title plus detail, switch toggles, and compact dark
 pills.
 
+Every clickable surface answers the pointer. Styles route their rest, hover,
+and press fills through `NotchHoverSurface`; deep-black window controls take
+theirs from `NotchControlFill` and draw with `notchControlSurface(fill:)`.
+Floating panels cannot blend into black, so they use the opaque `floating`
+palette entries instead of the white-opacity ladder. A disabled row dims once,
+at the row, one rung down the text ladder.
+
+Surfaces that hide their scroll indicators mark content with
+`notchScrollContent()` and the scroll view with `notchScrollEdgeFade()`, so a
+faded edge is the cue that more remains. A surface whose height is capped must
+scroll: no control may be clipped out of reach.
+
 ## Notch presentation
 
 - Stay collapsed for routine tool, edit, and completion activity.

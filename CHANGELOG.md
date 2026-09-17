@@ -13,6 +13,29 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   idle_prompt settle the turn; StopFailure shows a readable error. Codex
   Interrupt settles a user interrupt. Claude idle_prompt is not treated as
   attention.
+- Long permission prompts no longer hide their own Allow and Deny buttons. The
+  notch reply surface scrolls once it passes its maximum height, with the same
+  faded bottom edge the thread detail already used.
+- Setup no longer pushes Finish off-window when several integrations report
+  trust instructions or install errors. The provider list scrolls, the finish
+  actions stay pinned, and the window resizes with its content.
+- The custom Settings dropdown now flips above its control near the bottom of a
+  display and clamps to the visible frame instead of running off screen.
+- Disabled Settings rows dim once, to the next rung of the text ladder, rather
+  than compounding two opacities into unreadable grey.
+- The Activity Center relative timestamp moved up to the 10pt floor the type
+  scale documents.
+
+### Changed
+
+- Hover feedback now covers Settings, Setup, and the custom dropdown: pill and
+  icon buttons, pane tabs, filter chips, group disclosure, and menu options all
+  answer the pointer, and menu options track the pointer as well as the arrow
+  keys.
+- The empty notch list separates its state from the action it offers, so "No
+  active agents" and "Browse recent" no longer read as one sentence.
+- Thread detail measures its own chrome instead of assuming fixed heights, and
+  shares one scroll-fade implementation with the reply surface.
 
 ## [0.2.1] - 2026-09-03
 

@@ -48,6 +48,21 @@ struct NotchGlyphButtonStyle: ButtonStyle {
     }
 }
 
+/// Small removable capsule (filter chips). Hover and press ride the raised
+/// ladder so the chip reads as clickable, not as a static label.
+struct NotchCapsuleChipStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        NotchHoverSurface(
+            isPressed: configuration.isPressed,
+            rest: NotchWindowPalette.raised,
+            hover: NotchWindowPalette.raisedStrong,
+            pressed: NotchWindowPalette.raisedPressed
+        ) { fill in
+            configuration.label.background(fill, in: Capsule())
+        }
+    }
+}
+
 /// Emphasis levels for the notch's committed actions (reply, open in app).
 enum NotchActionEmphasis {
     /// The default action. Uses the system accent rather than orange so that
@@ -173,9 +188,14 @@ private struct NotchActionSurface<Label: View>: View {
 }
 
 /// Shared hover/press fill plumbing. `ButtonStyle` cannot observe hover on its
-/// own, so the style body delegates to this stateful wrapper.
-private struct NotchHoverSurface<Content: View>: View {
+/// own, so a style body delegates to this stateful wrapper. Every clickable
+/// surface in the app routes through it, so hover feedback stays uniform.
+struct NotchHoverSurface<Content: View>: View {
     let isPressed: Bool
+    /// Rest, hover, and press fills. Defaults are the transparent row ladder.
+    var rest: Color = .clear
+    var hover: Color = NotchWindowPalette.hover
+    var pressed: Color = NotchWindowPalette.raisedStrong
     @ViewBuilder let content: (Color) -> Content
 
     @State private var isHovering = false
@@ -189,8 +209,8 @@ private struct NotchHoverSurface<Content: View>: View {
     }
 
     private var fill: Color {
-        if isPressed { return NotchWindowPalette.raisedStrong }
-        return isHovering ? NotchWindowPalette.hover : .clear
+        if isPressed { return pressed }
+        return isHovering ? hover : rest
     }
 }
 

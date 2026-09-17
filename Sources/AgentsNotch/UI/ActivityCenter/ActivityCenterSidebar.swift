@@ -113,7 +113,7 @@ struct ActivityCenterSidebar: View {
                             .frame(width: 20, height: 28)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(NotchGlyphButtonStyle(size: 20))
                     .help(expandedGroupIDs.contains(group.id) ? "Collapse agent group" : "Expand agent group")
                     .accessibilityLabel(expandedGroupIDs.contains(group.id) ? "Collapse agent group" : "Expand agent group")
                 }
@@ -240,18 +240,23 @@ private struct ActivityFilterBar: View {
         .accessibilityLabel(activeFilterCount == 0 ? "Filter sessions" : "Filter sessions, \(activeFilterCount) active")
     }
 
+    /// The whole chip clears its filter, so the hit target is the capsule
+    /// rather than the 7pt glyph inside it.
     private func filterChip(_ title: String, clear: @escaping () -> Void) -> some View {
-        HStack(spacing: 5) {
-            Text(title).lineLimit(1)
-            Button(action: clear) { Image(systemName: "xmark").font(.system(size: 7, weight: .bold)) }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Remove \(title) filter")
+        Button(action: clear) {
+            HStack(spacing: 5) {
+                Text(title).lineLimit(1)
+                Image(systemName: "xmark").font(.system(size: 7, weight: .bold))
+            }
+            .font(NotchWindowFont.footnote)
+            .foregroundStyle(.white.opacity(0.72))
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .contentShape(Capsule())
         }
-        .font(NotchWindowFont.footnote)
-        .foregroundStyle(.white.opacity(0.72))
-        .padding(.horizontal, 8)
-        .frame(height: 22)
-        .background(NotchWindowPalette.raised, in: Capsule())
+        .buttonStyle(NotchCapsuleChipStyle())
+        .help("Remove \(title) filter")
+        .accessibilityLabel("Remove \(title) filter")
     }
 
     private var providerTitle: String {

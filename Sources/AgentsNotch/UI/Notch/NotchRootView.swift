@@ -57,7 +57,7 @@ struct NotchRootView: View {
     @State private var hasDrawnLayout = false
     @State private var sizeGeneration = 0
     @State private var detailContentHeight = NotchLayoutMetrics.minimumDetailContentHeight
-    @State private var waitingContentHeight: CGFloat = 96
+    @State private var waitingContentHeight = NotchLayoutMetrics.minimumWaitingContentHeight
     @AppStorage(AppPreferences.Key.animationsEnabled) private var animationsEnabled = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -108,7 +108,11 @@ struct NotchRootView: View {
         case .temporary:
             let extraHeight = snapshot.attentionSession?.pendingReply == nil
                 ? 56
-                : min(max(waitingContentHeight, 96), 240)
+                : NotchLayoutMetrics.waitingContentHeight(
+                    measured: waitingContentHeight,
+                    screenHeight: geometry.screenFrame.height,
+                    notchHeight: geometry.notchHeight
+                )
             return NotchLayout(
                 width: expandedWidth(preferred: NotchLayoutMetrics.temporaryPreferredWidth),
                 height: geometry.notchHeight + extraHeight,

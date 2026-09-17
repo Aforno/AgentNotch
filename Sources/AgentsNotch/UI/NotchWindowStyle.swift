@@ -10,7 +10,14 @@ enum NotchWindowPalette {
     static let raised = Color.white.opacity(0.055)
     static let raisedStrong = Color.white.opacity(0.1)
     static let raisedPressed = Color.white.opacity(0.135)
+    static let raisedActive = Color.white.opacity(0.17)
     static let hover = Color.white.opacity(0.075)
+
+    /// Opaque equivalents for floating panels, which order above arbitrary
+    /// content and so have no black backdrop of their own to blend into.
+    static let floating = Color(red: 0.13, green: 0.13, blue: 0.14)
+    static let floatingSelected = Color(red: 0.24, green: 0.24, blue: 0.26)
+    static let floatingHover = Color(red: 0.19, green: 0.19, blue: 0.21)
 
     static let hairline = Color.white.opacity(0.08)
 

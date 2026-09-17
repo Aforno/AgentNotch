@@ -17,7 +17,7 @@ struct NotchMenuPicker<Value: Hashable>: View {
         Button(action: toggleMenu) {
             HStack(spacing: 7) {
                 Text(selectedTitle)
-                    .font(.system(size: 12))
+                    .font(NotchWindowFont.bodyEmphasis)
                     .foregroundStyle(Color.white.opacity(0.9))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -26,10 +26,8 @@ struct NotchMenuPicker<Value: Hashable>: View {
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 28, maxHeight: 28, alignment: .leading)
-            .background(Color(red: 0.16, green: 0.16, blue: 0.17), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NotchMenuTriggerStyle(isExpanded: isExpanded))
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(selectedTitle)
         .accessibilityHint("Press Return, then use the arrow keys to choose an option")
@@ -55,6 +53,23 @@ struct NotchMenuPicker<Value: Hashable>: View {
             onDismiss: { isExpanded = false }
         )
         isExpanded = true
+    }
+}
+
+/// The picker trigger is a control on a deep-black window, so it shares the
+/// pill vocabulary. An open menu holds the hover fill so the pair reads as one.
+private struct NotchMenuTriggerStyle: ButtonStyle {
+    let isExpanded: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        NotchHoverSurface(
+            isPressed: configuration.isPressed,
+            rest: isExpanded ? NotchControlFill.hover : NotchControlFill.rest,
+            hover: NotchControlFill.hover,
+            pressed: NotchControlFill.pressed
+        ) { fill in
+            configuration.label.notchControlSurface(fill: fill)
+        }
     }
 }
 
@@ -85,6 +100,13 @@ final class NotchDropdownMenuModel {
         guard !titles.isEmpty else { return }
         highlightedIndex = min(max(highlightedIndex + offset, 0), titles.count - 1)
     }
+
+    /// Pointer and keyboard drive the same highlight, so the menu tracks
+    /// whichever the user reached for last.
+    func highlight(_ index: Int) {
+        guard titles.indices.contains(index) else { return }
+        highlightedIndex = index
+    }
     func select(_ index: Int) { guard titles.indices.contains(index) else { return }; onSelect(index) }
     func selectHighlighted() { select(highlightedIndex) }
 }
@@ -98,6 +120,7 @@ final class NotchDropdownPanel {
     private var scrollObservation: NSObjectProtocol?
     private var lifecycleObservations: [NSObjectProtocol] = []
     private var onDismiss: (() -> Void)?
+    /// Mirrors `NotchWindowPalette.floating` for the panel's backing layer.
     private static let menuFill = NSColor(srgbRed: 0.13, green: 0.13, blue: 0.14, alpha: 1)
     var isPresented: Bool { panel != nil }
 
@@ -130,7 +153,14 @@ final class NotchDropdownPanel {
         panel.setAccessibilityLabel("Options")
         if let window = anchor.window {
             let anchorOnScreen = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-            panel.setFrameOrigin(NSPoint(x: max(anchorOnScreen.minX, anchorOnScreen.maxX - size.width), y: anchorOnScreen.minY - size.height - 4))
+            let screen = window.screen
+                ?? NSScreen.screens.first { $0.frame.intersects(anchorOnScreen) }
+                ?? NSScreen.main
+            panel.setFrameOrigin(Self.menuOrigin(
+                size: size,
+                anchor: anchorOnScreen,
+                screen: screen?.visibleFrame
+            ))
         }
         panel.orderFront(nil)
         self.panel = panel
@@ -138,6 +168,23 @@ final class NotchDropdownPanel {
     }
 
     func dismiss() { dismiss(notify: true) }
+
+    /// Drops the menu below the anchor, flips it above when the space below is
+    /// too short, then clamps to the visible frame so no edge runs off screen.
+    static func menuOrigin(size: NSSize, anchor: NSRect, screen: NSRect?) -> NSPoint {
+        let gap: CGFloat = 4
+        let trailingAligned = max(anchor.minX, anchor.maxX - size.width)
+        let below = anchor.minY - size.height - gap
+        guard let screen else { return NSPoint(x: trailingAligned, y: below) }
+
+        var y = below
+        if y < screen.minY {
+            let above = anchor.maxY + gap
+            y = above + size.height <= screen.maxY ? above : screen.minY
+        }
+        let maximumX = max(screen.minX, screen.maxX - size.width)
+        return NSPoint(x: min(max(trailingAligned, screen.minX), maximumX), y: y)
+    }
 
     @discardableResult
     func handleKeyCode(_ keyCode: UInt16) -> Bool {
@@ -207,8 +254,8 @@ final class NotchDropdownPanel {
 
 private struct NotchDropdownMenuContent: View {
     let model: NotchDropdownMenuModel
-    private let menuFill = Color(red: 0.13, green: 0.13, blue: 0.14)
-    private let selectedFill = Color(red: 0.24, green: 0.24, blue: 0.26)
+    private let menuFill = NotchWindowPalette.floating
+    private let selectedFill = NotchWindowPalette.floatingSelected
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             ForEach(Array(model.titles.enumerated()), id: \.offset) { index, title in
@@ -223,6 +270,9 @@ private struct NotchDropdownMenuContent: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { model.highlight(index) }
+                }
                 .accessibilityAddTraits(index == model.highlightedIndex ? .isSelected : [])
             }
         }
