@@ -22,6 +22,8 @@ public enum ProviderHookEnricher {
             return Grok.enrich(payload, now: now)
         case .codex:
             return Codex.enrich(payload)
+        case .antigravity:
+            return AntigravityEventPolicy.enrich(payload)
         default:
             return ProviderHookEnrichment(
                 payload: payload,

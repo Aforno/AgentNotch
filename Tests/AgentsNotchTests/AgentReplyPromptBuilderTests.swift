@@ -119,6 +119,7 @@ final class AgentReplyPromptBuilderTests: XCTestCase {
         XCTAssertTrue(AgentReplyPolicy.canDecide(provider: .claudeCode))
         XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .grok))
         XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .geminiCLI))
+        XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .antigravity))
         XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .cursor))
         XCTAssertFalse(AgentReplyPolicy.canDecide(provider: .openCode))
     }

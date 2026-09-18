@@ -34,6 +34,7 @@ struct ProviderIconView: View {
         case .grok: .init(imageSet: "ProviderGrok", file: "grok.svg")
         case .openCode: .init(imageSet: "ProviderOpenCode", file: "opencode.svg")
         case .geminiCLI: .init(imageSet: "ProviderGemini", file: "gemini.svg", isTemplate: false)
+        case .antigravity: .init(imageSet: "ProviderAntigravity", file: "antigravity.svg")
         case .cursor: .init(imageSet: "ProviderCursor", file: "cursor.svg")
         default: nil
         }

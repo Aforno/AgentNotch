@@ -112,9 +112,9 @@ public enum ProviderEventPolicy {
 
     private static func normalizedToolName(_ toolName: String) -> String {
         switch toolName.lowercased() {
-        case "bash", "shell", "run_shell_command", "run_terminal_command": "Bash"
-        case "edit", "search_replace": "Edit"
-        case "write": "Write"
+        case "bash", "shell", "run_shell_command", "run_terminal_command", "run_command": "Bash"
+        case "edit", "search_replace", "replace_file_content", "multi_replace_file_content": "Edit"
+        case "write", "write_to_file": "Write"
         default: toolName
         }
     }

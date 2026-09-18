@@ -8,6 +8,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
     case grok
     case openCode = "opencode"
     case geminiCLI = "gemini-cli"
+    case antigravity
     case cursor
 
     var provider: AgentProvider { AgentProvider(rawValue: rawValue) }
@@ -22,7 +23,7 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
             eventName == "SessionEnd" || eventName == "Interrupt" ? .seconds(3) : .seconds(5)
         case .geminiCLI:
             .milliseconds(5_000)
-        case .claudeCode, .grok, .openCode, .cursor:
+        case .claudeCode, .grok, .openCode, .antigravity, .cursor:
             .seconds(5)
         }
     }
@@ -78,6 +79,10 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
             ]
         case .geminiCLI:
             ["SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "Notification", "AfterAgent", "SessionEnd"]
+        case .antigravity:
+            // PreToolUse is a gating hook: `{}` is an unknown decision and
+            // denies the tool. Observe completions via PostToolUse instead.
+            ["PreInvocation", "PostToolUse", "Stop"]
         case .cursor:
             ["sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse", "postToolUseFailure", "stop", "sessionEnd"]
         case .openCode:
@@ -103,6 +108,10 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
             homeDirectoryURL
                 .appendingPathComponent(".gemini", isDirectory: true)
                 .appendingPathComponent("settings.json")
+        case .antigravity:
+            homeDirectoryURL
+                .appendingPathComponent(".gemini/config", isDirectory: true)
+                .appendingPathComponent("hooks.json")
         case .openCode:
             homeDirectoryURL
                 .appendingPathComponent(".config/opencode/plugins", isDirectory: true)
@@ -118,6 +127,8 @@ enum IntegratedHookProvider: String, CaseIterable, Sendable {
         switch self {
         case .cursor:
             CursorHooksInstall(profile: self, homeDirectoryURL: homeDirectoryURL)
+        case .antigravity:
+            AntigravityHooksInstall(profile: self, homeDirectoryURL: homeDirectoryURL)
         case .openCode:
             OpenCodePluginInstall(homeDirectoryURL: homeDirectoryURL)
         case .codex, .claudeCode, .grok, .geminiCLI:

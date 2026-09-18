@@ -66,6 +66,7 @@ final class AppRuntime {
         .claudeCode,
         .grok,
         .geminiCLI,
+        .antigravity,
         .openCode,
         .cursor,
     ]

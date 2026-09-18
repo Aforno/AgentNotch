@@ -60,6 +60,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-The Codex, Claude Code, Grok, OpenCode, Gemini, and Cursor names and marks remain
+The Codex, Claude Code, Grok, OpenCode, Gemini, Antigravity, and Cursor names and marks remain
 trademarks of their respective owners. Their inclusion identifies compatible
 providers and does not imply endorsement or affiliation.

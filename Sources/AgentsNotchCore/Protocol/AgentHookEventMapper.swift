@@ -111,6 +111,13 @@ public enum AgentHookEventMapper {
                     state: .waitingForUser
                 )
             }
+            if AntigravityEventPolicy.isWaitingTool(payload.toolName) {
+                return context.event(
+                    type: .waiting,
+                    activity: AntigravityEventPolicy.waitingActivity(for: payload),
+                    state: .waitingForUser
+                )
+            }
             return toolEvent(payload, completed: false, context: context)
 
         case .postToolUse:
