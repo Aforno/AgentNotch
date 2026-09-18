@@ -162,12 +162,15 @@ final class AppRuntimeTests: XCTestCase {
         let session = try XCTUnwrap(runtime.activity.session(id: "codex:thr-answer"))
         XCTAssertTrue(runtime.canAnswer(session))
         runtime.answer(session, decision: .allow)
-        await fulfillment(of: [received], timeout: 2)
-
-        XCTAssertEqual(box.get()?.decision, .allow)
+        // Answering resolves the prompt on the spot. Asserting before the hook
+        // round trip keeps this off the socket-reconciliation race that used to
+        // decide whether pendingReply had been cleared yet.
         XCTAssertEqual(runtime.activity.session(id: session.id)?.state, .running)
         XCTAssertNil(runtime.activity.session(id: session.id)?.pendingReply)
         XCTAssertEqual(runtime.activity.session(id: session.id)?.currentActivity, "Allowed")
+
+        await fulfillment(of: [received], timeout: 2)
+        XCTAssertEqual(box.get()?.decision, .allow)
     }
 
     @MainActor
