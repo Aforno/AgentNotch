@@ -273,6 +273,15 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         pendingReply = pendingReplies.last
     }
 
+    /// Drops a reply the user has already answered.
+    @discardableResult
+    public mutating func removePendingReply(_ replyId: UUID) -> Bool {
+        guard pendingReplies.contains(where: { $0.replyId == replyId }) else { return false }
+        pendingReplies.removeAll { $0.replyId == replyId }
+        pendingReply = pendingReplies.last
+        return true
+    }
+
     private mutating func applyTask(from event: AgentEvent, projectName: String?) {
         task = Self.resolvedTask(
             current: task,

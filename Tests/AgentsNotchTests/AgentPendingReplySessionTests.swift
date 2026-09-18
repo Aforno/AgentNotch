@@ -35,6 +35,59 @@ final class AgentPendingReplySessionTests: XCTestCase {
     }
 
     @MainActor
+    func testAnsweringResolvesThatReplyWithoutWaitingForSocketReconciliation() {
+        let answered = UUID()
+        let service = AgentActivityService()
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "codex:thr",
+            provider: .codex,
+            activity: "Needs command approval",
+            state: .waitingForUser,
+            pendingReply: AgentPendingReply(
+                replyId: answered,
+                kind: .permission,
+                prompt: "Allow this command?",
+                detail: "swift test",
+                grants: [.deny, .allow]
+            )
+        ))
+        XCTAssertEqual(service.session(id: "codex:thr")?.pendingReply?.replyId, answered)
+
+        service.resolvePendingReply(answered, in: "codex:thr")
+
+        XCTAssertNil(service.session(id: "codex:thr")?.pendingReply)
+        XCTAssertEqual(service.session(id: "codex:thr")?.pendingReplies.count, 0)
+    }
+
+    @MainActor
+    func testResolvingOneReplyFallsBackToTheOtherStillWaitingPrompt() {
+        let answered = UUID()
+        let other = UUID()
+        let service = AgentActivityService()
+        for replyId in [answered, other] {
+            service.ingest(AgentEvent(
+                type: .waiting,
+                sessionId: "codex:thr",
+                provider: .codex,
+                activity: "Needs command approval",
+                state: .waitingForUser,
+                pendingReply: AgentPendingReply(
+                    replyId: replyId,
+                    kind: .permission,
+                    prompt: "Allow this command?",
+                    grants: [.deny, .allow]
+                )
+            ))
+        }
+
+        service.resolvePendingReply(answered, in: "codex:thr")
+
+        XCTAssertEqual(service.session(id: "codex:thr")?.pendingReply?.replyId, other)
+        XCTAssertEqual(service.session(id: "codex:thr")?.pendingReplies.count, 1)
+    }
+
+    @MainActor
     func testRestoredSessionsDropPendingReply() {
         let session = AgentSession(event: AgentEvent(
             type: .waiting,

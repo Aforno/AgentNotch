@@ -218,6 +218,15 @@ public final class AgentActivityService {
         commitSessionChanges(orderSessions: false, attentionRefresh: .ifMissing)
     }
 
+    /// Retires a reply the moment the user answers it. Socket-liveness
+    /// reconciliation retires it too, but that arrives asynchronously from the
+    /// hook's disconnect — the prompt must not linger in between.
+    public func resolvePendingReply(_ replyId: UUID, in sessionId: String) {
+        guard let index = sessionsByID[sessionId] else { return }
+        guard sessions[index].removePendingReply(replyId) else { return }
+        commitSessionChanges(orderSessions: false, attentionRefresh: .ifMissing)
+    }
+
     /// Reconciles workflow metadata discovered from provider-owned storage
     /// without treating app startup as new agent activity.
     public func reconcileRestoredWorkflow(_ event: AgentEvent) {

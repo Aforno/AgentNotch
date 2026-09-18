@@ -13,6 +13,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   idle_prompt settle the turn; StopFailure shows a readable error. Codex
   Interrupt settles a user interrupt. Claude idle_prompt is not treated as
   attention.
+- Answering a permission prompt from the notch now retires that prompt
+  immediately instead of waiting for the hook's disconnect to reach socket
+  reconciliation, so the resolved prompt cannot linger on screen.
 - Long permission prompts no longer hide their own Allow and Deny buttons. The
   notch reply surface scrolls once it passes its maximum height, with the same
   faded bottom edge the thread detail already used.

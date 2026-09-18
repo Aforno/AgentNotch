@@ -330,6 +330,9 @@ final class AppRuntime {
         #endif
         let delivered = replyServer?.submit(reply) ?? false
         guard delivered || simulated else { return }
+        // The answered prompt is resolved now, not whenever the hook's
+        // disconnect reaches reconcilePendingReplies.
+        activity.resolvePendingReply(pending.replyId, in: session.id)
         let remaining = session.pendingReplies.filter { candidate in
             candidate.replyId != pending.replyId
                 && replyServer?.isPending(candidate.replyId) == true
