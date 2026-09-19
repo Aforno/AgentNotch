@@ -43,7 +43,7 @@ struct WaitingReplyView: View {
                 scrollingContent
             }
         }
-        .padding(.bottom, DynamicIslandSpacing.standard)
+        .padding(.bottom, DynamicIslandSpacing.outer)
         .focusable()
         .focused($isFocused)
         .focusEffectDisabled()
@@ -131,14 +131,16 @@ struct WaitingReplyView: View {
         .notchScrollEdgeFade()
     }
 
-    /// Chrome is the header plus the two fixed gaps the body adds around it.
+    /// Chrome is the top inset above the header plus the two fixed gaps the
+    /// body adds around it.
     private func reportIdealHeight() {
         guard headerHeight > 0, contentHeight > 0 else { return }
         onIdealHeightChange(
-            headerHeight
+            DynamicIslandSpacing.expandedTop
+                + headerHeight
                 + DynamicIslandSpacing.related
                 + contentHeight
-                + DynamicIslandSpacing.standard
+                + DynamicIslandSpacing.outer
         )
     }
 
@@ -329,17 +331,16 @@ struct WaitingReplyActions: View {
                             .font(NotchWindowFont.captionEmphasis)
                             .foregroundStyle(NotchWindowPalette.secondaryText)
                     }
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 92), spacing: 6)],
-                        spacing: 6
-                    ) {
+                    // Full-width rows so long labels wrap instead of truncating.
+                    VStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(question.options.enumerated()), id: \.element.id) { index, option in
                             let selected = isSelected(option, for: question)
                             replyButton(
                                 option.label,
                                 emphasis: selected ? .primary : .neutral,
                                 shortcut: digitShortcut(for: index, in: questions, question: question),
-                                selected: selected
+                                selected: selected,
+                                wraps: true
                             ) {
                                 select(option, for: question)
                                 if questions.count == 1, !question.allowsMultiple {
@@ -437,18 +438,26 @@ struct WaitingReplyActions: View {
         emphasis: NotchActionEmphasis,
         shortcut: String? = nil,
         selected: Bool = false,
+        wraps: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(title)
-                    .lineLimit(1)
+                    .lineLimit(wraps ? nil : 1)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: wraps)
+                    .frame(maxWidth: wraps ? .infinity : nil, alignment: .leading)
                 if let shortcut {
                     NotchKeyCap(label: shortcut)
                 }
             }
         }
-        .buttonStyle(NotchActionButtonStyle(emphasis: emphasis))
+        .buttonStyle(NotchActionButtonStyle(
+            emphasis: emphasis,
+            cornerRadius: wraps ? 10 : nil,
+            expands: wraps
+        ))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityHintIfPresent(shortcut.map(spokenShortcutHint))
     }

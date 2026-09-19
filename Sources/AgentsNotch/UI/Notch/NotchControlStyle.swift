@@ -157,8 +157,9 @@ private struct NotchActionSurface<Label: View>: View {
                 isHovering: isHovering
             ))
             .padding(.horizontal, 12)
+            .padding(.vertical, 5)
             .frame(maxWidth: expands ? .infinity : nil)
-            .frame(height: 28)
+            .frame(minHeight: 28)
             .background {
                 shape
                     .fill(fill)
