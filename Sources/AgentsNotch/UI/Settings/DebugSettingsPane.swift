@@ -29,6 +29,15 @@ struct DebugSettingsPane: View {
                             }
                         }
                     }
+                    SettingsSection(title: "Questions") {
+                        SettingsControlRow(title: "Ask a question", detail: "Preview how agent questions appear in the notch.") {
+                            HStack(spacing: 8) {
+                                Button("Single") { runtime.simulator.simulateQuestion(multiple: false) }
+                                Button("Multiple") { runtime.simulator.simulateQuestion(multiple: true) }
+                            }
+                            .buttonStyle(NotchPillButtonStyle())
+                        }
+                    }
                     SettingsSection(title: "Structured Activity") {
                         SettingsControlRow(title: "Inject activity", detail: "Preview plans, workflows, and agent groups.") {
                             HStack(spacing: 8) {

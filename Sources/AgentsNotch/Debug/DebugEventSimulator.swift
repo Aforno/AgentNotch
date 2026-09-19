@@ -35,6 +35,60 @@ final class DebugEventSimulator {
         ))
     }
 
+    /// Shows an AskUserQuestion-style prompt. `multiple` previews several
+    /// questions with a multi-select one, which needs the Submit button.
+    func simulateQuestion(multiple: Bool) {
+        let questions = multiple
+            ? [
+                AgentPromptQuestion(
+                    text: "Which test runner should the suite use?",
+                    header: "Test runner",
+                    options: [
+                        AgentPromptOption(id: "swift-testing", label: "Swift Testing"),
+                        AgentPromptOption(id: "xctest", label: "XCTest"),
+                    ],
+                    allowsMultiple: false
+                ),
+                AgentPromptQuestion(
+                    text: "Which platforms should CI cover?",
+                    header: "CI platforms",
+                    options: [
+                        AgentPromptOption(id: "macos-15", label: "macOS 15 on Apple silicon runners"),
+                        AgentPromptOption(id: "macos-26", label: "macOS 26 beta, allowed to fail without blocking merges"),
+                        AgentPromptOption(id: "intel", label: "Intel"),
+                    ],
+                    allowsMultiple: true
+                ),
+            ]
+            : [
+                AgentPromptQuestion(
+                    text: "How should expired sessions be handled?",
+                    options: [
+                        AgentPromptOption(id: "refresh", label: "Silently refresh the token in the background and retry the request"),
+                        AgentPromptOption(id: "logout", label: "Sign the user out and show the login screen with an explanation"),
+                        AgentPromptOption(id: "prompt", label: "Ask first"),
+                    ],
+                    allowsMultiple: false
+                ),
+            ]
+        ingest(AgentEvent(
+            type: .waiting,
+            sessionId: Self.id(multiple ? "questions" : "question"),
+            provider: .claudeCode,
+            task: "Refine authentication flow",
+            activity: "Asking a question",
+            state: .waitingForUser,
+            workingDirectory: "/Users/demo/AgentsNotch",
+            pendingReply: AgentPendingReply(
+                replyId: UUID(),
+                kind: .question,
+                prompt: multiple ? "A few choices before I continue" : questions[0].text,
+                questions: questions,
+                grants: [.cancel]
+            )
+        ))
+    }
+
     func simulatePlan() {
         ingest(AgentEvent(
             type: .activity,
