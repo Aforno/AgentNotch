@@ -2,6 +2,8 @@ import AgentsNotchCore
 import SwiftUI
 
 struct CollapsedNotchView: View {
+    /// Aggregate state of the active agents; drives the leading dot.
+    let state: AgentState
     let activeProviders: [AgentProvider]
     let activeCount: Int
 
@@ -60,7 +62,7 @@ struct CollapsedNotchView: View {
 
     private var leadingStatus: some View {
         HStack(spacing: DynamicIslandSpacing.related) {
-            StateIndicator(state: .running, size: 7)
+            StateIndicator(state: state, size: 7)
             Text("\(activeCount)")
                 .font(NotchWindowFont.counter)
                 .monospacedDigit()
@@ -73,6 +75,7 @@ struct CollapsedNotchView: View {
         guard activeCount > 0 else { return "No active agents" }
         let count = activeCount == 1 ? "1 active agent" : "\(activeCount) active agents"
         let names = activeProviders.map(\.displayName).joined(separator: ", ")
-        return "\(count): \(names)"
+        let status = state == .running ? "" : ", \(state.displayName)"
+        return "\(count)\(status): \(names)"
     }
 }

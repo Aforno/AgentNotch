@@ -219,6 +219,9 @@ struct NotchHoverSurface<Content: View>: View {
 /// never advertised (Return to allow, Escape to deny, digits to pick options).
 struct NotchKeyCap: View {
     let label: String
+    /// Inactive caps stay visible but dimmed so the shortcut is discoverable
+    /// before the prompt has keyboard focus.
+    var isActive = true
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -231,6 +234,7 @@ struct NotchKeyCap: View {
             .padding(.vertical, 1)
             .background(NotchWindowPalette.background.opacity(0.72), in: shape)
             .overlay(shape.stroke(NotchWindowPalette.hairline, lineWidth: 0.6))
+            .opacity(isActive ? 1 : 0.4)
             .accessibilityHidden(true)
     }
 }

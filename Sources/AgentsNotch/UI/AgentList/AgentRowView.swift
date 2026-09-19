@@ -48,6 +48,8 @@ struct AgentRowView: View {
 
             Spacer(minLength: DynamicIslandSpacing.related)
 
+            ElapsedLabel(since: elapsedSince)
+
             StateIndicator(state: groupState, size: 12)
         }
         .padding(.horizontal, DynamicIslandSpacing.outer)
@@ -141,6 +143,11 @@ struct AgentRowView: View {
         return parts.joined(separator: ", ")
     }
 
+    /// Waiting rows count from when input was requested; others from start.
+    private var elapsedSince: Date {
+        groupAttentionSession?.updatedAt ?? session.startedAt
+    }
+
     private var groupAttentionSession: AgentSession? {
         ([session] + subagents)
             .filter { $0.state == .waitingForUser }
@@ -152,6 +159,31 @@ struct AgentRowView: View {
         if groupAttentionSession != nil { return .waitingForUser }
         if session.state == .failed || subagents.contains(where: { $0.state == .failed }) { return .failed }
         return session.state
+    }
+}
+
+/// Compact "4m" / "2h" age, refreshed each minute. Surfaces stuck agents.
+struct ElapsedLabel: View {
+    let since: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            Text(Self.format(context.date.timeIntervalSince(since)))
+                .font(NotchWindowFont.footnote)
+                .monospacedDigit()
+                .foregroundStyle(NotchWindowPalette.tertiaryText)
+                .fixedSize()
+        }
+        .accessibilityHidden(true)
+    }
+
+    static func format(_ interval: TimeInterval) -> String {
+        let minutes = Int(max(0, interval) / 60)
+        if minutes < 1 { return "now" }
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h" }
+        return "\(hours / 24)d"
     }
 }
 
