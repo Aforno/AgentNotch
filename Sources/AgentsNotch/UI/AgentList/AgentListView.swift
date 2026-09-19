@@ -5,11 +5,14 @@ struct AgentListView: View {
     let sessions: [AgentSession]
     let relatedSessions: [AgentSession]
     var hiddenGroupCount: Int = 0
+    /// Shown by the empty state so the list still answers "what just happened?".
+    var lastFinishedSession: AgentSession?
     let topInset: CGFloat
     let menuBarHeight: CGFloat
     let onOpenSettings: () -> Void
     let onOpenActivityCenter: () -> Void
     let onSelect: (String) -> Void
+    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
 
     static func rowsHeight(for sessions: [AgentSession], hiddenGroupCount: Int = 0) -> CGFloat {
         if sessions.isEmpty {
@@ -128,9 +131,10 @@ struct AgentListView: View {
                 Circle()
                     .fill(NotchWindowPalette.quaternaryText)
                     .frame(width: 6, height: 6)
-                Text("No active agents")
+                Text(emptyTitle)
                     .font(NotchWindowFont.bodyEmphasis)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
+                    .lineLimit(1)
                 Text("·")
                     .font(NotchWindowFont.footnote)
                     .foregroundStyle(NotchWindowPalette.quaternaryText)
@@ -147,7 +151,17 @@ struct AgentListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(NotchRowButtonStyle(inset: 0))
-        .accessibilityLabel("No active agents. Open Activity Center to browse recent sessions.")
+        .accessibilityLabel("\(emptyTitle). Open Activity Center to browse recent sessions.")
+    }
+
+    /// "Claude finished · repo · 2m ago", or the plain empty message.
+    private var emptyTitle: String {
+        guard let session = lastFinishedSession, !privacyModeEnabled else { return "No active agents" }
+        let verb = session.state == .failed ? "failed" : "finished"
+        let age = ElapsedLabel.format(Date().timeIntervalSince(session.completedAt ?? session.updatedAt))
+        let when = age == "now" ? "just now" : "\(age) ago"
+        let project = session.projectName.map { " · \($0)" } ?? ""
+        return "\(session.provider.displayName) \(verb)\(project) · \(when)"
     }
 
     static func descendantSessions(of session: AgentSession, in sessions: [AgentSession]) -> [AgentSession] {

@@ -47,6 +47,8 @@ struct NotchRootView: View {
     @State private var isHovering = false
     @State private var isPointerInside = false
     @State private var selectedSessionID: String?
+    /// The waiting session the user paged to; falls back to the newest one.
+    @State private var pagedAttentionID: String?
     @State private var hoverIntentTask: Task<Void, Never>?
     @State private var outsideClickMonitor = NotchOutsideClickMonitor()
     /// Separate scalars so SwiftUI interpolates width *and* height. A single
@@ -70,18 +72,31 @@ struct NotchRootView: View {
     }
     private var hasActiveAgents: Bool { !snapshot.activeSessions.isEmpty }
 
+    /// The waiting session shown in the temporary surface. Paging only moves
+    /// between sessions that are still waiting.
+    private var focusedAttentionSession: AgentSession? {
+        snapshot.attentionSessions.first { $0.id == pagedAttentionID } ?? snapshot.attentionSession
+    }
+
+    /// Most recently finished top-level session, offered by the empty list.
+    private var lastFinishedSession: AgentSession? {
+        activity.sessions
+            .filter { !$0.isActive && !$0.isSubagent && !$0.isInternalHelper }
+            .max { ($0.completedAt ?? $0.updatedAt) < ($1.completedAt ?? $1.updatedAt) }
+    }
+
     private var presentation: NotchPresentation {
         if let selectedSessionID,
            snapshot.relatedSessions.contains(where: { $0.id == selectedSessionID }) {
             return .detail(selectedSessionID)
         }
-        if let session = snapshot.attentionSession,
+        if let session = focusedAttentionSession,
            session.pendingReply != nil,
            runtime.canAnswer(session) {
             return .temporary(session.id)
         }
         if isHovering { return .list }
-        if let session = snapshot.attentionSession {
+        if let session = focusedAttentionSession {
             return .temporary(session.id)
         }
         return .collapsed
@@ -106,7 +121,7 @@ struct NotchRootView: View {
                 radius: min(10, (geometry.notchHeight + 2) * 0.32)
             )
         case .temporary:
-            let extraHeight = snapshot.attentionSession?.pendingReply == nil
+            let extraHeight = focusedAttentionSession?.pendingReply == nil
                 ? 56
                 : NotchLayoutMetrics.waitingContentHeight(
                     measured: waitingContentHeight,
@@ -197,6 +212,12 @@ struct NotchRootView: View {
                   !isVisibleDetailSession(selectedSessionID) else { return }
             self.selectedSessionID = nil
         }
+        .onChange(of: snapshot.attentionSessions.map(\.id)) { _, ids in
+            // Forget the paged session once it stops waiting, so a later
+            // request from it does not jump ahead of the newest one.
+            guard let pagedAttentionID, !ids.contains(pagedAttentionID) else { return }
+            self.pagedAttentionID = nil
+        }
         .onChange(of: runtime.requestedSessionID) { _, sessionID in
             guard let sessionID,
                   snapshot.relatedSessions.contains(where: { $0.id == sessionID }) else { return }
@@ -209,10 +230,10 @@ struct NotchRootView: View {
     private var notchSurface: some View {
         ZStack(alignment: .top) {
             NotchShape(bottomRadius: shownRadius)
-                .fill(Color.black.opacity(0.985))
+                .fill(NotchWindowPalette.background)
                 .overlay {
                     NotchShape(bottomRadius: shownRadius)
-                        .stroke(Color.white.opacity(presentation == .collapsed ? 0 : 0.08), lineWidth: 0.6)
+                        .stroke(Color.white.opacity(presentation == .collapsed ? 0 : 0.12), lineWidth: 0.6)
                 }
 
             content
@@ -302,17 +323,20 @@ struct NotchRootView: View {
         case .collapsed:
             if hasActiveAgents {
                 CollapsedNotchView(
+                    state: collapsedState,
                     activeProviders: snapshot.activeProviders,
                     activeCount: snapshot.activeGroupCount
                 )
             }
 
         case .temporary:
-            if let session = snapshot.attentionSession {
+            if let session = focusedAttentionSession {
                 if session.pendingReply != nil {
                     WaitingReplyView(
                         session: session,
+                        waitingPosition: attentionPosition(of: session),
                         waitingCount: snapshot.attentionCount,
+                        onPage: pageAttention,
                         canAnswer: runtime.canAnswer(session),
                         onAnswer: { decision, optionId, answers in
                             runtime.answer(session, decision: decision, optionId: optionId, answers: answers)
@@ -345,6 +369,7 @@ struct NotchRootView: View {
                 sessions: visibleSessions,
                 relatedSessions: snapshot.relatedSessions,
                 hiddenGroupCount: snapshot.hiddenActiveGroupCount,
+                lastFinishedSession: lastFinishedSession,
                 topInset: geometry.notchHeight + DynamicIslandSpacing.expandedTop,
                 menuBarHeight: geometry.notchHeight,
                 onOpenSettings: { runtime.openSettings() },
@@ -395,7 +420,9 @@ struct NotchRootView: View {
 
         // Small asymmetric delays prevent the changing panel boundary from
         // producing enter/exit loops while still keeping expansion responsive.
-        let delay = hovering ? Duration.milliseconds(60) : .milliseconds(110)
+        // Entry waits long enough that a pointer passing on its way to a
+        // neighbouring menu bar item does not open the list.
+        let delay = hovering ? Duration.milliseconds(150) : .milliseconds(110)
         hoverIntentTask = Task { @MainActor in
             do {
                 try await Task.sleep(for: delay)
@@ -419,6 +446,29 @@ struct NotchRootView: View {
             transaction.disablesAnimations = true
             withTransaction(transaction, change)
         }
+    }
+
+    /// Only active states reach the collapsed notch (failed and completed
+    /// sessions are not active), so waiting is the one state that outranks
+    /// running. `unknown` shows only when no agent is known to be working.
+    private var collapsedState: AgentState {
+        let states = Set(snapshot.activeSessions.map(\.state))
+        if states.contains(.waitingForUser) { return .waitingForUser }
+        if states.contains(.unknown), states.count == 1 { return .unknown }
+        return .running
+    }
+
+    private func attentionPosition(of session: AgentSession) -> Int {
+        (snapshot.attentionSessions.firstIndex { $0.id == session.id } ?? 0) + 1
+    }
+
+    /// Steps through waiting sessions, wrapping at either end.
+    private func pageAttention(by offset: Int) {
+        let sessions = snapshot.attentionSessions
+        guard sessions.count > 1, let current = focusedAttentionSession else { return }
+        let index = sessions.firstIndex { $0.id == current.id } ?? 0
+        let next = (index + offset + sessions.count) % sessions.count
+        withPresentationAnimation { pagedAttentionID = sessions[next].id }
     }
 
     private func isVisibleDetailSession(_ sessionID: String) -> Bool {

@@ -4,7 +4,11 @@ import SwiftUI
 
 struct WaitingReplyView: View {
     let session: AgentSession
+    /// 1-based index of `session` among the waiting sessions.
+    let waitingPosition: Int
     let waitingCount: Int
+    /// Moves to the previous (-1) or next (+1) waiting session.
+    let onPage: (Int) -> Void
     let canAnswer: Bool
     let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     let onOpenDetail: () -> Void
@@ -168,12 +172,10 @@ struct WaitingReplyView: View {
             }
             Spacer(minLength: 0)
             if waitingCount > 1 {
-                Text("\(waitingCount) waiting")
-                    .font(NotchWindowFont.footnoteEmphasis)
-                    .foregroundStyle(.orange)
+                waitingPager
             }
             Button(action: onOpenDetail) {
-                Image(systemName: "ellipsis")
+                Image(systemName: "chevron.right")
                     .font(NotchWindowFont.captionEmphasis)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
             }
@@ -181,6 +183,29 @@ struct WaitingReplyView: View {
             .help("Open details")
             .accessibilityLabel("Open details")
         }
+    }
+
+    private var waitingPager: some View {
+        HStack(spacing: 0) {
+            pagerButton("chevron.left", label: "Previous waiting agent") { onPage(-1) }
+            Text("\(waitingPosition)/\(waitingCount)")
+                .font(NotchWindowFont.footnoteEmphasis)
+                .monospacedDigit()
+                .foregroundStyle(.orange)
+                .accessibilityLabel("\(waitingPosition) of \(waitingCount) waiting")
+            pagerButton("chevron.right", label: "Next waiting agent") { onPage(1) }
+        }
+    }
+
+    private func pagerButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(NotchWindowPalette.secondaryText)
+        }
+        .buttonStyle(NotchGlyphButtonStyle(size: 20))
+        .help(label)
+        .accessibilityLabel(label)
     }
 
     @ViewBuilder
@@ -197,7 +222,9 @@ struct WaitingReplyView: View {
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(NotchWindowPalette.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .lineLimit(4)
+                    // Never truncate: an approval must show the whole command.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
         }
     }
@@ -207,7 +234,8 @@ struct WaitingReplyView: View {
         if canAnswer, let pending {
             WaitingReplyActions(
                 pending: pending,
-                showsKeyboardHints: shortcutsActive,
+                showsKeyboardHints: true,
+                keyboardHintsActive: shortcutsActive,
                 onAnswer: onAnswer
             )
             .id(pending.replyId)
@@ -319,6 +347,8 @@ struct WaitingReplyActions: View {
     /// Only the notch prompt installs the key handler, so only it may advertise
     /// the shortcuts. The same actions rendered in the detail pane do not.
     var showsKeyboardHints = false
+    /// Hints render dimmed until a click gives the prompt keyboard focus.
+    var keyboardHintsActive = false
     let onAnswer: (AgentReplyDecision, String?, [String: [String]]?) -> Void
     @State private var selections: [String: Set<String>] = [:]
 
@@ -351,10 +381,16 @@ struct WaitingReplyActions: View {
                     }
                 }
                 if questions.count > 1 || questions.contains(where: \.allowsMultiple) {
-                    replyButton("Submit answers", emphasis: .primary) {
+                    replyButton(submitTitle, emphasis: .primary) {
                         onAnswer(.option, nil, selectedAnswers(for: questions))
                     }
                     .disabled(!hasCompleteAnswers(for: questions))
+                    if let unanswered = questions.first(where: { selections[$0.text]?.isEmpty != false }) {
+                        Text("Still needs: \(unanswered.header ?? unanswered.text)")
+                            .font(NotchWindowFont.footnote)
+                            .foregroundStyle(NotchWindowPalette.tertiaryText)
+                            .lineLimit(1)
+                    }
                 }
             }
         } else {
@@ -385,6 +421,11 @@ struct WaitingReplyActions: View {
                 }
             }
         }
+    }
+
+    private var submitTitle: String {
+        let count = selections.values.reduce(0) { $0 + $1.count }
+        return count == 0 ? "Submit answers" : "Submit answers (\(count))"
     }
 
     private func hint(_ label: String) -> String? {
@@ -449,7 +490,7 @@ struct WaitingReplyActions: View {
                     .fixedSize(horizontal: false, vertical: wraps)
                     .frame(maxWidth: wraps ? .infinity : nil, alignment: .leading)
                 if let shortcut {
-                    NotchKeyCap(label: shortcut)
+                    NotchKeyCap(label: shortcut, isActive: keyboardHintsActive)
                 }
             }
         }
@@ -459,7 +500,7 @@ struct WaitingReplyActions: View {
             expands: wraps
         ))
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityHintIfPresent(shortcut.map(spokenShortcutHint))
+        .accessibilityHintIfPresent(keyboardHintsActive ? shortcut.map(spokenShortcutHint) : nil)
     }
 
     private func spokenShortcutHint(_ shortcut: String) -> String {
