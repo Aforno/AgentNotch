@@ -82,7 +82,7 @@ struct NotchRootView: View {
     private var lastFinishedSession: AgentSession? {
         activity.sessions
             .filter { !$0.isActive && !$0.isSubagent && !$0.isInternalHelper }
-            .max { $0.updatedAt < $1.updatedAt }
+            .max { ($0.completedAt ?? $0.updatedAt) < ($1.completedAt ?? $1.updatedAt) }
     }
 
     private var presentation: NotchPresentation {
@@ -211,6 +211,12 @@ struct NotchRootView: View {
             guard let selectedSessionID,
                   !isVisibleDetailSession(selectedSessionID) else { return }
             self.selectedSessionID = nil
+        }
+        .onChange(of: snapshot.attentionSessions.map(\.id)) { _, ids in
+            // Forget the paged session once it stops waiting, so a later
+            // request from it does not jump ahead of the newest one.
+            guard let pagedAttentionID, !ids.contains(pagedAttentionID) else { return }
+            self.pagedAttentionID = nil
         }
         .onChange(of: runtime.requestedSessionID) { _, sessionID in
             guard let sessionID,
@@ -442,8 +448,9 @@ struct NotchRootView: View {
         }
     }
 
-    /// Worst active state wins, so the collapsed dot never looks healthier
-    /// than the agents behind it.
+    /// Only active states reach the collapsed notch (failed and completed
+    /// sessions are not active), so waiting is the one state that outranks
+    /// running. `unknown` shows only when no agent is known to be working.
     private var collapsedState: AgentState {
         let states = Set(snapshot.activeSessions.map(\.state))
         if states.contains(.waitingForUser) { return .waitingForUser }

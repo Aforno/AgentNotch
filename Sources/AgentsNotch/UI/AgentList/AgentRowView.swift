@@ -145,7 +145,8 @@ struct AgentRowView: View {
 
     /// Waiting rows count from when input was requested; others from start.
     private var elapsedSince: Date {
-        groupAttentionSession?.updatedAt ?? session.startedAt
+        guard let attention = groupAttentionSession else { return session.startedAt }
+        return AgentRowPresentation.waitingSince(attention) ?? attention.updatedAt
     }
 
     private var groupAttentionSession: AgentSession? {
@@ -352,6 +353,13 @@ enum AgentRowPresentation {
         guard let project = projectName(for: session) else { return nil }
         guard let task = AgentTaskTitle.displayable(session.task), task != project else { return nil }
         return project
+    }
+
+    /// When the current prompt was first raised. `updatedAt` moves on every
+    /// event, so it would keep resetting the wait. Events are newest-first.
+    static func waitingSince(_ session: AgentSession) -> Date? {
+        guard let replyId = session.pendingReply?.replyId else { return nil }
+        return session.recentEvents.last { $0.pendingReply?.replyId == replyId }?.timestamp
     }
 
     static func currentStep(in steps: [AgentStep]) -> AgentStep? {
