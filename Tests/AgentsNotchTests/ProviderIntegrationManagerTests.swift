@@ -250,6 +250,32 @@ final class ProviderIntegrationManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testClaudeMonitoringDropsRetiredStopCancelledHook() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let manager = fixture.manager(provider: .claudeCode)
+        await manager.install()
+
+        let hooksURL = fixture.home.appendingPathComponent(".claude/settings.json")
+        var root = try Self.readJSON(at: hooksURL)
+        var hooks = try XCTUnwrap(root["hooks"] as? [String: Any])
+        hooks["StopCancelled"] = try XCTUnwrap(hooks["Stop"] as? [[String: Any]])
+        hooks["SomeOtherToolEvent"] = [["hooks": [["type": "command", "command": "/usr/bin/true"]]]]
+        root["hooks"] = hooks
+        try Self.writeJSON(root, to: hooksURL)
+
+        await manager.prepareForMonitoring()
+
+        let updated = try Self.readJSON(at: hooksURL)
+        let updatedHooks = try XCTUnwrap(updated["hooks"] as? [String: Any])
+        XCTAssertFalse(updatedHooks.keys.contains("StopCancelled"))
+        XCTAssertTrue(updatedHooks.keys.contains("SomeOtherToolEvent"))
+        XCTAssertTrue(updatedHooks.keys.contains("Stop"))
+        XCTAssertEqual(manager.status, .awaitingFirstEvent)
+        XCTAssertNil(manager.lastError)
+    }
+
+    @MainActor
     func testGrokInstallRegistersStopCancelled() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

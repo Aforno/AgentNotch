@@ -130,6 +130,7 @@ struct GroupedHooksInstall: HookInstallStrategy {
             groups.append(contentsOf: newGroups)
             hooks[eventName] = groups
         }
+        pruneRetiredEvents(from: &hooks, relay: relay)
 
         root["hooks"] = hooks
         try io.writeRoot(root, to: hooksURL, expectedData: configuration.originalData)
@@ -162,6 +163,7 @@ struct GroupedHooksInstall: HookInstallStrategy {
         guard let configuration = try? io.readRoot(at: hooksURL),
               let hooks = try? io.hooksDictionary(in: configuration.root, hooksURL: hooksURL)
         else { return false }
+        guard !hasRetiredEvent(in: hooks, relay: relay) else { return false }
         return eventNames.allSatisfy { eventName in
             let groups = hooks[eventName] as? [[String: Any]] ?? []
             if usesClaudeExecForm, relay.answersFromNotch, eventName == "PreToolUse" {
@@ -197,6 +199,34 @@ struct GroupedHooksInstall: HookInstallStrategy {
     func updateIfNeeded(io: HookConfigurationIO, relay: HookRelayIdentity) throws {
         guard !containsCurrentRelay(io: io, relay: relay) else { return }
         try install(io: io, relay: relay)
+    }
+
+    /// Events a previous release installed but this one no longer observes
+    /// (Claude Code retired `StopCancelled`). Their handlers still fire the
+    /// relay, so drop ours and leave anything the user added.
+    private func pruneRetiredEvents(from hooks: inout [String: Any], relay: HookRelayIdentity) {
+        for eventName in retiredEventNames(in: hooks) {
+            guard var groups = hooks[eventName] as? [[String: Any]] else { continue }
+            groups = groups.compactMap { removeOwnedHandlers(from: $0, relay: relay, eventName: eventName) }
+            if groups.isEmpty {
+                hooks.removeValue(forKey: eventName)
+            } else {
+                hooks[eventName] = groups
+            }
+        }
+    }
+
+    private func hasRetiredEvent(in hooks: [String: Any], relay: HookRelayIdentity) -> Bool {
+        retiredEventNames(in: hooks).contains { eventName in
+            let groups = hooks[eventName] as? [[String: Any]] ?? []
+            return groups.contains { group in
+                handlers(in: group).contains { relay.identity(of: $0, eventName: eventName).isOwned }
+            }
+        }
+    }
+
+    private func retiredEventNames(in hooks: [String: Any]) -> [String] {
+        hooks.keys.filter { !eventNames.contains($0) }
     }
 
     private func hasAnyOwnedHandler(io: HookConfigurationIO, relay: HookRelayIdentity) -> Bool {

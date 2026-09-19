@@ -16,6 +16,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Installs now sweep hook events AgentNotch no longer observes. Claude Code
+  settings kept a `StopCancelled` entry written by an older release even though
+  the event no longer exists; monitoring repairs it on launch and leaves hooks
+  other tools own untouched.
 - Grok turns that end without Stop (usage limit, output limit, interrupt, or
   max-turns) no longer leave the spinner running. StopCancelled and Grok's
   idle_prompt settle the turn; StopFailure shows a readable error. Codex
