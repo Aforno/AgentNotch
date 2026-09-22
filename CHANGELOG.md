@@ -14,6 +14,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   denies the tool. Stop writes `{"decision":"stop"}`. PostToolUse matches
   `.*` because `*` is not valid regex.
 
+### Changed
+
+- Codex hooks no longer decode every record in the 4 MiB tail of
+  `session_index.jsonl` or the session transcript. The relay searches raw bytes
+  for the session ID or `turn_context` first. The title lookup drops from about
+  60 ms to 2 ms, and the approval lookup from 17 ms to 2 ms.
+
 ### Fixed
 
 - Installs now sweep hook events AgentNotch no longer observes. Claude Code

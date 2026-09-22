@@ -15,14 +15,27 @@ public enum CodexSessionTitleResolver {
         let indexURL = codexHome.appendingPathComponent("session_index.jsonl")
         guard let data = indexTail(at: indexURL), !data.isEmpty else { return nil }
 
-        var found: String?
-        for line in data.split(separator: 0x0A) {
-            guard let record = try? JSONDecoder().decode(SessionIndexRecord.self, from: Data(line)),
+        // The index is append-only, so the newest matching record wins. Scan
+        // backwards and decode only lines that mention the ID: splitting and
+        // decoding a full 4 MiB tail costs ~60 ms on the hook's critical path.
+        let candidates = Self.prefilterBytes(for: trimmed).map(data.lines(containing:))
+            ?? data.split(separator: 0x0A)
+        let decoder = JSONDecoder()
+        for line in candidates.reversed() {
+            guard let record = try? decoder.decode(SessionIndexRecord.self, from: Data(line)),
                   record.id == trimmed
             else { continue }
-            found = record.threadName
+            return record.threadName.flatMap(AgentTaskTitle.displayable)
         }
-        return found.flatMap(AgentTaskTitle.displayable)
+        return nil
+    }
+
+    /// IDs JSON never escapes appear verbatim in their record. Anything else
+    /// falls back to decoding every line.
+    private static func prefilterBytes(for sessionId: String) -> Data? {
+        let bytes = Data(sessionId.utf8)
+        let isVerbatim = bytes.allSatisfy { $0 >= 0x20 && $0 < 0x7F && $0 != UInt8(ascii: "\"") }
+        return isVerbatim ? bytes : nil
     }
 
     private static func indexTail(at url: URL) -> Data? {
@@ -44,7 +57,7 @@ public enum CodexSessionTitleResolver {
         if startOffset > 0 {
             if data.first == 0x0A {
                 data.removeFirst()
-            } else if let newline = data.firstIndex(of: 0x0A) {
+            } else if let newline = data.firstNewline {
                 data.removeSubrange(data.startIndex...newline)
             } else {
                 return nil
