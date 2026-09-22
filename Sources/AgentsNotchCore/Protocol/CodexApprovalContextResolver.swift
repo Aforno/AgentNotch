@@ -4,6 +4,7 @@ import Foundation
 /// approvals. Missing context leaves the permission request visible to the user.
 public enum CodexApprovalContextResolver {
     public static let maximumTranscriptTailBytes = 4 * 1_024 * 1_024
+    private static let turnContextBytes = Data("turn_context".utf8)
 
     public static func permissionRequestRequiresUserInput(for payload: AgentHookPayload) -> Bool {
         guard HookEventName(rawEventName: payload.hookEventName) == .permissionRequest else {
@@ -31,28 +32,15 @@ public enum CodexApprovalContextResolver {
     }
 
     private static func reviewer(inTranscriptAt url: URL, matchingTurnId: String) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-
-        guard let endOffset = try? handle.seekToEnd() else { return nil }
-        let maximumBytes = UInt64(maximumTranscriptTailBytes)
-        let startOffset = endOffset > maximumBytes ? endOffset - maximumBytes : 0
-        guard (try? handle.seek(toOffset: startOffset)) != nil,
-              var data = try? handle.readToEnd(),
+        guard let data = Data.jsonlTail(at: url, maxBytes: maximumTranscriptTailBytes),
               !data.isEmpty
         else {
             return nil
         }
 
-        // If the tail begins midway through a JSONL record, discard that
-        // partial record before decoding from newest to oldest.
-        if startOffset > 0 {
-            guard let newline = data.firstIndex(of: 0x0A) else { return nil }
-            data.removeSubrange(data.startIndex...newline)
-        }
-
-        for line in data.split(separator: 0x0A).reversed() {
-            guard let record = try? JSONDecoder().decode(TranscriptRecord.self, from: Data(line)),
+        let decoder = JSONDecoder()
+        for line in data.lines(containing: turnContextBytes).reversed() {
+            guard let record = try? decoder.decode(TranscriptRecord.self, from: Data(line)),
                   record.type == "turn_context",
                   let context = record.payload
             else {

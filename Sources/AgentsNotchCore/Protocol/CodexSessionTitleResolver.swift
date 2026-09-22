@@ -13,44 +13,28 @@ public enum CodexSessionTitleResolver {
         guard isSafeSessionID(trimmed) else { return nil }
 
         let indexURL = codexHome.appendingPathComponent("session_index.jsonl")
-        guard let data = indexTail(at: indexURL), !data.isEmpty else { return nil }
+        guard let data = Data.jsonlTail(at: indexURL, maxBytes: maximumIndexTailBytes),
+              !data.isEmpty
+        else { return nil }
 
-        var found: String?
-        for line in data.split(separator: 0x0A) {
-            guard let record = try? JSONDecoder().decode(SessionIndexRecord.self, from: Data(line)),
+        // The index is append-only, so the newest matching record wins.
+        let candidates = Self.prefilterBytes(for: trimmed).map(data.lines(containing:))
+            ?? data.split(separator: 0x0A)
+        let decoder = JSONDecoder()
+        for line in candidates.reversed() {
+            guard let record = try? decoder.decode(SessionIndexRecord.self, from: Data(line)),
                   record.id == trimmed
             else { continue }
-            found = record.threadName
+            return record.threadName.flatMap(AgentTaskTitle.displayable)
         }
-        return found.flatMap(AgentTaskTitle.displayable)
+        return nil
     }
 
-    private static func indexTail(at url: URL) -> Data? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-
-        guard let endOffset = try? handle.seekToEnd() else { return nil }
-        let maximumBytes = UInt64(maximumIndexTailBytes)
-        let startOffset = endOffset > maximumBytes ? endOffset - maximumBytes : 0
-        let readOffset = startOffset > 0 ? startOffset - 1 : 0
-        let readCount = Int(endOffset - readOffset)
-        guard (try? handle.seek(toOffset: readOffset)) != nil,
-              var data = try? handle.read(upToCount: readCount),
-              !data.isEmpty
-        else {
-            return nil
-        }
-
-        if startOffset > 0 {
-            if data.first == 0x0A {
-                data.removeFirst()
-            } else if let newline = data.firstIndex(of: 0x0A) {
-                data.removeSubrange(data.startIndex...newline)
-            } else {
-                return nil
-            }
-        }
-        return data
+    /// The ID's raw bytes, or nil when JSON might escape it.
+    private static func prefilterBytes(for sessionId: String) -> Data? {
+        let bytes = Data(sessionId.utf8)
+        let isVerbatim = bytes.allSatisfy { $0 >= 0x20 && $0 < 0x7F && $0 != UInt8(ascii: "\"") }
+        return isVerbatim ? bytes : nil
     }
 
     public static func threadID(fromCanonicalSessionID sessionID: String) -> String? {

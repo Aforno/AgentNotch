@@ -14,8 +14,19 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   denies the tool. Stop writes `{"decision":"stop"}`. PostToolUse matches
   `.*` because `*` is not valid regex.
 
+### Changed
+
+- Codex hooks no longer decode every record in the 4 MiB tail of
+  `session_index.jsonl` or the session transcript. The relay searches raw bytes
+  for the session ID or `turn_context` first. The title lookup drops from about
+  60 ms to 2 ms, and the approval lookup from 17 ms to 2 ms.
+
 ### Fixed
 
+- The Codex approval lookup no longer drops the first transcript record when
+  the 4 MiB tail starts exactly at a record boundary, and no longer reads past
+  the tail limit when Codex appends mid-read. A dropped `turn_context` could
+  show an automatic-reviewer approval as needing user input.
 - Installs now sweep hook events AgentNotch no longer observes. Claude Code
   settings kept a `StopCancelled` entry written by an older release even though
   the event no longer exists; monitoring repairs it on launch and leaves hooks
