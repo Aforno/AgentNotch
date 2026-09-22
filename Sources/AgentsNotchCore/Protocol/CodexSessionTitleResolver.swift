@@ -17,9 +17,7 @@ public enum CodexSessionTitleResolver {
               !data.isEmpty
         else { return nil }
 
-        // The index is append-only, so the newest matching record wins. Scan
-        // backwards and decode only lines that mention the ID: splitting and
-        // decoding a full 4 MiB tail costs ~60 ms on the hook's critical path.
+        // The index is append-only, so the newest matching record wins.
         let candidates = Self.prefilterBytes(for: trimmed).map(data.lines(containing:))
             ?? data.split(separator: 0x0A)
         let decoder = JSONDecoder()
@@ -32,8 +30,7 @@ public enum CodexSessionTitleResolver {
         return nil
     }
 
-    /// IDs JSON never escapes appear verbatim in their record. Anything else
-    /// falls back to decoding every line.
+    /// The ID's raw bytes, or nil when JSON might escape it.
     private static func prefilterBytes(for sessionId: String) -> Data? {
         let bytes = Data(sessionId.utf8)
         let isVerbatim = bytes.allSatisfy { $0 >= 0x20 && $0 < 0x7F && $0 != UInt8(ascii: "\"") }

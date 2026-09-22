@@ -38,8 +38,6 @@ public enum CodexApprovalContextResolver {
             return nil
         }
 
-        // Transcripts are dominated by large tool-output records. Decode only
-        // the rare turn_context candidates.
         let decoder = JSONDecoder()
         for line in data.lines(containing: turnContextBytes).reversed() {
             guard let record = try? decoder.decode(TranscriptRecord.self, from: Data(line)),
