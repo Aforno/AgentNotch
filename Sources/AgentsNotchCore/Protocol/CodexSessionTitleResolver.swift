@@ -13,7 +13,9 @@ public enum CodexSessionTitleResolver {
         guard isSafeSessionID(trimmed) else { return nil }
 
         let indexURL = codexHome.appendingPathComponent("session_index.jsonl")
-        guard let data = indexTail(at: indexURL), !data.isEmpty else { return nil }
+        guard let data = Data.jsonlTail(at: indexURL, maxBytes: maximumIndexTailBytes),
+              !data.isEmpty
+        else { return nil }
 
         // The index is append-only, so the newest matching record wins. Scan
         // backwards and decode only lines that mention the ID: splitting and
@@ -36,34 +38,6 @@ public enum CodexSessionTitleResolver {
         let bytes = Data(sessionId.utf8)
         let isVerbatim = bytes.allSatisfy { $0 >= 0x20 && $0 < 0x7F && $0 != UInt8(ascii: "\"") }
         return isVerbatim ? bytes : nil
-    }
-
-    private static func indexTail(at url: URL) -> Data? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-
-        guard let endOffset = try? handle.seekToEnd() else { return nil }
-        let maximumBytes = UInt64(maximumIndexTailBytes)
-        let startOffset = endOffset > maximumBytes ? endOffset - maximumBytes : 0
-        let readOffset = startOffset > 0 ? startOffset - 1 : 0
-        let readCount = Int(endOffset - readOffset)
-        guard (try? handle.seek(toOffset: readOffset)) != nil,
-              var data = try? handle.read(upToCount: readCount),
-              !data.isEmpty
-        else {
-            return nil
-        }
-
-        if startOffset > 0 {
-            if data.first == 0x0A {
-                data.removeFirst()
-            } else if let newline = data.firstNewline {
-                data.removeSubrange(data.startIndex...newline)
-            } else {
-                return nil
-            }
-        }
-        return data
     }
 
     public static func threadID(fromCanonicalSessionID sessionID: String) -> String? {

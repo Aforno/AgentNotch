@@ -19,4 +19,19 @@ final class DataJSONLinesTests: XCTestCase {
             ["keep id"]
         )
     }
+
+    func testJSONLTailKeepsRecordStartingAtCutAndDropsPartialOne() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jsonl-tail-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("aaa\nbbb\nccc".utf8).write(to: url)
+
+        func tail(_ maxBytes: Int) -> String? {
+            Data.jsonlTail(at: url, maxBytes: maxBytes).map { String(decoding: $0, as: UTF8.self) }
+        }
+        XCTAssertEqual(tail(7), "bbb\nccc")
+        XCTAssertEqual(tail(6), "ccc")
+        XCTAssertEqual(tail(100), "aaa\nbbb\nccc")
+        XCTAssertNil(tail(2))
+    }
 }

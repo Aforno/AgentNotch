@@ -32,24 +32,10 @@ public enum CodexApprovalContextResolver {
     }
 
     private static func reviewer(inTranscriptAt url: URL, matchingTurnId: String) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-
-        guard let endOffset = try? handle.seekToEnd() else { return nil }
-        let maximumBytes = UInt64(maximumTranscriptTailBytes)
-        let startOffset = endOffset > maximumBytes ? endOffset - maximumBytes : 0
-        guard (try? handle.seek(toOffset: startOffset)) != nil,
-              var data = try? handle.readToEnd(),
+        guard let data = Data.jsonlTail(at: url, maxBytes: maximumTranscriptTailBytes),
               !data.isEmpty
         else {
             return nil
-        }
-
-        // If the tail begins midway through a JSONL record, discard that
-        // partial record before decoding from newest to oldest.
-        if startOffset > 0 {
-            guard let newline = data.firstNewline else { return nil }
-            data.removeSubrange(data.startIndex...newline)
         }
 
         // Transcripts are dominated by large tool-output records. Decode only
