@@ -61,8 +61,10 @@ read `https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml`
 Both `Release` and `Nightly` set `AGENT_NOTCH_BUILD_NUMBER` to Unix time in
 seconds when packaging starts. This becomes `CFBundleVersion`, replacing the
 independent `GITHUB_RUN_NUMBER` counters. Sparkle compares this value, so both
-workflows use the same time-based ordering. Nightly apps still check the stable
-appcast and can update to a stable build packaged later.
+workflows use the same time-based ordering. Apps on the Stable channel check the
+stable appcast; apps on the Nightly channel check the nightly appcast. Switching
+from Nightly back to Stable takes effect at the next stable release, since
+Sparkle does not downgrade.
 
 The `Release` workflow requires these repository Actions secrets:
 
@@ -132,12 +134,17 @@ Automated nightly builds run via `.github/workflows/nightly.yml`:
   to rebuild an already published commit. Set it to `false` to use the same skip
   check as scheduled runs.
 - Packaging creates a versioned ZIP in `dist/` and copies it to
-  `Agent-Notch-Nightly-macOS-arm64.zip`. Only the fixed Nightly ZIP and its
-  `.sha256` checksum are published to the rolling `nightly` GitHub prerelease
-  and retained in the Actions artifact for 7 days. Obsolete versioned release
-  assets are removed.
+  `Agent-Notch-Nightly-macOS-arm64.zip`. Only the fixed Nightly ZIP, its
+  `.sha256` checksum, and (for signed builds) `appcast.xml` are published to the
+  rolling `nightly` GitHub prerelease. The ZIP and checksum are also kept in the
+  Actions artifact for 7 days. Obsolete versioned release assets are removed.
 - Signs and notarizes if Developer ID credentials are configured in repository
   secrets; falls back to an ad-hoc signed preview if secrets are unavailable or
   if opted out via `NIGHTLY_RELEASE_MODE=unsigned` or
   `RELEASE_MODE=unsigned-prerelease`.
-- Does not modify `Casks/agent-notch.rb` or publish a Sparkle appcast.
+- Signed nightlies also publish a Sparkle `appcast.xml` to the `nightly`
+  release when `SPARKLE_ED_PRIVATE_KEY` is set. Apps on the Nightly update
+  channel (Settings → General) read
+  `https://github.com/Aforno/AgentNotch/releases/download/nightly/appcast.xml`.
+  Ad-hoc nightlies remove that appcast, because Sparkle would reject the build.
+- Does not modify `Casks/agent-notch.rb`.

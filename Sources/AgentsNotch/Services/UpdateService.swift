@@ -18,6 +18,7 @@ final class UpdateService {
 
     private var updater: SPUUpdater?
     private var driver: SparkleUpdateDriver?
+    private let feedDelegate = UpdateChannelFeedDelegate()
     private var foundReply: ((SPUUserUpdateChoice) -> Void)?
     private var installReply: ((SPUUserUpdateChoice) -> Void)?
     private var started = false
@@ -52,7 +53,7 @@ final class UpdateService {
             hostBundle: .main,
             applicationBundle: .main,
             userDriver: driver,
-            delegate: nil
+            delegate: feedDelegate
         )
         updater.automaticallyDownloadsUpdates = false
         updater.sendsSystemProfile = false
@@ -81,6 +82,13 @@ final class UpdateService {
         if enabled {
             updater?.checkForUpdatesInBackground()
         }
+    }
+
+    /// Re-checks against the newly selected feed. The channel itself is read from defaults.
+    func channelDidChange() {
+        start()
+        guard let updater, updater.automaticallyChecksForUpdates else { return }
+        updater.checkForUpdatesInBackground()
     }
 
     func check() {

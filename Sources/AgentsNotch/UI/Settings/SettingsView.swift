@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage(AppPreferences.Key.notchEnabled) private var notchEnabled = true
     @AppStorage(AppPreferences.Key.showVirtualNotch) private var showVirtualNotch = false
     @AppStorage(AppPreferences.Key.automaticallyCheckForUpdates) private var automaticallyCheckForUpdates = true
+    @AppStorage(AppPreferences.Key.updateChannel) private var updateChannel = UpdateChannel.stable.rawValue
     @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
     @AppStorage(AppPreferences.Key.answerFromNotchEnabled) private var answerFromNotchEnabled = false
     @AppStorage(AppPreferences.Key.globalActivityShortcut) private var globalActivityShortcut = GlobalActivityShortcut.off.rawValue
@@ -44,6 +45,7 @@ struct SettingsView: View {
         .onChange(of: automaticallyCheckForUpdates) { _, enabled in
             runtime.updates.setAutomaticChecksEnabled(enabled)
         }
+        .onChange(of: updateChannel) { _, _ in runtime.updates.channelDidChange() }
         .onChange(of: displayPreference) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: notchEnabled) { _, _ in runtime.refreshNotchSurface() }
         .onChange(of: showVirtualNotch) { _, _ in runtime.refreshNotchSurface() }
@@ -72,6 +74,7 @@ struct SettingsView: View {
                 notchEnabled: $notchEnabled,
                 showVirtualNotch: $showVirtualNotch,
                 automaticallyCheckForUpdates: $automaticallyCheckForUpdates,
+                updateChannel: $updateChannel,
                 displayPreference: $displayPreference,
                 globalActivityShortcut: $globalActivityShortcut,
                 launchError: launchError
