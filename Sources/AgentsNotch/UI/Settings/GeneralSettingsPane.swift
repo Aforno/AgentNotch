@@ -7,6 +7,7 @@ struct GeneralSettingsPane: View {
     let notchEnabled: Binding<Bool>
     let showVirtualNotch: Binding<Bool>
     let automaticallyCheckForUpdates: Binding<Bool>
+    let updateChannel: Binding<String>
     let displayPreference: Binding<String>
     let globalActivityShortcut: Binding<String>
     let launchError: String?
@@ -25,6 +26,7 @@ struct GeneralSettingsPane: View {
                     notchEnabled: notchEnabled,
                     showVirtualNotch: showVirtualNotch,
                     automaticallyCheckForUpdates: automaticallyCheckForUpdates,
+                    updateChannel: updateChannel,
                     displayPreference: displayPreference,
                     globalActivityShortcut: globalActivityShortcut,
                     updates: runtime.updates

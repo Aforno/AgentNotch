@@ -7,6 +7,7 @@ struct ApplicationSettingsSection: View {
     let notchEnabled: Binding<Bool>
     let showVirtualNotch: Binding<Bool>
     let automaticallyCheckForUpdates: Binding<Bool>
+    let updateChannel: Binding<String>
     let displayPreference: Binding<String>
     let globalActivityShortcut: Binding<String>
     let updates: UpdateService
@@ -37,6 +38,12 @@ struct ApplicationSettingsSection: View {
                 title: "App update checks",
                 detail: "Check for Agent Notch updates in the background. Downloads and installs only when you ask.",
                 isOn: automaticallyCheckForUpdates
+            )
+            SettingsMenuRow(
+                title: "Update channel",
+                detail: "Nightly builds come from the latest main branch and may be unstable.",
+                selection: updateChannel,
+                options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
             )
             SettingsMenuRow(
                 title: "Show the notch on",

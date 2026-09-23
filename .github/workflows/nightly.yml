@@ -122,6 +122,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
@@ -143,6 +144,13 @@ jobs:
           fi
           cp "dist/Agent-Notch-$VERSION-macOS-arm64.zip" "dist/Agent-Notch-Nightly-macOS-arm64.zip"
           (cd dist && shasum -a 256 "Agent-Notch-Nightly-macOS-arm64.zip" > "Agent-Notch-Nightly-macOS-arm64.zip.sha256")
+          # The in-app Nightly channel reads this feed. Sparkle rejects ad-hoc builds,
+          # so unsigned nightlies publish no appcast.
+          if [[ "$CAN_SIGN" == "true" && -n "${SPARKLE_ED_PRIVATE_KEY:-}" ]]; then
+            ./script/generate_appcast.sh \
+              --archive "dist/Agent-Notch-Nightly-macOS-arm64.zip" \
+              --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/"
+          fi
 
       - name: Publish rolling nightly GitHub release
         if: steps.check_commits.outputs.skip != 'true'
@@ -155,6 +163,10 @@ jobs:
           SHORT_SHA="${GITHUB_SHA:0:7}"
           NIGHTLY_ARCHIVE="dist/Agent-Notch-Nightly-macOS-arm64.zip"
           NOTES_FILE="$RUNNER_TEMP/nightly-release-notes.md"
+          ASSETS_TO_PUBLISH=("$NIGHTLY_ARCHIVE" "$NIGHTLY_ARCHIVE.sha256")
+          if [[ -f dist/appcast.xml ]]; then
+            ASSETS_TO_PUBLISH+=("dist/appcast.xml")
+          fi
 
           cat > "$NOTES_FILE" <<EOF
           Automated nightly build for commit [\`${SHORT_SHA}\`](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) built on ${DATE}.
@@ -186,13 +198,11 @@ jobs:
               --prerelease
             gh release upload nightly \
               --repo "$GITHUB_REPOSITORY" \
-              "$NIGHTLY_ARCHIVE" \
-              "$NIGHTLY_ARCHIVE.sha256" \
+              "${ASSETS_TO_PUBLISH[@]}" \
               --clobber
           else
             gh release create nightly \
-              "$NIGHTLY_ARCHIVE" \
-              "$NIGHTLY_ARCHIVE.sha256" \
+              "${ASSETS_TO_PUBLISH[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Agent Notch Nightly ($DATE)" \
@@ -200,11 +210,17 @@ jobs:
               --prerelease
           fi
 
-          # Remove assets left by older workflows that published versioned names.
+          # Remove assets left by older workflows that published versioned names, and
+          # any appcast that would point at a ZIP this run replaced without signing.
           ASSETS="$(gh release view nightly --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
           while IFS= read -r asset; do
             case "$asset" in
               Agent-Notch-Nightly-macOS-arm64.zip|Agent-Notch-Nightly-macOS-arm64.zip.sha256) ;;
+              appcast.xml)
+                if [[ ! -f dist/appcast.xml ]]; then
+                  gh release delete-asset nightly "$asset" --repo "$GITHUB_REPOSITORY" --yes
+                fi
+                ;;
               Agent-Notch-*-macOS-arm64.zip|Agent-Notch-*-macOS-arm64.zip.sha256)
                 gh release delete-asset nightly "$asset" --repo "$GITHUB_REPOSITORY" --yes
                 ;;

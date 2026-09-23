@@ -7,6 +7,7 @@ VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 ARCHIVE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.zip"
 OUTPUT=""
 ED_KEY_FILE=""
+DOWNLOAD_PREFIX=""
 SPARKLE_VERSION="2.9.6"
 SPARKLE_TARBALL_SHA256="52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-Aforno/AgentNotch}"
@@ -14,6 +15,7 @@ GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-Aforno/AgentNotch}"
 usage() {
   cat >&2 <<'USAGE'
 usage: generate_appcast.sh [--archive PATH] [--output PATH] [--ed-key-file PATH]
+                           [--download-url-prefix URL]
 USAGE
 }
 
@@ -32,6 +34,11 @@ while [[ $# -gt 0 ]]; do
     --ed-key-file)
       [[ $# -ge 2 ]] || { usage; exit 2; }
       ED_KEY_FILE="$2"
+      shift 2
+      ;;
+    --download-url-prefix)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      DOWNLOAD_PREFIX="$2"
       shift 2
       ;;
     --version)
@@ -103,7 +110,9 @@ fi
 chmod +x "$GENERATE_APPCAST"
 
 cp "$ARCHIVE" "$ARCHIVES_DIR/$(basename "$ARCHIVE")"
-DOWNLOAD_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/"
+if [[ -z "$DOWNLOAD_PREFIX" ]]; then
+  DOWNLOAD_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/"
+fi
 printf '%s\n' "$PRIVATE_KEY" | "$GENERATE_APPCAST" \
   --ed-key-file - \
   --maximum-deltas 0 \

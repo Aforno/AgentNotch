@@ -8,6 +8,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Settings → General has an Update channel picker. Nightly checks the signed
+  appcast that the nightly workflow now publishes to the rolling `nightly`
+  release. Stable stays the default.
 - Observer-only Google Antigravity integration. Install writes a named
   `agentnotch` hook to `~/.gemini/config/hooks.json` and maps PreInvocation,
   PostToolUse, and Stop. PreToolUse is omitted because a missing `decision`

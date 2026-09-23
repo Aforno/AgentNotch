@@ -16,6 +16,7 @@ enum AppPreferences {
         static let notchEnabled = "notchEnabled"
         static let privacyModeEnabled = "privacyModeEnabled"
         static let showVirtualNotch = "showVirtualNotch"
+        static let updateChannel = "updateChannel"
     }
 
     static var registeredDefaults: [String: Any] {
@@ -33,6 +34,7 @@ enum AppPreferences {
             Key.notchEnabled: true,
             Key.privacyModeEnabled: false,
             Key.showVirtualNotch: false,
+            Key.updateChannel: UpdateChannel.stable.rawValue,
         ]
         #if DEBUG
         values[Key.debugMode] = false
