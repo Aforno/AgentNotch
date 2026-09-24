@@ -101,12 +101,17 @@ struct NotchRootView: View {
            runtime.canAnswer(session) {
             return .temporary(session.id)
         }
+        // Keep the finish action under the pointer until it expires or is
+        // clicked, while allowing attention requests to take precedence.
+        if focusedAttentionSession == nil,
+           let finishedFlashID,
+           let session = activity.session(id: finishedFlashID),
+           session.state == .completed || session.state == .failed {
+            return .finished(finishedFlashID)
+        }
         if isHovering { return .list }
         if let session = focusedAttentionSession {
             return .temporary(session.id)
-        }
-        if let finishedFlashID, activity.session(id: finishedFlashID) != nil {
-            return .finished(finishedFlashID)
         }
         return .collapsed
     }
@@ -218,6 +223,9 @@ struct NotchRootView: View {
             outsideClickMonitor.stop()
         }
         .onChange(of: snapshot.activeSessions.map(\.id)) { previous, current in
+            if let finishedFlashID, current.contains(finishedFlashID) {
+                dismissFinishedFlash()
+            }
             announceFinishedSession(endedIDs: Set(previous).subtracting(current))
         }
         .onChange(of: selectedSessionID, initial: true) { _, sessionID in
