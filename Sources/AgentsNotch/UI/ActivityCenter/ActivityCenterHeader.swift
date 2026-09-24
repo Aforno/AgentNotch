@@ -15,7 +15,7 @@ struct ActivityCenterHeader: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Activity")
                     .font(NotchWindowFont.display)
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(NotchWindowPalette.primaryText)
                 Text(sessionCount == 1 ? "1 session on this Mac" : "\(sessionCount) sessions on this Mac")
                     .font(NotchWindowFont.footnote)
                     .foregroundStyle(NotchWindowPalette.secondaryText)
@@ -24,14 +24,14 @@ struct ActivityCenterHeader: View {
             ActivityMetric(
                 title: "Active",
                 value: activeCount,
-                color: .blue,
+                color: NotchWindowPalette.active,
                 isSelected: statusFilter.wrappedValue == .active,
                 action: { toggleStatusFilter(.active) }
             )
             ActivityMetric(
                 title: "Attention",
                 value: attentionCount,
-                color: .orange,
+                color: NotchWindowPalette.attention,
                 isSelected: statusFilter.wrappedValue == .attention,
                 action: { toggleStatusFilter(.attention) }
             )
@@ -70,11 +70,11 @@ struct ActivityCenterEmptyDetail: View {
     var body: some View {
         VStack(spacing: 10) {
             NotchShape(bottomRadius: 12)
-                .fill(.white.opacity(0.09))
+                .fill(NotchWindowPalette.raisedStrong)
                 .frame(width: 66, height: 34)
             Text("Select a session")
                 .font(NotchWindowFont.title)
-                .foregroundStyle(.white.opacity(0.82))
+                .foregroundStyle(NotchWindowPalette.primaryText)
             Text("Plans, workflows, files, and recent events appear here.")
                 .font(NotchWindowFont.caption)
                 .foregroundStyle(NotchWindowPalette.secondaryText)

@@ -12,17 +12,17 @@ struct ActivityMetric: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Circle()
-                    .fill(value > 0 ? color : Color.white.opacity(0.18))
+                    .fill(value > 0 ? color : NotchWindowPalette.quaternaryText)
                     .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
 
                 Text(title)
                     .font(NotchWindowFont.caption)
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.92) : NotchWindowPalette.secondaryText)
+                    .foregroundStyle(isSelected ? NotchWindowPalette.primaryText : NotchWindowPalette.secondaryText)
 
                 Text("\(value)")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(value > 0 ? 0.9 : 0.4))
+                    .font(NotchWindowFont.counter)
+                    .foregroundStyle(value > 0 ? NotchWindowPalette.primaryText : NotchWindowPalette.tertiaryText)
                     .monospacedDigit()
             }
             .padding(.horizontal, 9)
@@ -57,33 +57,27 @@ struct ActivitySessionRow: View {
             ProviderIconView(provider: session.provider, size: 18)
                 .frame(width: 22)
 
+            // The provider icon already names the provider, so the second line
+            // carries only what distinguishes this session.
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.task)
                     .font(NotchWindowFont.bodyEmphasis)
-                    .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.82))
+                    .foregroundStyle(NotchWindowPalette.primaryText)
                     .lineLimit(1)
 
-                HStack(spacing: 5) {
-                    Text(session.provider.displayName)
-                    Text("·")
-                        .foregroundStyle(NotchWindowPalette.tertiaryText)
-                    Text(rowDetail)
-                        .lineLimit(1)
-                }
-                .font(NotchWindowFont.footnote)
-                .foregroundStyle(NotchWindowPalette.secondaryText)
+                Text(rowDetail)
+                    .font(NotchWindowFont.footnote)
+                    .foregroundStyle(NotchWindowPalette.secondaryText)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 6)
 
             VStack(alignment: .trailing, spacing: 3) {
                 StateIndicator(state: session.state, size: 9)
-                Text(session.updatedAt, style: .relative)
-                    .font(NotchWindowFont.footnote)
-                    .foregroundStyle(NotchWindowPalette.tertiaryText)
-                    .lineLimit(1)
+                ElapsedLabel(since: session.updatedAt)
             }
-            .frame(minWidth: 56, alignment: .trailing)
+            .frame(minWidth: 28, alignment: .trailing)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)

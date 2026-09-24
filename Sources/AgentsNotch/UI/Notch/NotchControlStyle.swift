@@ -65,28 +65,28 @@ struct NotchCapsuleChipStyle: ButtonStyle {
 
 /// Emphasis levels for the notch's committed actions (reply, open in app).
 enum NotchActionEmphasis {
-    /// The default action. Uses the system accent rather than orange so that
+    /// The default action. Uses the brand hue rather than orange so that
     /// orange keeps meaning "needs attention" and nothing else.
     case primary
     case neutral
 
     var fill: Color {
         switch self {
-        case .primary: Color.accentColor.opacity(NotchAccentContrast.primaryFillOpacity)
+        case .primary: NotchWindowPalette.active.opacity(NotchAccentContrast.primaryFillOpacity)
         case .neutral: NotchWindowPalette.raisedStrong
         }
     }
 
     var hoverFill: Color {
         switch self {
-        case .primary: Color.accentColor
+        case .primary: NotchWindowPalette.active
         case .neutral: NotchWindowPalette.raisedPressed
         }
     }
 
     var pressedFill: Color {
         switch self {
-        case .primary: Color.accentColor.opacity(0.72)
+        case .primary: NotchWindowPalette.active.opacity(0.72)
         case .neutral: NotchWindowPalette.raised
         }
     }
@@ -95,7 +95,7 @@ enum NotchActionEmphasis {
         isEnabled: Bool,
         isPressed: Bool,
         isHovering: Bool,
-        accent: NSColor = .controlAccentColor
+        accent: NSColor = NotchBrand.active
     ) -> Color {
         guard isEnabled else { return NotchWindowPalette.tertiaryText }
         switch self {

@@ -20,12 +20,29 @@ enum NotchWindowPalette {
     static let floatingHover = Color(red: 0.19, green: 0.19, blue: 0.21)
 
     static let hairline = Color.white.opacity(0.08)
+    /// Control outlines at rest and under the pointer.
+    static let border = Color.white.opacity(0.08)
+    static let borderStrong = Color.white.opacity(0.16)
 
     static let primaryText = Color.white.opacity(0.92)
     static let secondaryText = Color.white.opacity(0.68)
     static let tertiaryText = Color.white.opacity(0.5)
     /// Decorative chrome (separator dots, inactive glyphs) only.
     static let quaternaryText = Color.white.opacity(0.32)
+
+    /// The five state hues. `active` is the product's signature colour and
+    /// also fills primary actions; the other three keep one meaning each.
+    static let active = Color(nsColor: NotchBrand.active)
+    static let attention = Color.orange
+    static let success = Color.green
+    static let failure = Color.red
+}
+
+/// AppKit-side brand colours, for code that needs an `NSColor`.
+enum NotchBrand {
+    /// A cool azure, bright enough to read as "working" on true black and
+    /// distinct from the system accent the user may have picked.
+    static let active = NSColor(srgbRed: 0.33, green: 0.71, blue: 1.0, alpha: 1)
 }
 
 /// Foreground for accent-filled notch actions. Each interaction fill is
@@ -95,8 +112,9 @@ enum NotchWindowMetrics {
     static let contentInset: CGFloat = 20
 }
 
-/// One type scale for every surface. Sizes stop at 10pt: below that, the
+/// One type scale for every surface. Text sizes stop at 10pt: below that, the
 /// muted text tones this app uses stop being readable on a laptop panel.
+/// `glyph` and `emptyStateIcon` are for SF Symbols only, never for text.
 enum NotchWindowFont {
     static let display = Font.system(size: 17, weight: .semibold)
     static let title = Font.system(size: 15, weight: .semibold)
@@ -113,11 +131,16 @@ enum NotchWindowFont {
     static let mono = Font.system(size: 10, weight: .regular, design: .monospaced)
     static let monoCaption = Font.system(size: 11, weight: .regular, design: .monospaced)
     static let counter = Font.system(size: 11, weight: .semibold, design: .rounded)
+    /// Settings row titles and floating-menu items, one step above body.
+    static let label = Font.system(size: 13, weight: .medium)
+    /// Disclosure chevrons and chip glyphs that sit beside footnote text.
+    static let glyph = Font.system(size: 8, weight: .semibold)
+    static let emptyStateIcon = Font.system(size: 20, weight: .light)
 }
 
 /// How an agent state reads on screen. Five hues only: idle, active,
-/// attention, success, failure. Thinking, editing, and running share active
-/// blue and are distinguished by `systemImage`, so the state survives greyscale.
+/// attention, success, failure. Thinking, editing, and running share the
+/// active hue and are distinguished by `systemImage`, so the state survives greyscale.
 struct AgentStatePresentation {
     let color: Color
     /// Empty when `showsSpinner` is true.
@@ -128,17 +151,17 @@ struct AgentStatePresentation {
 func agentStatePresentation(for state: AgentState) -> AgentStatePresentation {
     switch state {
     case .waitingForUser:
-        AgentStatePresentation(color: .orange, systemImage: "questionmark", showsSpinner: false)
+        AgentStatePresentation(color: NotchWindowPalette.attention, systemImage: "questionmark", showsSpinner: false)
     case .failed:
-        AgentStatePresentation(color: .red, systemImage: "xmark", showsSpinner: false)
+        AgentStatePresentation(color: NotchWindowPalette.failure, systemImage: "xmark", showsSpinner: false)
     case .completed:
-        AgentStatePresentation(color: .green, systemImage: "checkmark", showsSpinner: false)
+        AgentStatePresentation(color: NotchWindowPalette.success, systemImage: "checkmark", showsSpinner: false)
     case .editing:
-        AgentStatePresentation(color: .blue, systemImage: "pencil", showsSpinner: false)
+        AgentStatePresentation(color: NotchWindowPalette.active, systemImage: "pencil", showsSpinner: false)
     case .thinking:
-        AgentStatePresentation(color: .blue, systemImage: "ellipsis", showsSpinner: false)
+        AgentStatePresentation(color: NotchWindowPalette.active, systemImage: "ellipsis", showsSpinner: false)
     case .starting, .running, .executingTool:
-        AgentStatePresentation(color: .blue, systemImage: "", showsSpinner: true)
+        AgentStatePresentation(color: NotchWindowPalette.active, systemImage: "", showsSpinner: true)
     // Unknown is a static refresh glyph so reconnecting does not look like running.
     case .unknown:
         AgentStatePresentation(
@@ -167,10 +190,10 @@ enum StepStatusStyle {
     static func color(for status: AgentStepStatus) -> Color {
         switch status {
         case .pending: NotchWindowPalette.quaternaryText
-        case .inProgress: .blue
-        case .completed: .green
-        case .failed: .red
-        case .blocked: .orange
+        case .inProgress: NotchWindowPalette.active
+        case .completed: NotchWindowPalette.success
+        case .failed: NotchWindowPalette.failure
+        case .blocked: NotchWindowPalette.attention
         }
     }
 

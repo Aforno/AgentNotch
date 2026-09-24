@@ -43,6 +43,10 @@ enum DynamicIslandSpacing {
 /// SwiftUI state makes display adaptation and content-driven height testable.
 enum NotchLayoutMetrics {
     static let temporaryPreferredWidth: CGFloat = 392
+    static let finishedPreferredWidth: CGFloat = 320
+    /// One line of text plus the expanded top and bottom insets.
+    static let finishedContentHeight: CGFloat = 44
+    static let finishedFlashDuration = Duration.milliseconds(2800)
     static let listPreferredWidth: CGFloat = 424
     static let detailPreferredWidth: CGFloat = 440
     static let maximumDetailContentHeight: CGFloat = 420

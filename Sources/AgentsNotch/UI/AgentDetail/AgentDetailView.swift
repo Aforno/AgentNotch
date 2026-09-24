@@ -59,7 +59,7 @@ struct AgentDetailView: View {
             Text(session.state.displayName)
                 .font(NotchWindowFont.footnoteEmphasis)
                 .foregroundStyle(
-                    session.needsAttention ? .orange : NotchWindowPalette.tertiaryText
+                    session.needsAttention ? NotchWindowPalette.attention : NotchWindowPalette.tertiaryText
                 )
         }
         .padding(.horizontal, DynamicIslandSpacing.outer)

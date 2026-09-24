@@ -4,6 +4,7 @@ import SwiftUI
 private enum NotchPresentation: Equatable {
     case collapsed
     case temporary(String)
+    case finished(String)
     case list
     case detail(String)
 }
@@ -60,6 +61,11 @@ struct NotchRootView: View {
     @State private var sizeGeneration = 0
     @State private var detailContentHeight = NotchLayoutMetrics.minimumDetailContentHeight
     @State private var waitingContentHeight = NotchLayoutMetrics.minimumWaitingContentHeight
+    /// The top-level session whose completion is briefly announced.
+    @State private var finishedFlashID: String?
+    @State private var finishedFlashTask: Task<Void, Never>?
+    /// 1 at the instant a new prompt arrives, eased to 0: a one-shot glow.
+    @State private var attentionGlow: Double = 0
     @AppStorage(AppPreferences.Key.animationsEnabled) private var animationsEnabled = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -99,6 +105,9 @@ struct NotchRootView: View {
         if let session = focusedAttentionSession {
             return .temporary(session.id)
         }
+        if let finishedFlashID, activity.session(id: finishedFlashID) != nil {
+            return .finished(finishedFlashID)
+        }
         return .collapsed
     }
 
@@ -132,6 +141,12 @@ struct NotchRootView: View {
                 width: expandedWidth(preferred: NotchLayoutMetrics.temporaryPreferredWidth),
                 height: geometry.notchHeight + extraHeight,
                 radius: 18
+            )
+        case .finished:
+            return NotchLayout(
+                width: expandedWidth(preferred: NotchLayoutMetrics.finishedPreferredWidth),
+                height: geometry.notchHeight + NotchLayoutMetrics.finishedContentHeight,
+                radius: 16
             )
         case .list:
             let contentHeight = DynamicIslandSpacing.expandedTop
@@ -199,7 +214,11 @@ struct NotchRootView: View {
         }
         .onDisappear {
             hoverIntentTask?.cancel()
+            finishedFlashTask?.cancel()
             outsideClickMonitor.stop()
+        }
+        .onChange(of: snapshot.activeSessions.map(\.id)) { previous, current in
+            announceFinishedSession(endedIDs: Set(previous).subtracting(current))
         }
         .onChange(of: selectedSessionID, initial: true) { _, sessionID in
             syncOutsideClickMonitor(isPinned: sessionID != nil)
@@ -212,7 +231,10 @@ struct NotchRootView: View {
                   !isVisibleDetailSession(selectedSessionID) else { return }
             self.selectedSessionID = nil
         }
-        .onChange(of: snapshot.attentionSessions.map(\.id)) { _, ids in
+        .onChange(of: snapshot.attentionSessions.map(\.id)) { previous, ids in
+            if !Set(ids).subtracting(previous).isEmpty {
+                pulseAttention()
+            }
             // Forget the paged session once it stops waiting, so a later
             // request from it does not jump ahead of the newest one.
             guard let pagedAttentionID, !ids.contains(pagedAttentionID) else { return }
@@ -229,11 +251,14 @@ struct NotchRootView: View {
 
     private var notchSurface: some View {
         ZStack(alignment: .top) {
+            // No outline: the island should read as part of the bezel, not
+            // as a popover. The only edge light is the attention glow.
             NotchShape(bottomRadius: shownRadius)
                 .fill(NotchWindowPalette.background)
                 .overlay {
                     NotchShape(bottomRadius: shownRadius)
-                        .stroke(Color.white.opacity(presentation == .collapsed ? 0 : 0.12), lineWidth: 0.6)
+                        .stroke(NotchWindowPalette.attention.opacity(0.9 * attentionGlow), lineWidth: 3)
+                        .blur(radius: 2)
                 }
 
             content
@@ -252,6 +277,7 @@ struct NotchRootView: View {
         switch presentation {
         case .collapsed: return "collapsed"
         case .temporary: return "temporary"
+        case let .finished(id): return "finished-\(id)"
         case .list: return "list"
         case let .detail(id): return "detail-\(id)"
         }
@@ -261,7 +287,7 @@ struct NotchRootView: View {
         switch presentation {
         case .collapsed, .list:
             return 0
-        case .temporary, .detail:
+        case .temporary, .finished, .detail:
             return geometry.notchHeight + DynamicIslandSpacing.expandedTop
         }
     }
@@ -364,6 +390,19 @@ struct NotchRootView: View {
                 }
             }
 
+        case let .finished(id):
+            if let session = activity.session(id: id) {
+                Button {
+                    dismissFinishedFlash()
+                    runtime.presentSession(session.id)
+                } label: {
+                    FinishedFlashView(session: session)
+                        .frame(height: NotchLayoutMetrics.finishedContentHeight - DynamicIslandSpacing.expandedTop * 2)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
         case .list:
             AgentListView(
                 sessions: visibleSessions,
@@ -446,6 +485,43 @@ struct NotchRootView: View {
             transaction.disablesAnimations = true
             withTransaction(transaction, change)
         }
+    }
+
+    /// Announces the newest top-level session that just completed or failed.
+    /// Subagents and helpers finish constantly and would make this noise.
+    private func announceFinishedSession(endedIDs: Set<String>) {
+        let finished = endedIDs
+            .compactMap { activity.session(id: $0) }
+            .filter { !$0.isSubagent && !$0.isInternalHelper }
+            .filter { $0.state == .completed || $0.state == .failed }
+            .max { $0.updatedAt < $1.updatedAt }
+        guard let finished else { return }
+
+        finishedFlashTask?.cancel()
+        withPresentationAnimation { finishedFlashID = finished.id }
+        finishedFlashTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: NotchLayoutMetrics.finishedFlashDuration)
+            } catch {
+                return
+            }
+            dismissFinishedFlash()
+        }
+    }
+
+    private func dismissFinishedFlash() {
+        finishedFlashTask?.cancel()
+        guard finishedFlashID != nil else { return }
+        withPresentationAnimation { finishedFlashID = nil }
+    }
+
+    /// One soft orange pass around the island when a new prompt arrives.
+    private func pulseAttention() {
+        guard motionEnabled else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { attentionGlow = 1 }
+        withAnimation(.easeOut(duration: 1.4).delay(0.25)) { attentionGlow = 0 }
     }
 
     /// Only active states reach the collapsed notch (failed and completed

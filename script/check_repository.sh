@@ -126,5 +126,22 @@ if rg -n --hidden \
   exit 1
 fi
 
+# UI code draws colours and type from NotchWindowStyle.swift. Raw white
+# opacities, literal font sizes, and system hues drift into near-duplicate
+# greys and one-off sizes, so they are allowed only in that file.
+style_matches="$(
+  rg -n \
+    -g '*.swift' \
+    -g '!NotchWindowStyle.swift' \
+    '\.system\(size: *[0-9]|white\.opacity\(|Color\.accentColor|[(: ]\.(orange|green|red|blue)\b' \
+    Sources/AgentsNotch/UI \
+    || true
+)"
+if [[ -n "$style_matches" ]]; then
+  printf '%s\n' "$style_matches"
+  echo "raw colour or font size in UI code; use NotchWindowPalette / NotchWindowFont" >&2
+  exit 1
+fi
+
 git diff --check
 echo "Repository hygiene checks passed"

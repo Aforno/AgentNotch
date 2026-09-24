@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct GeneralSettingsPane: View {
@@ -19,20 +20,14 @@ struct GeneralSettingsPane: View {
                     title: "General",
                     detail: "Control how Agent Notch starts and presents activity."
                 )
-                runtimeHealthMessages
-                ApplicationSettingsSection(
-                    launchAtLogin: launchAtLogin,
-                    animationsEnabled: animationsEnabled,
-                    notchEnabled: notchEnabled,
-                    showVirtualNotch: showVirtualNotch,
-                    automaticallyCheckForUpdates: automaticallyCheckForUpdates,
-                    updateChannel: updateChannel,
-                    displayPreference: displayPreference,
-                    globalActivityShortcut: globalActivityShortcut,
-                    updates: runtime.updates
-                )
-                if let launchError {
-                    SettingsMessage(text: launchError, symbol: "exclamationmark.triangle.fill", color: .red)
+                RuntimeHealthBanner(runtime: runtime)
+                notchSection
+                systemSection
+                updatesSection
+                HStack {
+                    Spacer()
+                    Button("Quit Agent Notch") { NSApplication.shared.terminate(nil) }
+                        .buttonStyle(NotchPillButtonStyle())
                 }
             }
             .settingsPanePadding()
@@ -40,19 +35,58 @@ struct GeneralSettingsPane: View {
         .background(NotchWindowPalette.background)
     }
 
-    @ViewBuilder
-    private var runtimeHealthMessages: some View {
-        if runtime.socketError != nil
-            || runtime.persistenceError != nil
-            || runtime.persistenceRecoveryNotice != nil
-            || runtime.activity.protocolMismatchDetected
-        {
-            RuntimeHealthMessages(
-                socketError: runtime.socketError,
-                persistenceError: runtime.persistenceError,
-                persistenceRecoveryNotice: runtime.persistenceRecoveryNotice,
-                protocolMismatchDetected: runtime.activity.protocolMismatchDetected
+    private var notchSection: some View {
+        SettingsSection(title: "Notch") {
+            SettingsToggleRow(title: "Show notch surface", isOn: notchEnabled)
+            SettingsMenuRow(
+                title: "Show the notch on",
+                selection: displayPreference,
+                options: DisplayPreference.allCases.map { ($0.rawValue, $0.title) }
             )
+            SettingsToggleRow(
+                title: "Virtual notch",
+                detail: "For displays without a camera housing.",
+                isOn: showVirtualNotch
+            )
+            SettingsToggleRow(title: "Animate transitions", isOn: animationsEnabled)
+        }
+    }
+
+    private var systemSection: some View {
+        SettingsSection(title: "System") {
+            SettingsToggleRow(title: "Launch at login", isOn: launchAtLogin)
+            SettingsMenuRow(
+                title: "Global activity shortcut",
+                detail: "Opens Activity Center from any app.",
+                selection: globalActivityShortcut,
+                options: GlobalActivityShortcut.allCases.map { ($0.rawValue, $0.title) }
+            )
+            if let launchError {
+                SettingsMessage(
+                    text: launchError,
+                    symbol: "exclamationmark.triangle.fill",
+                    color: NotchWindowPalette.failure
+                )
+            }
+        }
+    }
+
+    private var updatesSection: some View {
+        SettingsSection(title: "Updates") {
+            SettingsToggleRow(
+                title: "Check automatically",
+                detail: "Downloads and installs only when you ask.",
+                isOn: automaticallyCheckForUpdates
+            )
+            SettingsMenuRow(
+                title: "Update channel",
+                detail: "Nightly builds track main and may be unstable.",
+                selection: updateChannel,
+                options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
+            )
+            SettingsControlRow(title: "Version \(runtime.updates.currentVersion)") {
+                SettingsUpdateControl(updates: runtime.updates)
+            }
         }
     }
 }

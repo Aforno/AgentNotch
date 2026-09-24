@@ -191,7 +191,7 @@ struct WaitingReplyView: View {
             Text("\(waitingPosition)/\(waitingCount)")
                 .font(NotchWindowFont.footnoteEmphasis)
                 .monospacedDigit()
-                .foregroundStyle(.orange)
+                .foregroundStyle(NotchWindowPalette.attention)
                 .accessibilityLabel("\(waitingPosition) of \(waitingCount) waiting")
             pagerButton("chevron.right", label: "Next waiting agent") { onPage(1) }
         }
@@ -200,7 +200,7 @@ struct WaitingReplyView: View {
     private func pagerButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 9, weight: .semibold))
+                .font(NotchWindowFont.glyph)
                 .foregroundStyle(NotchWindowPalette.secondaryText)
         }
         .buttonStyle(NotchGlyphButtonStyle(size: 20))

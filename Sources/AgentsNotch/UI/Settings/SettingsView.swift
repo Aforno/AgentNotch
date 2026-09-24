@@ -227,7 +227,7 @@ private struct SettingsPaneTabStyle: ButtonStyle {
         ) { fill in
             configuration.label
                 .font(NotchWindowFont.control)
-                .foregroundStyle(.white.opacity(isSelected ? 0.92 : 0.6))
+                .foregroundStyle(isSelected ? NotchWindowPalette.primaryText : NotchWindowPalette.secondaryText)
                 .background(
                     fill,
                     in: RoundedRectangle(

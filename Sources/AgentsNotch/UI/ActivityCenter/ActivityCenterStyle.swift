@@ -7,8 +7,8 @@ enum NotchControlFill {
     static let rest = NotchWindowPalette.raisedStrong
     static let hover = NotchWindowPalette.raisedPressed
     static let pressed = NotchWindowPalette.raisedActive
-    static let border = Color.white.opacity(0.08)
-    static let hoverBorder = Color.white.opacity(0.16)
+    static let border = NotchWindowPalette.border
+    static let hoverBorder = NotchWindowPalette.borderStrong
     static let radius: CGFloat = 7
 }
 
@@ -30,26 +30,44 @@ extension View {
 }
 
 /// Compact dark pill with hairline border — Settings, Setup, and other deep-black windows.
+/// `prominent` fills it with the brand hue for the one default action per window.
 struct NotchPillButtonStyle: ButtonStyle {
     var destructive: Bool = false
+    var prominent: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        NotchHoverSurface(
-            isPressed: configuration.isPressed,
-            rest: NotchControlFill.rest,
-            hover: NotchControlFill.hover,
-            pressed: NotchControlFill.pressed
-        ) { fill in
-            configuration.label
-                .font(NotchWindowFont.control)
-                .foregroundStyle(
-                    destructive
-                        ? Color.red.opacity(configuration.isPressed ? 0.7 : 0.88)
-                        : Color.white.opacity(configuration.isPressed ? 0.62 : 0.82)
-                )
-                .padding(.horizontal, 11)
-                .frame(height: 26)
-                .notchControlSurface(fill: fill)
+        if prominent {
+            NotchHoverSurface(
+                isPressed: configuration.isPressed,
+                rest: NotchWindowPalette.active.opacity(NotchAccentContrast.primaryFillOpacity),
+                hover: NotchWindowPalette.active,
+                pressed: NotchWindowPalette.active.opacity(0.72)
+            ) { fill in
+                configuration.label
+                    .font(NotchWindowFont.control)
+                    .foregroundStyle(NotchAccentContrast.foreground(for: NotchBrand.active))
+                    .padding(.horizontal, 12)
+                    .frame(height: 26)
+                    .background(fill, in: RoundedRectangle(cornerRadius: NotchControlFill.radius, style: .continuous))
+            }
+        } else {
+            NotchHoverSurface(
+                isPressed: configuration.isPressed,
+                rest: NotchControlFill.rest,
+                hover: NotchControlFill.hover,
+                pressed: NotchControlFill.pressed
+            ) { fill in
+                configuration.label
+                    .font(NotchWindowFont.control)
+                    .foregroundStyle(
+                        destructive
+                            ? NotchWindowPalette.failure.opacity(configuration.isPressed ? 0.7 : 0.9)
+                            : configuration.isPressed ? NotchWindowPalette.secondaryText : NotchWindowPalette.primaryText
+                    )
+                    .padding(.horizontal, 11)
+                    .frame(height: 26)
+                    .notchControlSurface(fill: fill)
+            }
         }
     }
 }
@@ -65,7 +83,7 @@ struct NotchIconButtonStyle: ButtonStyle {
         ) { fill in
             configuration.label
                 .font(NotchWindowFont.control)
-                .foregroundStyle(Color.white.opacity(configuration.isPressed ? 0.55 : 0.72))
+                .foregroundStyle(configuration.isPressed ? NotchWindowPalette.tertiaryText : NotchWindowPalette.secondaryText)
                 .frame(width: 26, height: 26)
                 .notchControlSurface(fill: fill)
         }
@@ -83,7 +101,7 @@ struct NotchIconControlLabel: View {
     var body: some View {
         Image(systemName: systemName)
             .font(NotchWindowFont.control)
-            .foregroundStyle(Color.white.opacity(isHovering ? 0.9 : 0.72))
+            .foregroundStyle(isHovering ? NotchWindowPalette.primaryText : NotchWindowPalette.secondaryText)
             .frame(width: 26, height: 26)
             .notchControlSurface(fill: isHovering ? NotchControlFill.hover : NotchControlFill.rest)
             .onHover { isHovering = $0 }
@@ -101,7 +119,7 @@ struct NotchSectionLabel: View {
         HStack(spacing: 8) {
             Text(title)
                 .font(NotchWindowFont.sectionLabel)
-                .foregroundStyle(.white.opacity(0.74))
+                .foregroundStyle(NotchWindowPalette.secondaryText)
             if let trailing {
                 Text(trailing)
                     .font(NotchWindowFont.footnote)
