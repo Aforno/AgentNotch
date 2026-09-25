@@ -29,17 +29,16 @@ struct AlertsPrivacySettingsPane: View {
                     retentionDays: retentionDays,
                     hasCompletedSessions: !runtime.activity.recentSessions.isEmpty,
                     openActivityCenter: runtime.openActivityCenter,
-                    openOnboarding: runtime.openOnboarding,
                     requestClearHistory: requestClearHistory
                 )
                 if let notificationError {
-                    SettingsMessage(text: notificationError, symbol: "bell.slash.fill", color: .orange)
+                    SettingsMessage(text: notificationError, symbol: "bell.slash.fill", color: NotchWindowPalette.attention)
                 }
                 if let replySocketError = runtime.replySocketError {
                     SettingsMessage(
                         text: replySocketError,
                         symbol: "exclamationmark.triangle.fill",
-                        color: .orange
+                        color: NotchWindowPalette.attention
                     )
                 }
             }

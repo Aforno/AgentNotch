@@ -114,9 +114,9 @@ struct AgentWorkflowsView: View {
 
     private func workflowStatusColor(_ status: AgentWorkflowStatus) -> Color {
         switch status {
-        case .completed: .green
-        case .failed: .red
-        case .blocked, .waiting: .orange
+        case .completed: NotchWindowPalette.success
+        case .failed: NotchWindowPalette.failure
+        case .blocked, .waiting: NotchWindowPalette.attention
         case .pending, .running: NotchWindowPalette.tertiaryText
         }
     }
@@ -173,7 +173,7 @@ struct AgentRelationshipsView: View {
                 Spacer()
                 StateIndicator(state: session.state, size: 7)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(NotchWindowFont.glyph)
                     .foregroundStyle(NotchWindowPalette.quaternaryText)
             }
             .padding(.vertical, 4)
@@ -210,6 +210,6 @@ private struct AgentStepRow: View {
 private extension View {
     func executionCard() -> some View {
         padding(DynamicIslandSpacing.standard)
-            .notchPanel(cornerRadius: 9)
+            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
     }
 }

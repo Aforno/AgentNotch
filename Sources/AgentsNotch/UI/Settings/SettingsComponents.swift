@@ -1,83 +1,6 @@
 import AppKit
 import SwiftUI
 
-struct ApplicationSettingsSection: View {
-    let launchAtLogin: Binding<Bool>
-    let animationsEnabled: Binding<Bool>
-    let notchEnabled: Binding<Bool>
-    let showVirtualNotch: Binding<Bool>
-    let automaticallyCheckForUpdates: Binding<Bool>
-    let updateChannel: Binding<String>
-    let displayPreference: Binding<String>
-    let globalActivityShortcut: Binding<String>
-    let updates: UpdateService
-
-    var body: some View {
-        SettingsSection(title: "Application") {
-            SettingsToggleRow(
-                title: "Launch at login",
-                detail: "Start Agent Notch automatically when you sign in to this Mac.",
-                isOn: launchAtLogin
-            )
-            SettingsToggleRow(
-                title: "Animate notch transitions",
-                detail: "Smooth open, close, and content changes on the notch surface.",
-                isOn: animationsEnabled
-            )
-            SettingsToggleRow(
-                title: "Show notch surface",
-                detail: "Display live agent activity on the hardware or virtual notch.",
-                isOn: notchEnabled
-            )
-            SettingsToggleRow(
-                title: "Virtual notch",
-                detail: "Show a virtual notch on displays without hardware cutouts.",
-                isOn: showVirtualNotch
-            )
-            SettingsToggleRow(
-                title: "App update checks",
-                detail: "Check for Agent Notch updates in the background. Downloads and installs only when you ask.",
-                isOn: automaticallyCheckForUpdates
-            )
-            SettingsMenuRow(
-                title: "Update channel",
-                detail: "Nightly builds come from the latest main branch and may be unstable.",
-                selection: updateChannel,
-                options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
-            )
-            SettingsMenuRow(
-                title: "Show the notch on",
-                detail: "Choose which display hosts the notch surface.",
-                selection: displayPreference,
-                options: DisplayPreference.allCases.map { ($0.rawValue, $0.title) }
-            )
-            SettingsMenuRow(
-                title: "Global activity shortcut",
-                detail: "Open Activity Center from any app without Accessibility permission.",
-                selection: globalActivityShortcut,
-                options: GlobalActivityShortcut.allCases.map { ($0.rawValue, $0.title) }
-            )
-            SettingsControlRow(title: "Version", detail: "Current app version and update status.") {
-                HStack(spacing: 8) {
-                    Text(updates.currentVersion)
-                        .font(NotchWindowFont.control)
-                        .foregroundStyle(NotchWindowPalette.secondaryText)
-                    SettingsUpdateControl(updates: updates)
-                }
-            }
-            SettingsControlRow(
-                title: "Quit",
-                detail: "Stop the notch and stop listening for local agent events."
-            ) {
-                Button("Quit Agent Notch") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(NotchPillButtonStyle())
-            }
-        }
-    }
-}
-
 struct AttentionSettingsSection: View {
     let notificationsEnabled: Binding<Bool>
     let soundEnabled: Binding<Bool>
@@ -88,18 +11,17 @@ struct AttentionSettingsSection: View {
         SettingsSection(title: "Attention") {
             SettingsToggleRow(
                 title: "Attention notifications",
-                detail: "Show macOS notifications when an agent needs input.",
+                detail: "Post a macOS notification when an agent needs input.",
                 isOn: notificationsEnabled
             )
             SettingsToggleRow(
                 title: "Notification sound",
-                detail: "Play the system notification sound with attention alerts.",
                 isOn: soundEnabled
             )
             .disabled(!notificationsEnabled.wrappedValue)
             SettingsToggleRow(
                 title: "Failure notifications",
-                detail: "Also notify when an agent fails. Routine activity stays collapsed.",
+                detail: "Routine activity never notifies.",
                 isOn: failureNotificationsEnabled
             )
             .disabled(!notificationsEnabled.wrappedValue)
@@ -130,33 +52,26 @@ struct HistorySettingsSection: View {
     let retentionDays: Binding<Int>
     let hasCompletedSessions: Bool
     let openActivityCenter: () -> Void
-    let openOnboarding: () -> Void
     let requestClearHistory: () -> Void
 
     var body: some View {
         SettingsSection(title: "Local History") {
             SettingsMenuRow(
                 title: "Keep finished sessions",
-                detail: "How long finished sessions remain in Activity Center.",
                 selection: retentionDays,
                 options: [
                     (3, "3 days"),
                     (7, "7 days"),
                 ]
             )
-            SettingsControlRow(
-                title: "History actions",
-                detail: "Open related windows or clear finished local sessions."
-            ) {
-                HStack(spacing: 8) {
-                    Button("Open Activity Center", action: openActivityCenter)
-                        .buttonStyle(NotchPillButtonStyle())
-                    Button("Show Setup", action: openOnboarding)
-                        .buttonStyle(NotchPillButtonStyle())
-                    Button("Clear History", role: .destructive, action: requestClearHistory)
-                        .buttonStyle(NotchPillButtonStyle(destructive: true))
-                        .disabled(!hasCompletedSessions)
-                }
+            SettingsControlRow(title: "Browse history") {
+                Button("Open Activity Center", action: openActivityCenter)
+                    .buttonStyle(NotchPillButtonStyle())
+            }
+            SettingsControlRow(title: "Clear finished sessions", detail: "Active and waiting sessions are kept.") {
+                Button("Clear History", role: .destructive, action: requestClearHistory)
+                    .buttonStyle(NotchPillButtonStyle(destructive: true))
+                    .disabled(!hasCompletedSessions)
             }
         }
     }
@@ -176,7 +91,7 @@ struct SettingsUpdateControl: View {
         case .upToDate:
             Label("Up to date", systemImage: "checkmark.circle.fill")
                 .font(NotchWindowFont.caption)
-                .foregroundStyle(.green)
+                .foregroundStyle(NotchWindowPalette.success)
         case let .available(version):
             Button("Download \(version)") { updates.download() }
                 .buttonStyle(NotchPillButtonStyle())
@@ -224,7 +139,7 @@ struct SettingsHeading: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(NotchWindowFont.display)
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(NotchWindowPalette.primaryText)
             Text(detail)
                 .font(NotchWindowFont.caption)
                 .foregroundStyle(NotchWindowPalette.secondaryText)
@@ -240,7 +155,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(NotchWindowFont.sectionLabel)
-                .foregroundStyle(.white.opacity(0.74))
+                .foregroundStyle(NotchWindowPalette.secondaryText)
                 .padding(.bottom, 8)
 
             content
@@ -260,8 +175,8 @@ struct SettingsControlRow<Control: View>: View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .font(NotchWindowFont.label)
+                    .foregroundStyle(NotchWindowPalette.primaryText)
                 if let detail {
                     Text(detail)
                         .font(NotchWindowFont.caption)
@@ -293,7 +208,7 @@ struct SettingsToggleRow: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                .tint(Color.accentColor)
+                .tint(NotchWindowPalette.active)
         }
     }
 }
@@ -329,6 +244,26 @@ struct SettingsMessage: View {
     }
 }
 
+/// Runtime health for Setup and Settings. Renders nothing while healthy.
+struct RuntimeHealthBanner: View {
+    let runtime: AppRuntime
+
+    var body: some View {
+        if runtime.socketError != nil
+            || runtime.persistenceError != nil
+            || runtime.persistenceRecoveryNotice != nil
+            || runtime.activity.protocolMismatchDetected
+        {
+            RuntimeHealthMessages(
+                socketError: runtime.socketError,
+                persistenceError: runtime.persistenceError,
+                persistenceRecoveryNotice: runtime.persistenceRecoveryNotice,
+                protocolMismatchDetected: runtime.activity.protocolMismatchDetected
+            )
+        }
+    }
+}
+
 struct RuntimeHealthMessages: View {
     let socketError: String?
     let persistenceError: String?
@@ -341,28 +276,28 @@ struct RuntimeHealthMessages: View {
                 SettingsMessage(
                     text: "Some agent events were ignored because they use an unsupported protocol version. Reinstall the provider integrations below (or update the app) so hooks and app speak the same protocol.",
                     symbol: "arrow.triangle.branch",
-                    color: .orange
+                    color: NotchWindowPalette.attention
                 )
             }
             if let socketError {
                 SettingsMessage(
                     text: "Local event relay unavailable: \(socketError)",
                     symbol: "network.slash",
-                    color: .red
+                    color: NotchWindowPalette.failure
                 )
             }
             if let persistenceError {
                 SettingsMessage(
                     text: persistenceError,
                     symbol: "externaldrive.badge.exclamationmark",
-                    color: .red
+                    color: NotchWindowPalette.failure
                 )
             }
             if let persistenceRecoveryNotice {
                 SettingsMessage(
                     text: persistenceRecoveryNotice,
                     symbol: "externaldrive.badge.checkmark",
-                    color: .orange
+                    color: NotchWindowPalette.attention
                 )
             }
         }

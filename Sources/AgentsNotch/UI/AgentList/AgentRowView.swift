@@ -163,16 +163,22 @@ struct AgentRowView: View {
     }
 }
 
-/// Compact "4m" / "2h" age, refreshed each minute. Surfaces stuck agents.
+/// Compact "4m" / "2h" age, refreshed twice a minute. Surfaces stuck agents.
+/// `phrased` renders "4m ago" / "just now" for sentences and metadata lines.
+/// Every surface uses this rather than `Text(_:style: .relative)`, which ticks
+/// each second and spells out "3 min, 12 sec".
 struct ElapsedLabel: View {
     let since: Date
+    var phrased = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            Text(Self.format(context.date.timeIntervalSince(since)))
+            let interval = context.date.timeIntervalSince(since)
+            Text(phrased ? Self.phrase(interval) : Self.format(interval))
                 .font(NotchWindowFont.footnote)
                 .monospacedDigit()
                 .foregroundStyle(NotchWindowPalette.tertiaryText)
+                .lineLimit(1)
                 .fixedSize()
         }
         .accessibilityHidden(true)
@@ -185,6 +191,11 @@ struct ElapsedLabel: View {
         let hours = minutes / 60
         if hours < 24 { return "\(hours)h" }
         return "\(hours / 24)d"
+    }
+
+    static func phrase(_ interval: TimeInterval) -> String {
+        let age = format(interval)
+        return age == "now" ? "just now" : "\(age) ago"
     }
 }
 
@@ -214,7 +225,7 @@ private struct AttentionInlineSummary: View {
                 .lineLimit(1)
         }
         .font(NotchWindowFont.bodyEmphasis)
-        .foregroundStyle(.orange)
+        .foregroundStyle(NotchWindowPalette.attention)
     }
 
     private var label: String {

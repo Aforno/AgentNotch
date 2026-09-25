@@ -50,29 +50,9 @@ struct OnboardingView: View {
                 }
             }
 
-            if runtime.socketError != nil
-                || runtime.persistenceError != nil
-                || runtime.persistenceRecoveryNotice != nil
-                || runtime.activity.protocolMismatchDetected
-            {
-                RuntimeHealthMessages(
-                    socketError: runtime.socketError,
-                    persistenceError: runtime.persistenceError,
-                    persistenceRecoveryNotice: runtime.persistenceRecoveryNotice,
-                    protocolMismatchDetected: runtime.activity.protocolMismatchDetected
-                )
-            }
+            RuntimeHealthBanner(runtime: runtime)
 
-            VStack(spacing: 0) {
-                ForEach(Array(runtime.integrations.enumerated()), id: \.element.provider) { index, integration in
-                    providerRow(integration)
-                    if index < runtime.integrations.count - 1 {
-                        NotchHairline(leadingInset: 42)
-                    }
-                }
-            }
-            .padding(.horizontal, 14)
-            .notchPanel(cornerRadius: NotchWindowMetrics.cardRadius)
+            ProviderIntegrationList(runtime: runtime, allowsRemove: false)
 
             Label(
                 "Observers run locally. Agent Notch does not upload source code or session history.",
@@ -96,62 +76,9 @@ struct OnboardingView: View {
                 )
                 onDone()
             }
-            .buttonStyle(NotchPillButtonStyle())
+            .buttonStyle(NotchPillButtonStyle(prominent: true))
             .keyboardShortcut(.defaultAction)
         }
-    }
-
-    private func providerRow(_ integration: ProviderIntegrationManager) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            ProviderIconView(provider: integration.provider, size: 22)
-                .frame(width: 26)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(integration.provider.displayName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.86))
-                    .accessibilityLabel("\(integration.provider.displayName), \(integration.status.title)")
-
-                if let instructions = integration.trustInstructions {
-                    Text(instructions)
-                        .font(NotchWindowFont.caption)
-                        .foregroundStyle(.orange.opacity(0.9))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if let error = integration.lastError {
-                    Text(error)
-                        .font(NotchWindowFont.caption)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-            }
-
-            Spacer(minLength: 12)
-
-            if integration.status.canInstall {
-                Button(integration.status == .notInstalled ? "Install" : "Retry") {
-                    Task { await integration.install() }
-                }
-                .buttonStyle(NotchPillButtonStyle())
-                .disabled(integration.isPerformingMaintenance)
-            } else {
-                Button {
-                    integration.refreshStatus(
-                        hasReceivedEvent: runtime.lastEventReceivedAt[integration.provider] != nil
-                    )
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(NotchIconButtonStyle())
-                .help("Refresh status")
-                .accessibilityLabel("Refresh \(integration.provider.displayName) status")
-                .disabled(integration.isPerformingMaintenance)
-            }
-        }
-        .controlSize(.small)
-        .padding(.vertical, 11)
     }
 
     private var finishButtonTitle: String {

@@ -18,11 +18,11 @@ struct NotchMenuPicker<Value: Hashable>: View {
             HStack(spacing: 7) {
                 Text(selectedTitle)
                     .font(NotchWindowFont.bodyEmphasis)
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .foregroundStyle(NotchWindowPalette.primaryText)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.45))
+                    .font(NotchWindowFont.glyph)
+                    .foregroundStyle(NotchWindowPalette.tertiaryText)
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 28, maxHeight: 28, alignment: .leading)
@@ -261,8 +261,8 @@ private struct NotchDropdownMenuContent: View {
             ForEach(Array(model.titles.enumerated()), id: \.offset) { index, title in
                 Button { model.select(index) } label: {
                     Text(title)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.white.opacity(0.92))
+                        .font(NotchWindowFont.label)
+                        .foregroundStyle(NotchWindowPalette.primaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
@@ -279,7 +279,7 @@ private struct NotchDropdownMenuContent: View {
         .padding(5)
         .background(menuFill)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(NotchWindowPalette.border))
         .fixedSize()
         .preferredColorScheme(.dark)
     }

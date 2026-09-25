@@ -69,7 +69,7 @@ struct AgentListView: View {
                                 .font(NotchWindowFont.footnoteEmphasis)
                                 .foregroundStyle(NotchWindowPalette.tertiaryText)
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 8, weight: .semibold))
+                                .font(NotchWindowFont.glyph)
                                 .foregroundStyle(NotchWindowPalette.quaternaryText)
                             Spacer()
                         }
@@ -142,7 +142,7 @@ struct AgentListView: View {
                     Text("Browse recent")
                         .font(NotchWindowFont.footnoteEmphasis)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
+                        .font(NotchWindowFont.glyph)
                 }
                 .foregroundStyle(NotchWindowPalette.secondaryText)
             }
@@ -154,14 +154,14 @@ struct AgentListView: View {
         .accessibilityLabel("\(emptyTitle). Open Activity Center to browse recent sessions.")
     }
 
-    /// "Claude finished · repo · 2m ago", or the plain empty message.
+    /// "Claude finished 2m ago · repo", or the plain empty message. The time
+    /// leads so truncation drops the project rather than the recency.
     private var emptyTitle: String {
         guard let session = lastFinishedSession, !privacyModeEnabled else { return "No active agents" }
         let verb = session.state == .failed ? "failed" : "finished"
-        let age = ElapsedLabel.format(Date().timeIntervalSince(session.completedAt ?? session.updatedAt))
-        let when = age == "now" ? "just now" : "\(age) ago"
+        let when = ElapsedLabel.phrase(Date().timeIntervalSince(session.completedAt ?? session.updatedAt))
         let project = session.projectName.map { " · \($0)" } ?? ""
-        return "\(session.provider.displayName) \(verb)\(project) · \(when)"
+        return "\(session.provider.displayName) \(verb) \(when)\(project)"
     }
 
     static func descendantSessions(of session: AgentSession, in sessions: [AgentSession]) -> [AgentSession] {

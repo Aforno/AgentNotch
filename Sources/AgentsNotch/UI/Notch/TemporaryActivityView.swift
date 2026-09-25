@@ -38,11 +38,11 @@ struct TemporaryActivityView: View {
             if waitingCount > 1 {
                 Text("\(waitingCount) waiting")
                     .font(NotchWindowFont.footnoteEmphasis)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(NotchWindowPalette.attention)
             } else {
                 Image(systemName: "arrow.up.right")
                     .font(NotchWindowFont.footnoteEmphasis)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(NotchWindowPalette.attention)
             }
         }
         .padding(.horizontal, DynamicIslandSpacing.outer)

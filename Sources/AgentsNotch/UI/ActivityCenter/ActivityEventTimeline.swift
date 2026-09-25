@@ -138,7 +138,7 @@ struct ActivityEventTimeline: View {
     private func summaryRow(_ summary: ActivityEventSummary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: symbol(for: summary))
-                .font(.system(size: 9, weight: .semibold))
+                .font(NotchWindowFont.footnoteEmphasis)
                 .foregroundStyle(color(for: summary))
                 .frame(width: 14)
             Text(summary.endedAt, style: .time)
@@ -147,7 +147,7 @@ struct ActivityEventTimeline: View {
                 .frame(width: 54, alignment: .leading)
             Text(summary.title)
                 .font(NotchWindowFont.caption)
-                .foregroundStyle(.white.opacity(0.76))
+                .foregroundStyle(NotchWindowPalette.primaryText)
             Spacer(minLength: 8)
             if summary.operationCount > 1 {
                 Text("\(summary.operationCount) runs")
@@ -171,7 +171,7 @@ struct ActivityEventTimeline: View {
                 .frame(width: 64, alignment: .leading)
             Text(event.activity ?? event.resolvedState.displayName)
                 .font(NotchWindowFont.footnote)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(NotchWindowPalette.tertiaryText)
             Spacer()
         }
     }
@@ -190,7 +190,7 @@ struct ActivityEventTimeline: View {
     }
 
     private func color(for summary: ActivityEventSummary) -> Color {
-        if summary.isFailure { return .red }
+        if summary.isFailure { return NotchWindowPalette.failure }
         guard let state = summary.events.last?.resolvedState else { return NotchWindowPalette.tertiaryText }
         return agentStateColor(for: state)
     }

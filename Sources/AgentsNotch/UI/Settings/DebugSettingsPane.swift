@@ -10,6 +10,12 @@ struct DebugSettingsPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 SettingsHeading(title: "Debug", detail: "Preview agent states without a live session.")
+                SettingsSection(title: "Gallery") {
+                    SettingsControlRow(title: "Notch gallery", detail: "Every notch presentation side by side, from static samples.") {
+                        Button("Open Gallery") { DebugGalleryWindow.show() }
+                            .buttonStyle(NotchPillButtonStyle())
+                    }
+                }
                 SettingsSection(title: "Simulator") {
                     SettingsToggleRow(
                         title: "Enable debug simulator",

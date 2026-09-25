@@ -40,7 +40,7 @@ struct ActivityCenterSidebar: View {
         if projection.filteredSessions.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
-                    .font(.system(size: 20, weight: .light))
+                    .font(NotchWindowFont.emptyStateIcon)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
                 Text("No matching sessions")
                     .font(NotchWindowFont.caption)
@@ -79,7 +79,7 @@ struct ActivityCenterSidebar: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Image(systemName: "folder")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(NotchWindowFont.glyph)
                     .accessibilityHidden(true)
                 Text(project.title).lineLimit(1)
                 Spacer(minLength: 4)
@@ -108,7 +108,7 @@ struct ActivityCenterSidebar: View {
                 } else {
                     Button { onToggleGroup(group.id) } label: {
                         Image(systemName: expandedGroupIDs.contains(group.id) ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 8, weight: .semibold))
+                            .font(NotchWindowFont.glyph)
                             .foregroundStyle(NotchWindowPalette.tertiaryText)
                             .frame(width: 20, height: 28)
                             .contentShape(Rectangle())
@@ -167,7 +167,7 @@ private struct ActivityFilterBar: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(NotchWindowFont.control)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
                 TextField("Search sessions", text: $searchText)
                     .textFieldStyle(.plain)
@@ -228,8 +228,8 @@ private struct ActivityFilterBar: View {
                 Image(systemName: "line.3.horizontal.decrease")
                 if activeFilterCount > 0 { Text("\(activeFilterCount)").monospacedDigit() }
             }
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.white.opacity(activeFilterCount > 0 ? 0.9 : 0.55))
+            .font(NotchWindowFont.footnoteEmphasis)
+            .foregroundStyle(activeFilterCount > 0 ? NotchWindowPalette.primaryText : NotchWindowPalette.tertiaryText)
             .frame(minWidth: 24, minHeight: 24)
             .contentShape(Rectangle())
         }
@@ -246,10 +246,10 @@ private struct ActivityFilterBar: View {
         Button(action: clear) {
             HStack(spacing: 5) {
                 Text(title).lineLimit(1)
-                Image(systemName: "xmark").font(.system(size: 7, weight: .bold))
+                Image(systemName: "xmark").font(NotchWindowFont.glyph)
             }
             .font(NotchWindowFont.footnote)
-            .foregroundStyle(.white.opacity(0.72))
+            .foregroundStyle(NotchWindowPalette.secondaryText)
             .padding(.horizontal, 8)
             .frame(height: 22)
             .contentShape(Capsule())

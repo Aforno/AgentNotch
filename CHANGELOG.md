@@ -6,6 +6,28 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The notch briefly shows "Claude finished · repo" (or failed) when a
+  top-level agent ends. Click it to open the session.
+- A soft orange glow runs around the notch when a new prompt arrives.
+- Settings → Integrations shows each observer's status, including when its
+  last event arrived.
+- Debug builds have a Notch Gallery (Settings → Debug) that renders every
+  notch presentation side by side.
+
+### Changed
+
+- The expanded notch no longer draws an outline.
+- Active state and primary actions use a signature azure instead of system
+  blue and the system accent colour.
+- Settings → General is grouped into Notch, System, and Updates, with
+  shorter descriptions.
+- Activity Center rows and headers use compact ages ("4m") instead of
+  second-by-second relative times, and rows no longer repeat the provider name.
+- UI colours and type sizes come only from the shared style tokens.
+  `script/check_repository.sh` rejects raw values.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added
