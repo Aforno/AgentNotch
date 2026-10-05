@@ -10,7 +10,18 @@ body:
     id: version
     attributes:
       label: Agent Notch version
-      placeholder: 0.1.0
+      placeholder: 0.3.0 — include the release URL or nightly date and commit
+    validations:
+      required: true
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Installation method
+      options:
+        - Unsigned beta or nightly ZIP
+        - Signed release ZIP
+        - Homebrew
+        - Built from source
     validations:
       required: true
   - type: input
@@ -28,6 +39,10 @@ body:
         - Codex
         - Claude Code
         - Grok
+        - Gemini CLI
+        - Antigravity
+        - OpenCode
+        - Cursor
         - Not provider-specific
     validations:
       required: true

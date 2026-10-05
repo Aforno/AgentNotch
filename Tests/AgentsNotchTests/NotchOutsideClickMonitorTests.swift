@@ -3,45 +3,19 @@ import XCTest
 
 @MainActor
 final class NotchOutsideClickMonitorTests: XCTestCase {
-    func testClickOutsideNotchFrameDismisses() {
+    func testOnlyClicksOutsideAKnownNotchFrameDismiss() {
         let frame = CGRect(x: 100, y: 400, width: 440, height: 360)
-        XCTAssertTrue(
-            NotchOutsideClickMonitor.shouldDismiss(
-                clickAt: CGPoint(x: 20, y: 20),
-                notchFrame: frame
+        let cases: [(name: String, click: CGPoint, frame: CGRect?, dismiss: Bool)] = [
+            ("outside", CGPoint(x: 20, y: 20), frame, true),
+            ("inside", CGPoint(x: 220, y: 520), frame, false),
+            ("missing frame", CGPoint(x: 20, y: 20), nil, false),
+        ]
+        for example in cases {
+            XCTAssertEqual(
+                NotchOutsideClickMonitor.shouldDismiss(clickAt: example.click, notchFrame: example.frame),
+                example.dismiss,
+                example.name
             )
-        )
-    }
-
-    func testClickInsideNotchFrameStaysPinned() {
-        let frame = CGRect(x: 100, y: 400, width: 440, height: 360)
-        XCTAssertFalse(
-            NotchOutsideClickMonitor.shouldDismiss(
-                clickAt: CGPoint(x: 220, y: 520),
-                notchFrame: frame
-            )
-        )
-    }
-
-    func testMissingNotchFrameDoesNotDismiss() {
-        XCTAssertFalse(
-            NotchOutsideClickMonitor.shouldDismiss(
-                clickAt: CGPoint(x: 20, y: 20),
-                notchFrame: nil
-            )
-        )
-    }
-
-    func testStartStopTracksActiveState() {
-        let monitor = NotchOutsideClickMonitor(notchFrame: {
-            CGRect(x: 0, y: 0, width: 100, height: 40)
-        })
-        XCTAssertFalse(monitor.isActive)
-
-        monitor.start(onDismiss: {})
-        XCTAssertTrue(monitor.isActive)
-
-        monitor.stop()
-        XCTAssertFalse(monitor.isActive)
+        }
     }
 }

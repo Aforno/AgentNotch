@@ -45,6 +45,12 @@ fi
 
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 BUILD_NUMBER="${AGENT_NOTCH_BUILD_NUMBER:-1}"
+MANUAL_UPDATES=false
+AUTOMATIC_UPDATE_CHECKS=true
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  MANUAL_UPDATES=true
+  AUTOMATIC_UPDATE_CHECKS=false
+fi
 SPARKLE_PUBLIC_KEY_FILE="$ROOT_DIR/Resources/SparklePublicEDKey"
 SPARKLE_FEED_URL="https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml"
 SPARKLE_PUBLIC_KEY="$(tr -d '[:space:]' < "$SPARKLE_PUBLIC_KEY_FILE")"
@@ -162,12 +168,14 @@ cat >"$INFO_PLIST" <<PLIST
   <string>Agent Notch uses Apple Events to focus the terminal tab where an agent is running.</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>AgentNotchManualUpdates</key>
+  <$MANUAL_UPDATES/>
   <key>SUFeedURL</key>
   <string>$SPARKLE_FEED_URL</string>
   <key>SUPublicEDKey</key>
   <string>$SPARKLE_PUBLIC_KEY</string>
   <key>SUEnableAutomaticChecks</key>
-  <true/>
+  <$AUTOMATIC_UPDATE_CHECKS/>
   <key>SUAutomaticallyUpdate</key>
   <false/>
   <key>SUAllowsAutomaticUpdates</key>

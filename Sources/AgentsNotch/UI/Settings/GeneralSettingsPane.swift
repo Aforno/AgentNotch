@@ -73,19 +73,28 @@ struct GeneralSettingsPane: View {
 
     private var updatesSection: some View {
         SettingsSection(title: "Updates") {
-            SettingsToggleRow(
-                title: "Check automatically",
-                detail: "Downloads and installs only when you ask.",
-                isOn: automaticallyCheckForUpdates
-            )
-            SettingsMenuRow(
-                title: "Update channel",
-                detail: "Nightly builds track main and may be unstable.",
-                selection: updateChannel,
-                options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
-            )
-            SettingsControlRow(title: "Version \(runtime.updates.currentVersion)") {
-                SettingsUpdateControl(updates: runtime.updates)
+            if case let .unavailable(message) = runtime.updates.state {
+                SettingsControlRow(
+                    title: "Version \(runtime.updates.currentVersion)",
+                    detail: message
+                ) {
+                    SettingsUpdateControl(updates: runtime.updates)
+                }
+            } else {
+                SettingsToggleRow(
+                    title: "Check automatically",
+                    detail: "Downloads and installs only when you ask.",
+                    isOn: automaticallyCheckForUpdates
+                )
+                SettingsMenuRow(
+                    title: "Update channel",
+                    detail: "Nightly builds track main and may be unstable.",
+                    selection: updateChannel,
+                    options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
+                )
+                SettingsControlRow(title: "Version \(runtime.updates.currentVersion)") {
+                    SettingsUpdateControl(updates: runtime.updates)
+                }
             }
         }
     }

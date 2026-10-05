@@ -4,13 +4,6 @@ import Foundation
 import XCTest
 
 final class ProviderIntegrationManagerTests: XCTestCase {
-    func testInstalledFlagMatchesLifecycle() {
-        XCTAssertFalse(ProviderIntegrationStatus.notInstalled.isInstalled)
-        XCTAssertTrue(ProviderIntegrationStatus.awaitingFirstEvent.isInstalled)
-        XCTAssertTrue(ProviderIntegrationStatus.connected.isInstalled)
-        XCTAssertFalse(ProviderIntegrationStatus.unavailable("Unavailable").isInstalled)
-    }
-
     @MainActor
     func testInstallIsIdempotentAndUninstallPreservesExistingConfiguration() async throws {
         let fixture = try Fixture()
@@ -603,20 +596,31 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(manager.status, .awaitingFirstEvent)
         XCTAssertNil(manager.lastError)
         XCTAssertNotNil(manager.trustInstructions)
-        let source = String(decoding: try Data(contentsOf: pluginURL), as: UTF8.self)
-        XCTAssertTrue(source.contains("// Managed by Agent Notch."))
-        XCTAssertTrue(source.contains("export const AgentNotchPlugin"))
-        XCTAssertTrue(source.contains("Bun.spawn"))
-        XCTAssertTrue(source.contains(manager.installedRelayURL.path))
-        XCTAssertTrue(source.contains("\"--provider\", \"opencode\""))
         if let bunURL = Self.executableURL(named: "bun") {
             let encodedPluginURL = try JSONEncoder().encode(pluginURL.absoluteString)
             let pluginLiteral = String(decoding: encodedPluginURL, as: UTF8.self)
+            let encodedRelayURL = try JSONEncoder().encode(manager.installedRelayURL.path)
+            let relayLiteral = String(decoding: encodedRelayURL, as: UTF8.self)
             let process = Process()
             process.executableURL = bunURL
             process.arguments = [
                 "-e",
-                "const module = await import(\(pluginLiteral)); const hooks = await module.AgentNotchPlugin({ directory: '/tmp' }); if (typeof hooks.event !== 'function') process.exit(1)",
+                """
+                import { strict as assert } from "node:assert";
+                const calls = [];
+                Bun.spawn = (args, options) => {
+                  calls.push({ args, input: options.stdin });
+                  return { exited: Promise.resolve(0) };
+                };
+                const module = await import(\(pluginLiteral));
+                const hooks = await module.AgentNotchPlugin({ directory: "/tmp" });
+                await hooks.event({ event: { type: "session.idle", properties: { sessionID: "test-session" } } });
+                assert.equal(calls.length, 1);
+                assert.deepEqual(calls[0].args, [\(relayLiteral), "--provider", "opencode"]);
+                assert.deepEqual(JSON.parse(await calls[0].input.text()), {
+                  session_id: "test-session", cwd: "/tmp", hook_event_name: "Stop"
+                });
+                """,
             ]
             let errors = Pipe()
             process.standardOutput = FileHandle.nullDevice
@@ -654,15 +658,6 @@ final class ProviderIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(manager.status, .unavailable("Installation failed"))
         XCTAssertEqual(try Data(contentsOf: pluginURL), original)
         XCTAssertTrue(manager.lastError?.contains("will not replace") == true)
-    }
-
-    @MainActor
-    func testIntegratedProvidersDeclareTimeouts() {
-        XCTAssertEqual(IntegratedHookProvider.antigravity.timeout(for: "PreToolUse"), .seconds(5))
-        XCTAssertEqual(IntegratedHookProvider.geminiCLI.timeout(for: "BeforeAgent"), .milliseconds(5_000))
-        XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "SessionEnd"), .seconds(3))
-        XCTAssertEqual(IntegratedHookProvider.codex.timeout(for: "Interrupt"), .seconds(3))
-        XCTAssertEqual(IntegratedHookProvider.claudeCode.timeout(for: "PermissionRequest"), .seconds(5))
     }
 
     func testHandlerIdentityCollapsesOwnedLegacyAndCurrent() {

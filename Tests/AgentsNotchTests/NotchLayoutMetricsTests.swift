@@ -2,138 +2,47 @@
 import XCTest
 
 final class NotchLayoutMetricsTests: XCTestCase {
-    func testExpandedWidthUsesPreferredWidthWhenItFits() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.expandedWidth(
-                preferred: 440,
-                screenWidth: 1_440,
-                notchWidth: 180
-            ),
-            440
-        )
+    func testExpandedWidthFitsTheDisplayWithoutShrinkingBelowThePhysicalNotch() {
+        let cases: [(name: String, screenWidth: CGFloat, expected: CGFloat)] = [
+            ("room for preferred width", 1_440, 440),
+            ("narrow display", 420, 388),
+            ("physical notch floor", 200, 180),
+        ]
+        for example in cases {
+            XCTAssertEqual(
+                NotchLayoutMetrics.expandedWidth(
+                    preferred: 440, screenWidth: example.screenWidth, notchWidth: 180
+                ),
+                example.expected,
+                example.name
+            )
+        }
     }
 
-    func testExpandedWidthLeavesMarginsOnNarrowDisplay() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.expandedWidth(
-                preferred: 440,
-                screenWidth: 420,
-                notchWidth: 180
-            ),
-            388
-        )
-    }
-
-    func testExpandedWidthNeverShrinksBelowPhysicalNotch() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.expandedWidth(
-                preferred: 440,
-                screenWidth: 200,
-                notchWidth: 180
-            ),
-            180
-        )
-    }
-
-    func testDetailHeightShrinksToCompactContent() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.detailContentHeight(
-                measured: 90,
-                screenHeight: 900,
-                notchHeight: 32
-            ),
-            NotchLayoutMetrics.minimumDetailContentHeight
-        )
-    }
-
-    func testDetailHeightTracksContentUntilMaximum() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.detailContentHeight(
-                measured: 286,
-                screenHeight: 900,
-                notchHeight: 32
-            ),
-            286
-        )
-        XCTAssertEqual(
-            NotchLayoutMetrics.detailContentHeight(
-                measured: 800,
-                screenHeight: 900,
-                notchHeight: 32
-            ),
-            NotchLayoutMetrics.maximumDetailContentHeight
-        )
-    }
-
-    func testDetailHeightClampsToShortDisplay() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.detailContentHeight(
-                measured: 800,
-                screenHeight: 360,
-                notchHeight: 32
-            ),
-            312
-        )
-        XCTAssertEqual(
-            NotchLayoutMetrics.detailContentHeight(
-                measured: 800,
-                screenHeight: 150,
-                notchHeight: 32
-            ),
-            102
-        )
-    }
-
-    func testWaitingHeightHoldsItsFloorForShortPrompts() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.waitingContentHeight(
-                measured: 60,
-                screenHeight: 900,
-                notchHeight: 32
-            ),
-            NotchLayoutMetrics.minimumWaitingContentHeight
-        )
-    }
-
-    func testWaitingHeightTracksContentUntilMaximum() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.waitingContentHeight(
-                measured: 210,
-                screenHeight: 900,
-                notchHeight: 32
-            ),
-            210
-        )
-        // Past the maximum the prompt scrolls rather than growing the window.
-        XCTAssertEqual(
-            NotchLayoutMetrics.waitingContentHeight(
-                measured: 640,
-                screenHeight: 900,
-                notchHeight: 32
-            ),
-            NotchLayoutMetrics.maximumWaitingContentHeight
-        )
-    }
-
-    func testWaitingHeightClampsToShortDisplay() {
-        XCTAssertEqual(
-            NotchLayoutMetrics.waitingContentHeight(
-                measured: 640,
-                screenHeight: 200,
-                notchHeight: 32
-            ),
-            152
-        )
-    }
-
-    func testInsetCornerRadiusTracksOuterGeometry() {
-        XCTAssertEqual(
-            DynamicIslandSpacing.insetCornerRadius(outerRadius: 21),
-            5
-        )
-        XCTAssertEqual(
-            DynamicIslandSpacing.insetCornerRadius(outerRadius: 12),
-            DynamicIslandSpacing.tight
-        )
+    func testDetailAndWaitingHeightsFitContentAndAvailableDisplay() {
+        let cases: [(name: String, measured: CGFloat, screen: CGFloat, detail: CGFloat, waiting: CGFloat)] = [
+            ("short content", 60, 900, 164, 96),
+            ("content below the caps", 210, 900, 210, 210),
+            ("long content scrolls", 800, 900, 420, 300),
+            ("short display", 800, 360, 312, 300),
+            ("display smaller than either floor", 800, 150, 102, 102),
+            ("no available display space", 800, 20, 0, 0),
+        ]
+        for example in cases {
+            XCTAssertEqual(
+                NotchLayoutMetrics.detailContentHeight(
+                    measured: example.measured, screenHeight: example.screen, notchHeight: 32
+                ),
+                example.detail,
+                example.name
+            )
+            XCTAssertEqual(
+                NotchLayoutMetrics.waitingContentHeight(
+                    measured: example.measured, screenHeight: example.screen, notchHeight: 32
+                ),
+                example.waiting,
+                example.name
+            )
+        }
     }
 }

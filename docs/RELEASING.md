@@ -115,13 +115,22 @@ git push origin "v$(cat VERSION)"
 ```
 
 The workflow ad-hoc signs the app, marks the GitHub release as a prerelease,
-and puts a notarization and Gatekeeper warning at the top of its notes. After
+and puts a notarization and Gatekeeper warning at the top of its notes.
+Unsigned builds use manual updates: Settings → General shows View Downloads
+and replacement instructions instead of automatic checks and update channels.
+They publish no Sparkle appcast and do not update the Homebrew cask. Include
+the [beta tester guide](BETA_TESTING.md) when sharing a preview. After
 the release succeeds, remove the temporary opt-in so later tags default back to
 the signed release path:
 
 ```sh
 gh variable delete RELEASE_MODE --repo Aforno/AgentNotch
 ```
+
+For a local tester handoff without publishing a GitHub release, run
+`./script/package_release.sh --adhoc` after the release checks. Share both
+the ZIP and its `.sha256`, identify the source commit, and explicitly label
+the build as an unsigned beta that is not notarized by Apple.
 
 ## Nightly builds
 

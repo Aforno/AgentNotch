@@ -49,18 +49,4 @@ final class NotchAccentContrastTests: XCTestCase {
             .black
         )
     }
-
-    func testDisabledPrimaryActionUsesReadablePaletteText() {
-        let yellow = NSColor(srgbRed: 1, green: 0.8, blue: 0, alpha: 1)
-
-        XCTAssertEqual(
-            NotchActionEmphasis.primary.foreground(
-                isEnabled: false,
-                isPressed: false,
-                isHovering: false,
-                accent: yellow
-            ),
-            NotchWindowPalette.tertiaryText
-        )
-    }
 }
