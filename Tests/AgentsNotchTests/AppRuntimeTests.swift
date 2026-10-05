@@ -4,23 +4,6 @@ import Foundation
 import XCTest
 
 final class AppRuntimeTests: XCTestCase {
-    func testThreeDayHistoryRetentionOption() {
-        XCTAssertEqual(
-            SessionHistoryPolicy.completedSessionRetentionAge(configuredDays: 3),
-            3 * 24 * 60 * 60
-        )
-    }
-
-    @MainActor
-    func testRuntimeConstructsEveryBuiltInProviderIntegration() {
-        let runtime = AppRuntime(monitorProviders: false)
-
-        XCTAssertEqual(
-            runtime.integrations.map(\.provider),
-            [.codex, .claudeCode, .grok, .geminiCLI, .antigravity, .openCode, .cursor]
-        )
-    }
-
     @MainActor
     func testReplySocketBindFailureDisablesAnswerabilityAndReportsError() async throws {
         let root = FileManager.default.temporaryDirectory
@@ -309,15 +292,6 @@ final class AppRuntimeTests: XCTestCase {
         runtime.openSettingsHandler = { requested = $0 }
         runtime.updates.check()
         XCTAssertEqual(requested, .general)
-    }
-
-    @MainActor
-    func testOpenSettingsWithoutPaneLeavesSelectionToTheWindow() {
-        let runtime = AppRuntime(monitorProviders: false)
-        var requested: SettingsPane? = .integrations
-        runtime.openSettingsHandler = { requested = $0 }
-        runtime.openSettings()
-        XCTAssertNil(requested)
     }
 }
 

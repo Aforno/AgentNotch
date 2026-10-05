@@ -1,4 +1,3 @@
-#if DEBUG
 @testable import AgentsNotch
 import AgentsNotchCore
 import XCTest
@@ -204,4 +203,3 @@ final class CodexSessionTitleResolverTests: XCTestCase {
         return home
     }
 }
-#endif

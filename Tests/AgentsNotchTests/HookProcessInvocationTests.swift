@@ -4,65 +4,40 @@ import Foundation
 import XCTest
 
 final class HookProcessInvocationTests: XCTestCase {
-    func testKnownProviderIsAccepted() {
-        let warnings: [String] = []
-        let invocation = HookProcessInvocation.parse(
-            arguments: ["AgentsNotchHook", "--provider", "claude-code"],
-            environment: [:],
-            warn: { _ in XCTFail("known provider must not warn") }
-        )
-        XCTAssertEqual(invocation.configuredProvider, .claudeCode)
-        XCTAssertTrue(warnings.isEmpty)
+    func testProviderParsingPreservesUnknownIDsAndWarnsOnlyForUnknownValues() {
+        let cases: [(arguments: [String], provider: AgentProvider, warns: Bool)] = [
+            (["--provider", "claude-code"], .claudeCode, false),
+            ([], .codex, false),
+            (["--provider"], .codex, false),
+            (["--provider", "codxe"], AgentProvider(rawValue: "codxe"), true),
+        ]
+        for example in cases {
+            var warnings: [String] = []
+            let invocation = HookProcessInvocation.parse(
+                arguments: ["AgentsNotchHook"] + example.arguments,
+                environment: [:],
+                warn: { warnings.append($0) }
+            )
+            let context = example.arguments.joined(separator: " ")
+            XCTAssertEqual(invocation.configuredProvider, example.provider, context)
+            XCTAssertEqual(invocation.provider, example.provider, context)
+            XCTAssertEqual(warnings.count, example.warns ? 1 : 0, context)
+            if example.warns {
+                XCTAssertEqual(warnings.first?.contains(example.provider.rawValue), true, context)
+            }
+        }
     }
 
-    func testMissingProviderFallsBackToCodexSilently() {
-        let invocation = HookProcessInvocation.parse(
-            arguments: ["AgentsNotchHook"],
-            environment: [:],
-            warn: { _ in XCTFail("absent --provider must not warn") }
-        )
-        XCTAssertEqual(invocation.configuredProvider, .codex)
-    }
-
-    func testUnknownProviderWarnsAndPreservesProviderID() {
-        var warnings: [String] = []
-        let invocation = HookProcessInvocation.parse(
-            arguments: ["AgentsNotchHook", "--provider", "codxe"],
-            environment: [:],
-            warn: { warnings.append($0) }
-        )
-        XCTAssertEqual(invocation.configuredProvider, AgentProvider(rawValue: "codxe"))
-        XCTAssertEqual(invocation.provider, AgentProvider(rawValue: "codxe"))
-        XCTAssertEqual(warnings.count, 1)
-        XCTAssertTrue(warnings[0].contains("codxe"))
-    }
-
-    func testProviderWithoutValueDoesNotCrash() {
-        let invocation = HookProcessInvocation.parse(
-            arguments: ["AgentsNotchHook", "--provider"],
-            environment: [:],
-            warn: { _ in XCTFail("dangling flag must not warn") }
-        )
-        XCTAssertEqual(invocation.configuredProvider, .codex)
-    }
-
-    func testEventNameArgumentIsHonored() {
-        let invocation = HookProcessInvocation.parse(
-            arguments: ["AgentsNotchHook", "--provider", "antigravity", "--event", "PreToolUse"],
-            environment: [:],
-            warn: { _ in XCTFail("known provider must not warn") }
-        )
-        XCTAssertEqual(invocation.configuredProvider, .antigravity)
-        XCTAssertEqual(invocation.eventName, "PreToolUse")
-    }
-
-    func testDanglingEventFlagIsIgnored() {
-        let invocation = HookProcessInvocation.parse(
-            arguments: ["AgentsNotchHook", "--provider", "antigravity", "--event"],
-            environment: [:],
-            warn: { _ in XCTFail("dangling --event must not warn") }
-        )
-        XCTAssertNil(invocation.eventName)
+    func testEventFlagAcceptsAValueAndIgnoresADanglingFlag() {
+        let events: [String?] = ["PreToolUse", nil]
+        for event in events {
+            let invocation = HookProcessInvocation.parse(
+                arguments: ["AgentsNotchHook", "--provider", "antigravity", "--event"] + (event.map { [$0] } ?? []),
+                environment: [:],
+                warn: { XCTFail($0) }
+            )
+            XCTAssertEqual(invocation.eventName, event)
+        }
     }
 
     func testSocketPathArgumentsAreHonored() {
@@ -88,8 +63,6 @@ final class HookProcessInvocationTests: XCTestCase {
             environment: ["GROK_HOOK_EVENT": "UserPromptSubmit"]
         )
         XCTAssertEqual(invocation.provider, .grok)
-        // configured stays codex because the Claude compatibility hook installs
-        // no --provider flag; routing happens through the environment.
         XCTAssertEqual(invocation.configuredProvider, .codex)
     }
 }

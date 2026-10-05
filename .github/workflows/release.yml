@@ -132,6 +132,14 @@ jobs:
             cat > "$NOTES_FILE" <<'EOF'
           > [!WARNING]
           > This preview is ad-hoc signed and has not been notarized by Apple. macOS Gatekeeper may block or warn about it. Verify the published SHA-256 checksum before opening the app.
+
+          Download the ZIP and matching `.sha256` file into the same folder. Run `shasum -a 256 -c Agent-Notch-*-macOS-arm64.zip.sha256` there and continue only if it reports `OK`. Unzip and move `Agent Notch.app` to Applications.
+
+          If blocked, try opening the app once, then use **System Settings → Privacy & Security → Open Anyway** and confirm the prompt. See [Apple's instructions](https://support.apple.com/en-us/102445).
+
+          **Updates are manual:** download and verify the new ZIP, quit Agent Notch from Settings → General, replace the app in Applications, and reopen it. History and preferences stay in place.
+
+          Try the [beta tester guide](https://github.com/Aforno/AgentNotch/blob/main/docs/BETA_TESTING.md) and include this release URL in feedback.
           EOF
             gh release create "$GITHUB_REF_NAME" \
               "$ARCHIVE" \
@@ -152,6 +160,7 @@ jobs:
           fi
 
       - name: Point Homebrew cask at this release
+        if: vars.RELEASE_MODE != 'unsigned-prerelease'
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

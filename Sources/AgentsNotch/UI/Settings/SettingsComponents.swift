@@ -123,9 +123,8 @@ struct SettingsUpdateControl: View {
                 .help(message)
                 .accessibilityHint(message)
         case let .unavailable(message):
-            Text("Packaged builds only")
-                .font(NotchWindowFont.caption)
-                .foregroundStyle(NotchWindowPalette.secondaryText)
+            Link("View Downloads", destination: UpdateService.downloadsURL)
+                .buttonStyle(NotchPillButtonStyle())
                 .help(message)
         }
     }

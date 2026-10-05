@@ -18,6 +18,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Unsigned betas show manual update instructions and View Downloads in Settings
+  instead of starting Sparkle or offering automatic checks and update channels.
+  Unsigned prereleases no longer change the Homebrew cask. Installation docs,
+  release notes, and a beta tester guide explain checksums and Gatekeeper.
 - The expanded notch no longer draws an outline.
 - Active state and primary actions use a signature azure instead of system
   blue and the system accent colour.

@@ -2,21 +2,15 @@ import AgentsNotchCore
 import XCTest
 
 final class ProviderDecisionMapperTests: XCTestCase {
-    func testCodexPermissionAllowAndDenyMatchSchema() throws {
+    func testPermissionRepliesMatchBothProviderSchemas() throws {
         let payload = try decode(permissionFixture)
-        let allowed = try decision(provider: .codex, payload: payload, reply: .allow)
-        XCTAssertEqual(allowed["behavior"] as? String, "allow")
-        let denied = try decision(provider: .codex, payload: payload, reply: .deny)
-        XCTAssertEqual(denied["behavior"] as? String, "deny")
-        XCTAssertEqual(denied["message"] as? String, "Denied from Agent Notch")
-    }
-
-    func testClaudePermissionAllowAndDenyMatchSchema() throws {
-        let payload = try decode(permissionFixture)
-        let allowed = try decision(provider: .claudeCode, payload: payload, reply: .allow)
-        let denied = try decision(provider: .claudeCode, payload: payload, reply: .deny)
-        XCTAssertEqual(allowed["behavior"] as? String, "allow")
-        XCTAssertEqual(denied["behavior"] as? String, "deny")
+        for provider in [AgentProvider.codex, .claudeCode] {
+            let allowed = try decision(provider: provider, payload: payload, reply: .allow)
+            let denied = try decision(provider: provider, payload: payload, reply: .deny)
+            XCTAssertEqual(allowed["behavior"] as? String, "allow", provider.rawValue)
+            XCTAssertEqual(denied["behavior"] as? String, "deny", provider.rawValue)
+            XCTAssertEqual(denied["message"] as? String, "Denied from Agent Notch", provider.rawValue)
+        }
     }
 
     func testClaudeQuestionPreservesQuestionsAndMapsSingleAndMultiSelectLabels() throws {

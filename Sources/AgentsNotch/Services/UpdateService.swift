@@ -6,7 +6,9 @@ import Sparkle
 @Observable
 @MainActor
 final class UpdateService {
-    static let packagedOnlyMessage = "Automatic updates are only available in packaged production builds."
+    static let packagedOnlyMessage = "Source builds update manually. Rebuild from source or download the latest beta."
+    static let manualUpdatesMessage = "This beta updates manually. Download the latest ZIP, quit Agent Notch, and replace the app in Applications."
+    static let downloadsURL = URL(string: "https://github.com/Aforno/AgentNotch/releases")!
 
     private(set) var state: UpdateState = .idle
     private(set) var lastError: String?
@@ -22,36 +24,49 @@ final class UpdateService {
     private var foundReply: ((SPUUserUpdateChoice) -> Void)?
     private var installReply: ((SPUUserUpdateChoice) -> Void)?
     private var started = false
+    private let bundle: Bundle
     private static let logger = Logger(subsystem: "com.afonsoferreira.AgentNotch", category: "updates")
 
+    init(bundle: Bundle = .main) {
+        self.bundle = bundle
+    }
+
     var currentVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+        bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     }
 
     static var hostCanUseSparkle: Bool {
-        let bundle = Bundle.main
-        guard bundle.bundleIdentifier == "com.afonsoferreira.AgentNotch" else { return false }
-        guard bundle.bundlePath.hasSuffix(".app") else { return false }
-        guard bundle.object(forInfoDictionaryKey: "SUFeedURL") is String else { return false }
-        guard bundle.object(forInfoDictionaryKey: "SUPublicEDKey") is String else { return false }
-        return FileManager.default.fileExists(
-            atPath: bundle.privateFrameworksPath.map { "\($0)/Sparkle.framework" } ?? ""
-        )
+        unavailabilityMessage(in: .main) == nil
+    }
+
+    /// Ad-hoc packaging opts into manual updates before Sparkle can start or fetch a feed.
+    static func unavailabilityMessage(in bundle: Bundle) -> String? {
+        guard bundle.bundleIdentifier == "com.afonsoferreira.AgentNotch",
+              bundle.bundlePath.hasSuffix(".app") else { return packagedOnlyMessage }
+        if bundle.object(forInfoDictionaryKey: "AgentNotchManualUpdates") as? Bool == true {
+            return manualUpdatesMessage
+        }
+        guard bundle.object(forInfoDictionaryKey: "SUFeedURL") is String,
+              bundle.object(forInfoDictionaryKey: "SUPublicEDKey") is String,
+              FileManager.default.fileExists(
+                  atPath: bundle.privateFrameworksPath.map { "\($0)/Sparkle.framework" } ?? ""
+              ) else { return packagedOnlyMessage }
+        return nil
     }
 
     func start() {
         guard !started else { return }
-        guard Self.hostCanUseSparkle else {
+        if let message = Self.unavailabilityMessage(in: bundle) {
             started = true
-            state = .unavailable(Self.packagedOnlyMessage)
+            state = .unavailable(message)
             return
         }
 
         let driver = SparkleUpdateDriver()
         driver.service = self
         let updater = SPUUpdater(
-            hostBundle: .main,
-            applicationBundle: .main,
+            hostBundle: bundle,
+            applicationBundle: bundle,
             userDriver: driver,
             delegate: feedDelegate
         )

@@ -7,38 +7,14 @@ import XCTest
 /// socket → decision back to the blocked hook, plus the fail-open path when
 /// the app is not listening.
 final class HookRelayIntegrationTests: XCTestCase {
+    /// Finds the SwiftPM relay beside the test bundle in the active configuration.
     private func locateHookBinary() throws -> URL {
-        let packageRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // Tests/AgentsNotchTests
-            .deletingLastPathComponent() // Tests
-            .deletingLastPathComponent() // package root
-        let buildRoot = packageRoot.appendingPathComponent(".build", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: buildRoot.path) else {
-            throw XCTSkip(".build directory missing; run swift build first")
-        }
-
-        var candidates: [URL] = []
-        let enumerator = FileManager.default.enumerator(
-            at: buildRoot,
-            includingPropertiesForKeys: nil
+        let binary = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
+            .appendingPathComponent("AgentsNotchHook")
+        return try XCTUnwrap(
+            FileManager.default.isExecutableFile(atPath: binary.path) ? binary : nil,
+            "Missing relay for this test configuration: \(binary.path)"
         )
-        let fileManager = FileManager.default
-        while let object = enumerator?.nextObject() {
-            guard let url = object as? URL,
-                  url.lastPathComponent == "AgentsNotchHook",
-                  // Skip release DWARF images inside .dSYM bundles.
-                  !url.path.contains(".dSYM/"),
-                  fileManager.isExecutableFile(atPath: url.path)
-            else { continue }
-            candidates.append(url)
-        }
-        // Prefer the plain-debug binary.
-        guard let binary = candidates.first(where: { $0.path.contains("/debug/") })
-            ?? candidates.first
-        else {
-            throw XCTSkip("AgentsNotchHook executable not found under .build")
-        }
-        return binary
     }
 
     private func makeTemporaryRoot(_ label: String) throws -> URL {
@@ -49,21 +25,17 @@ final class HookRelayIntegrationTests: XCTestCase {
         return root
     }
 
-    private static func spawnHook(
+    private func spawnHook(
         binary: URL,
         arguments: [String],
-        payload: Data,
-        environment extraEnvironment: [String: String] = [:]
-    ) throws -> (process: Process, stdoutBox: DataBox, stderrBox: DataBox, exited: XCTestExpectation) {
+        payload: Data
+    ) throws -> (process: Process, stdout: FileHandle, stderr: FileHandle, exited: XCTestExpectation) {
         let process = Process()
         process.executableURL = binary
         process.arguments = arguments
 
         var environment = ProcessInfo.processInfo.environment
         environment.removeValue(forKey: "GROK_HOOK_EVENT")
-        for (key, value) in extraEnvironment {
-            environment[key] = value
-        }
         process.environment = environment
 
         let stdin = Pipe()
@@ -73,41 +45,21 @@ final class HookRelayIntegrationTests: XCTestCase {
         process.standardOutput = stdout
         process.standardError = stderr
 
-        let stdoutBox = DataBox()
-        let stderrBox = DataBox()
-        stdout.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if !chunk.isEmpty { stdoutBox.append(chunk) }
-        }
-        stderr.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if !chunk.isEmpty { stderrBox.append(chunk) }
-        }
-
         let exited = XCTestExpectation(description: "hook exited")
         process.terminationHandler = { _ in exited.fulfill() }
         try process.run()
+        addTeardownBlock {
+            if process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+            try? stdout.fileHandleForReading.close()
+            try? stderr.fileHandleForReading.close()
+        }
+        defer { try? stdin.fileHandleForWriting.close() }
         try stdin.fileHandleForWriting.write(contentsOf: payload)
-        try? stdin.fileHandleForWriting.close()
 
-        return (process, stdoutBox, stderrBox, exited)
-    }
-
-    private final class DataBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var storage = Data()
-
-        func append(_ data: Data) {
-            lock.lock()
-            storage.append(data)
-            lock.unlock()
-        }
-
-        var value: Data {
-            lock.lock()
-            defer { lock.unlock() }
-            return storage
-        }
+        return (process, stdout.fileHandleForReading, stderr.fileHandleForReading, exited)
     }
 
     private func permissionPayload(sessionID: String) -> Data {
@@ -137,10 +89,9 @@ final class HookRelayIntegrationTests: XCTestCase {
         try replyServer.start()
         defer { replyServer.stop() }
 
-        let hooks = try HookRelayIntegrationTests.spawnHook(
+        let hooks = try spawnHook(
             binary: binary,
             arguments: [
-                binary.path,
                 "--provider", "codex",
                 "--socket", eventSocket.path,
                 "--reply-socket", replySocket.path,
@@ -163,11 +114,16 @@ final class HookRelayIntegrationTests: XCTestCase {
         XCTAssertTrue(delivered)
 
         await fulfillment(of: [hooks.exited], timeout: 10)
+        guard !hooks.process.isRunning else { return XCTFail("Relay did not exit before the timeout") }
         XCTAssertEqual(hooks.process.terminationStatus, 0)
 
-        let output = String(decoding: hooks.stdoutBox.value, as: UTF8.self)
-        XCTAssertTrue(output.contains("PermissionRequest"), "decision must address the PermissionRequest hook, got \(output)")
-        XCTAssertTrue(output.contains("allow"), "submitted allow decision must reach the hook stdout")
+        let output = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: hooks.stdout.readDataToEndOfFile()) as? [String: Any]
+        )
+        let hookOutput = try XCTUnwrap(output["hookSpecificOutput"] as? [String: Any])
+        XCTAssertEqual(hookOutput["hookEventName"] as? String, "PermissionRequest")
+        let decision = try XCTUnwrap(hookOutput["decision"] as? [String: Any])
+        XCTAssertEqual(decision["behavior"] as? String, "allow")
     }
 
     func testHookFailsOpenWhenAppIsNotListening() async throws {
@@ -175,10 +131,9 @@ final class HookRelayIntegrationTests: XCTestCase {
         let root = try makeTemporaryRoot("failopen")
         let eventSocket = root.appendingPathComponent("agent.sock")
 
-        let hooks = try HookRelayIntegrationTests.spawnHook(
+        let hooks = try spawnHook(
             binary: binary,
             arguments: [
-                binary.path,
                 "--provider", "claude-code",
                 "--socket", eventSocket.path,
                 "--reply-socket", root.appendingPathComponent("reply.sock").path,
@@ -188,9 +143,10 @@ final class HookRelayIntegrationTests: XCTestCase {
         )
 
         await fulfillment(of: [hooks.exited], timeout: 15)
+        guard !hooks.process.isRunning else { return XCTFail("Relay did not exit before the timeout") }
         XCTAssertEqual(hooks.process.terminationStatus, 0, "observer failures must never fail the provider hook")
         XCTAssertTrue(
-            hooks.stdoutBox.value.isEmpty,
+            hooks.stdout.readDataToEndOfFile().isEmpty,
             "Claude passive runs must keep stdout empty even in answer mode"
         )
     }
@@ -214,10 +170,9 @@ final class HookRelayIntegrationTests: XCTestCase {
         let payload = Data("""
         {"conversationId":"agy-relay","workspacePaths":["/tmp/AgentsNotch"],"toolCall":{"name":"run_command","args":{"CommandLine":"swift test"}}}
         """.utf8)
-        let hooks = try HookRelayIntegrationTests.spawnHook(
+        let hooks = try spawnHook(
             binary: binary,
             arguments: [
-                binary.path,
                 "--provider", "antigravity",
                 "--event", "PreToolUse",
                 "--socket", eventSocket.path,
@@ -226,8 +181,9 @@ final class HookRelayIntegrationTests: XCTestCase {
         )
 
         await fulfillment(of: [eventReceived, hooks.exited], timeout: 10)
+        guard !hooks.process.isRunning else { return XCTFail("Relay did not exit before the timeout") }
         XCTAssertEqual(hooks.process.terminationStatus, 0)
-        XCTAssertEqual(String(decoding: hooks.stdoutBox.value, as: UTF8.self), "{}\n")
+        XCTAssertEqual(String(decoding: hooks.stdout.readDataToEndOfFile(), as: UTF8.self), "{}\n")
         let event = try XCTUnwrap(receivedEventBox.load())
         XCTAssertEqual(event.sessionId, "antigravity:agy-relay")
         XCTAssertEqual(event.provider, .antigravity)
@@ -238,15 +194,16 @@ final class HookRelayIntegrationTests: XCTestCase {
         let binary = try locateHookBinary()
         let root = try makeTemporaryRoot("unknown-provider")
 
-        let hooks = try HookRelayIntegrationTests.spawnHook(
+        let hooks = try spawnHook(
             binary: binary,
-            arguments: [binary.path, "--provider", "not-a-provider", "--socket", root.appendingPathComponent("agent.sock").path],
+            arguments: ["--provider", "not-a-provider", "--socket", root.appendingPathComponent("agent.sock").path],
             payload: permissionPayload(sessionID: "relay-warn")
         )
         await fulfillment(of: [hooks.exited], timeout: 15)
+        guard !hooks.process.isRunning else { return XCTFail("Relay did not exit before the timeout") }
         XCTAssertEqual(hooks.process.terminationStatus, 0)
 
-        let stderr = String(decoding: hooks.stderrBox.value, as: UTF8.self)
+        let stderr = String(decoding: hooks.stderr.readDataToEndOfFile(), as: UTF8.self)
         XCTAssertTrue(stderr.contains("unknown --provider"), "misconfiguration must be diagnosable, got \(stderr)")
         XCTAssertTrue(stderr.contains("not-a-provider"))
     }

@@ -97,6 +97,18 @@ fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
+SIGNING_DETAILS="$(codesign --display --verbose=2 "$APP_BUNDLE" 2>&1)"
+if [[ "$SIGNING_DETAILS" == *"Signature=adhoc"* ]]; then
+  if [[ "$(plutil -extract AgentNotchManualUpdates raw "$INFO_PLIST")" != "true" || \
+        "$(plutil -extract SUEnableAutomaticChecks raw "$INFO_PLIST")" != "false" ]]; then
+    echo "ad-hoc previews must use manual updates" >&2
+    exit 1
+  fi
+elif [[ "$(plutil -extract AgentNotchManualUpdates raw "$INFO_PLIST")" != "false" ]]; then
+  echo "signed releases must allow in-app updates" >&2
+  exit 1
+fi
+
 APP_ENTITLEMENTS_PLIST="$(mktemp "${TMPDIR:-/tmp}/agentnotch-entitlements.XXXXXX")"
 trap 'rm -f "$APP_ENTITLEMENTS_PLIST"' EXIT
 codesign --display --entitlements "$APP_ENTITLEMENTS_PLIST" --xml "$APP_BUNDLE" 2>/dev/null

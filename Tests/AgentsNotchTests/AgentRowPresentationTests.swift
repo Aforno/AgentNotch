@@ -1,4 +1,3 @@
-#if DEBUG
 @testable import AgentsNotch
 import AgentsNotchCore
 import XCTest
@@ -249,4 +248,3 @@ final class AgentRowPresentationTests: XCTestCase {
         ))
     }
 }
-#endif
