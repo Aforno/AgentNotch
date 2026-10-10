@@ -31,6 +31,7 @@ EXPECTED_VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/AgentsNotch"
 HOOK_BINARY="$APP_BUNDLE/Contents/Resources/bin/agentnotch-hook"
+PROVIDER_ICONS="$APP_BUNDLE/Contents/Resources/AgentsNotch_AgentsNotch.bundle/ProviderIcons.xcassets"
 
 for required_path in "$INFO_PLIST" "$APP_BINARY" "$HOOK_BINARY"; do
   if [[ ! -f "$required_path" ]]; then
@@ -38,6 +39,11 @@ for required_path in "$INFO_PLIST" "$APP_BINARY" "$HOOK_BINARY"; do
     exit 1
   fi
 done
+
+if [[ ! -d "$PROVIDER_ICONS" ]]; then
+  echo "missing provider icon resource bundle: $PROVIDER_ICONS" >&2
+  exit 1
+fi
 
 if [[ ! -x "$APP_BINARY" || ! -x "$HOOK_BINARY" ]]; then
   echo "release executables must be executable" >&2
