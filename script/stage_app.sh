@@ -87,7 +87,6 @@ HOOK_BINARY="$APP_RESOURCES/bin/agentnotch-hook"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 APP_ENTITLEMENTS="$ROOT_DIR/Resources/AgentsNotch.entitlements"
 APP_ICON_SOURCE="$ROOT_DIR/Resources/AppIcon/AppIcon.icns"
-PROVIDER_ICONS_SOURCE="$ROOT_DIR/Sources/AgentsNotch/Resources/ProviderIcons.xcassets"
 
 swift_arguments=(-c "$CONFIGURATION")
 if [[ -n "$BUILD_ARCH" ]]; then
@@ -104,7 +103,7 @@ mkdir -p "$APP_MACOS" "$APP_RESOURCES/bin" "$APP_CONTENTS/Frameworks"
 cp "$BIN_DIR/$EXECUTABLE_NAME" "$APP_BINARY"
 cp "$BIN_DIR/AgentsNotchHook" "$HOOK_BINARY"
 cp "$APP_ICON_SOURCE" "$APP_RESOURCES/AppIcon.icns"
-cp -R "$PROVIDER_ICONS_SOURCE" "$APP_RESOURCES/ProviderIcons.xcassets"
+cp -R "$BIN_DIR/AgentsNotch_AgentsNotch.bundle" "$APP_RESOURCES/AgentsNotch_AgentsNotch.bundle"
 chmod 0755 "$APP_BINARY" "$HOOK_BINARY"
 
 SPARKLE_FRAMEWORK_SOURCE="$(
