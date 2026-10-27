@@ -243,7 +243,7 @@ struct WaitingReplyView: View {
     }
 
     private var projectName: String {
-        return session.projectName ?? session.task
+        session.projectName ?? session.displayTitle
     }
 }
 

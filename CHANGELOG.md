@@ -31,6 +31,12 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   second-by-second relative times, and rows no longer repeat the provider name.
 - UI colours and type sizes come only from the shared style tokens.
   `script/check_repository.sh` rejects raw values.
+- Activity Center, thread detail, and notifications no longer show raw
+  titles such as `[Image #1]`, `<user_query>`, or "Untitled task"; they fall
+  back to the project name, as the notch list already did.
+- With Privacy mode on, the empty notch list still shows which agent last
+  finished and in which project, and the waiting pill no longer repeats the
+  provider name when a session has no project.
 
 ## [0.3.0] - 2026-09-23
 

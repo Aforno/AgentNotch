@@ -132,7 +132,7 @@ struct ActivityCenterSidebar: View {
             ActivitySessionRow(session: session, isSelected: selection == session.id)
         }
         .buttonStyle(.plain)
-        .help(session.task)
+        .help(session.displayTitle)
         .contextMenu {
             ForEach(OriginActivationService.destinations(for: session), id: \.action) { destination in
                 Button(destination.title) { onOpen(session, destination.action) }
@@ -142,7 +142,7 @@ struct ActivityCenterSidebar: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(session.task)
+        .accessibilityLabel(session.displayTitle)
         .accessibilityValue("\(session.provider.displayName), \(session.state.displayName), \(session.currentActivity)")
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(selection == session.id ? .isSelected : [])
