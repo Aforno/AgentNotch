@@ -214,7 +214,7 @@ struct NotchRootView: View {
         // insets would push the black shape down and reveal the menu bar.
         .ignoresSafeArea()
         .onAppear {
-            applyDrawnLayout(layout, animated: false)
+            applyDrawnLayout(layout)
             onSizeChange(CGSize(width: layout.width, height: layout.height), false)
         }
         .onDisappear {
@@ -328,7 +328,7 @@ struct NotchRootView: View {
                 ? .spring(response: 0.38, dampingFraction: 0.78)
                 : .spring(response: 0.30, dampingFraction: 0.92)
             withAnimation(animation) {
-                applyDrawnLayout(newValue, animated: true)
+                applyDrawnLayout(newValue)
             } completion: {
                 guard generation == sizeGeneration else { return }
                 onSizeChange(CGSize(width: newValue.width, height: newValue.height), false)
@@ -337,14 +337,13 @@ struct NotchRootView: View {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                applyDrawnLayout(newValue, animated: false)
+                applyDrawnLayout(newValue)
             }
             onSizeChange(CGSize(width: newValue.width, height: newValue.height), false)
         }
     }
 
-    private func applyDrawnLayout(_ layout: NotchLayout, animated: Bool) {
-        _ = animated
+    private func applyDrawnLayout(_ layout: NotchLayout) {
         drawnWidth = layout.width
         drawnHeight = layout.height
         drawnRadius = layout.radius

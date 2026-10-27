@@ -69,7 +69,7 @@ struct AgentDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DynamicIslandSpacing.standard) {
                 VStack(alignment: .leading, spacing: DynamicIslandSpacing.tight) {
-                    Text(privacyModeEnabled ? "Private activity" : session.task)
+                    Text(privacyModeEnabled ? "Private activity" : session.displayTitle)
                         .font(NotchWindowFont.title)
                         .foregroundStyle(NotchWindowPalette.primaryText)
                         .lineLimit(2)

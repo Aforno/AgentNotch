@@ -153,6 +153,6 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
     }
 
     private func projectName(for session: AgentSession) -> String {
-        session.projectName ?? session.task
+        session.projectName ?? session.displayTitle
     }
 }

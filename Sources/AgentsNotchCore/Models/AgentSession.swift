@@ -65,6 +65,13 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var needsAttention: Bool { state.needsAttention }
     public var isSubagent: Bool { parentSessionId != nil }
 
+    /// Title for any surface that names the session. `task` keeps the raw
+    /// provider value (image placeholders, markup tags, "Untitled task"), so
+    /// fall back to the project before the placeholder.
+    public var displayTitle: String {
+        AgentTaskTitle.displayable(task) ?? projectName ?? AgentTaskTitle.untitled
+    }
+
     /// Ring-buffer size for per-session event history. The Activity Center
     /// timeline renders from this list, so it bounds how far back the timeline
     /// can reach. Keep the decode path capped at the same value.

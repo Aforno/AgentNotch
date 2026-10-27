@@ -113,6 +113,21 @@ final class AgentRowPresentationTests: XCTestCase {
         )
     }
 
+    func testDisplayTitleSkipsPlaceholderTasks() {
+        let withProject = session(
+            id: "root",
+            state: .running,
+            task: "[Image #1]",
+            workingDirectory: "/Users/me/AgentNotch"
+        )
+        let withoutProject = session(id: "other", state: .running, task: "<user_query>")
+        let titled = session(id: "titled", state: .running, task: "[Image #1] Fix login")
+
+        XCTAssertEqual(withProject.displayTitle, "AgentNotch")
+        XCTAssertEqual(withoutProject.displayTitle, AgentTaskTitle.untitled)
+        XCTAssertEqual(titled.displayTitle, "Fix login")
+    }
+
     func testHeadlineUsesTaskAloneWhenProjectIsMissing() {
         let session = session(id: "root", state: .running, task: "Fix authentication")
 

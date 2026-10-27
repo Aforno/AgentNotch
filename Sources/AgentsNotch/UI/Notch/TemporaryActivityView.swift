@@ -48,10 +48,9 @@ struct TemporaryActivityView: View {
         .padding(.horizontal, DynamicIslandSpacing.outer)
     }
 
+    /// Privacy mode allows the project, but never the task. Without a project
+    /// it must not repeat the provider name that already leads the line.
     private var projectName: String {
-        guard let project = session.projectName else {
-            return privacyModeEnabled ? session.provider.displayName : session.task
-        }
-        return project
+        session.projectName ?? (privacyModeEnabled ? "Private activity" : session.displayTitle)
     }
 }

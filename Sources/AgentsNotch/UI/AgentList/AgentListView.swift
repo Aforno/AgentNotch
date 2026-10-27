@@ -12,7 +12,6 @@ struct AgentListView: View {
     let onOpenSettings: () -> Void
     let onOpenActivityCenter: () -> Void
     let onSelect: (String) -> Void
-    @AppStorage(AppPreferences.Key.privacyModeEnabled) private var privacyModeEnabled = false
 
     static func rowsHeight(for sessions: [AgentSession], hiddenGroupCount: Int = 0) -> CGFloat {
         if sessions.isEmpty {
@@ -155,9 +154,10 @@ struct AgentListView: View {
     }
 
     /// "Claude finished 2m ago · repo", or the plain empty message. The time
-    /// leads so truncation drops the project rather than the recency.
+    /// leads so truncation drops the project rather than the recency. Provider,
+    /// state, and project are all allowed in Privacy mode.
     private var emptyTitle: String {
-        guard let session = lastFinishedSession, !privacyModeEnabled else { return "No active agents" }
+        guard let session = lastFinishedSession else { return "No active agents" }
         let verb = session.state == .failed ? "failed" : "finished"
         let when = ElapsedLabel.phrase(Date().timeIntervalSince(session.completedAt ?? session.updatedAt))
         let project = session.projectName.map { " · \($0)" } ?? ""

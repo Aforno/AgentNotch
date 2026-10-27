@@ -41,7 +41,7 @@ struct PrivacySettingsSection: View {
         SettingsSection(title: "Privacy") {
             SettingsToggleRow(
                 title: "Hide activity details",
-                detail: "Show only provider, project, and state in the notch and notifications.",
+                detail: "The notch shows only provider, project, and state. Notifications show only provider and state.",
                 isOn: privacyModeEnabled
             )
         }

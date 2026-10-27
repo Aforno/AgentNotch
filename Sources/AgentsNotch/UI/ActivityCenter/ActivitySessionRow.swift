@@ -60,7 +60,7 @@ struct ActivitySessionRow: View {
             // The provider icon already names the provider, so the second line
             // carries only what distinguishes this session.
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.task)
+                Text(session.displayTitle)
                     .font(NotchWindowFont.bodyEmphasis)
                     .foregroundStyle(NotchWindowPalette.primaryText)
                     .lineLimit(1)
@@ -96,8 +96,9 @@ struct ActivitySessionRow: View {
         return isHovering ? NotchWindowPalette.raised : .clear
     }
 
+    /// Skips the project when the title already fell back to it.
     private var rowDetail: String {
-        let project = session.projectName
+        let project = session.projectName.flatMap { $0 == session.displayTitle ? nil : $0 }
         return [project, session.currentActivity].compactMap { $0 }.joined(separator: " · ")
     }
 }

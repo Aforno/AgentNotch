@@ -80,7 +80,7 @@ struct ActivitySessionDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 16) {
-                Text(session.task)
+                Text(session.displayTitle)
                     .font(NotchWindowFont.display)
                     .foregroundStyle(NotchWindowPalette.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -182,7 +182,7 @@ struct ActivitySessionDetailView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(NotchWindowPalette.raisedStrong, in: Capsule())
-                Text(related.task)
+                Text(related.displayTitle)
                     .font(NotchWindowFont.caption)
                     .foregroundStyle(NotchWindowPalette.secondaryText)
                     .lineLimit(1)
