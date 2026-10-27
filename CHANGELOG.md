@@ -37,6 +37,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - With Privacy mode on, the empty notch list still shows which agent last
   finished and in which project, and the waiting pill no longer repeats the
   provider name when a session has no project.
+- The Privacy mode description now says notifications hide the project too.
 
 ## [0.3.0] - 2026-09-23
 
