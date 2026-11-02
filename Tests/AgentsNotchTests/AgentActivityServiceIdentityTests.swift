@@ -3,7 +3,7 @@ import XCTest
 
 extension AgentActivityServiceTests {
     @MainActor
-    func testRestoreDropsOrphanedGrokStartsButKeepsRealSessions() {
+    func testRestoreDropsOrphanedGrokAndCursorStartsButKeepsRealSessions() {
         let orphanedGrokStart = AgentSession(event: AgentEvent(
             type: .started,
             sessionId: "grok:probe",
@@ -21,6 +21,14 @@ extension AgentActivityServiceTests {
             state: .thinking,
             metadata: ["hookEvent": "user_prompt_submit"]
         ))
+        let orphanedCursorStart = AgentSession(event: AgentEvent(
+            type: .started,
+            sessionId: "cursor:idle",
+            provider: .cursor,
+            activity: "Session started",
+            state: .starting,
+            metadata: ["hookEvent": "sessionStart"]
+        ))
         let codexStart = AgentSession(event: AgentEvent(
             type: .started,
             sessionId: "codex:session",
@@ -30,7 +38,7 @@ extension AgentActivityServiceTests {
             metadata: ["hookEvent": "SessionStart"]
         ))
 
-        let service = AgentActivityService(sessions: [orphanedGrokStart, activeGrokTurn, codexStart])
+        let service = AgentActivityService(sessions: [orphanedGrokStart, orphanedCursorStart, activeGrokTurn, codexStart])
 
         XCTAssertEqual(Set(service.sessions.map(\.id)), ["grok:turn", "codex:session"])
     }

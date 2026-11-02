@@ -52,7 +52,8 @@ receive `{}` followed by a newline. Keep this in sync with
   notch adds `--answer` handlers only for supported interactive events.
 - Cursor exposes session, prompt, tool, failure, and completion hooks. It has
   no passive native approval hook, so it cannot raise notch attention for
-  approval.
+  approval. Like Grok, it becomes visible on its first prompt: closing the
+  terminal skips `sessionEnd`, so an unanswered `sessionStart` would spin.
 - Gemini CLI Before/After lifecycle aliases map to the same protocol event
   types.
 - Antigravity uses a named `agentnotch` hook in `~/.gemini/config/hooks.json`.

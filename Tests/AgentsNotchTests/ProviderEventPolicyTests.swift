@@ -2,9 +2,12 @@ import XCTest
 @testable import AgentsNotchCore
 
 final class ProviderEventPolicyTests: XCTestCase {
-    func testGrokSessionStartIsInvisible() {
+    func testGrokAndCursorSessionStartsAreInvisible() {
         XCTAssertFalse(
             ProviderEventPolicy.shouldMapSessionStart(provider: .grok, source: nil)
+        )
+        XCTAssertFalse(
+            ProviderEventPolicy.shouldMapSessionStart(provider: .cursor, source: nil)
         )
         XCTAssertTrue(
             ProviderEventPolicy.shouldMapSessionStart(provider: .codex, source: nil)

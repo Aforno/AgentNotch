@@ -427,11 +427,11 @@ public final class AgentActivityService {
         return true
     }
 
-    /// Restore normalization: drop orphaned Grok SessionStart rows, prefix
+    /// Restore normalization: drop orphaned Grok/Cursor SessionStart rows, prefix
     /// every session and parent, then keep the newest row per identity.
     /// Idempotent. Runs on init and every replaceSessions restore boundary.
     private func normalizeRestoredSessions() {
-        sessions.removeAll(where: Self.isOrphanedGrokStart)
+        sessions.removeAll(where: Self.isOrphanedSessionStart)
         for index in sessions.indices {
             namespaceSessionIdentity(&sessions[index])
         }
@@ -523,12 +523,12 @@ public final class AgentActivityService {
         return lhs.updatedAt > rhs.updatedAt
     }
 
-    /// Removes rows persisted by older builds when Grok initialized a command
-    /// but never began an agent turn. Real Grok sessions have at least one
+    /// Removes rows persisted by older builds when Grok or Cursor opened a
+    /// session but never began an agent turn. Real sessions have at least one
     /// prompt, tool, notification, or terminal event after SessionStart.
     /// `nonisolated` so Swift 6.0 can pass it to `removeAll(where:)`.
-    nonisolated private static func isOrphanedGrokStart(_ session: AgentSession) -> Bool {
-        guard session.provider == .grok,
+    nonisolated private static func isOrphanedSessionStart(_ session: AgentSession) -> Bool {
+        guard session.provider == .grok || session.provider == .cursor,
               session.state == .starting,
               !session.recentEvents.isEmpty
         else { return false }

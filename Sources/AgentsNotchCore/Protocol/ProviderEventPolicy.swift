@@ -10,6 +10,11 @@ public enum ProviderEventPolicy {
         switch provider {
         case .grok:
             return GrokEventPolicy.shouldMapSessionStart
+        case .cursor:
+            // Cursor fires sessionStart when the CLI or a composer opens, but
+            // skips sessionEnd when the terminal is closed. Surface the session
+            // on its first prompt so an idle open/close never looks like work.
+            return false
         default:
             return !isLifecycleReentry(source: source)
         }

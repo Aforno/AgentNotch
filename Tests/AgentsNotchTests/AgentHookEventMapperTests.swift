@@ -909,14 +909,13 @@ final class AgentHookEventMapperTests: XCTestCase {
           "conversation_id": "cursor-conversation",
           "cwd": "",
           "workspace_roots": ["/tmp/AgentsNotch"],
-          "hook_event_name": "session_start"
+          "hook_event_name": "beforeSubmitPrompt"
         }
         """)
 
         XCTAssertEqual(payload.cwd, "/tmp/AgentsNotch")
         let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .cursor))
         XCTAssertEqual(event.workingDirectory, "/tmp/AgentsNotch")
-        XCTAssertEqual(event.task, "AgentsNotch")
     }
 
     func testObjectErrorAndNullHookEventNameAliasDoNotDropPayload() throws {
