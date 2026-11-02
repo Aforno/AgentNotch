@@ -885,6 +885,21 @@ final class AgentHookEventMapperTests: XCTestCase {
         XCTAssertEqual(event.task, "Reviewer subagent")
     }
 
+    func testOnlyHeadlessCursorSessionStartIsVisible() throws {
+        func start(agentArguments: [String]?) throws -> AgentEvent? {
+            var payload = try decode("""
+            {"conversation_id": "c", "hook_event_name": "sessionStart", "workspace_roots": ["/tmp/AgentsNotch"]}
+            """)
+            CursorEventPolicy.markHeadlessStart(&payload, agentArguments: agentArguments)
+            return AgentHookEventMapper.map(payload, provider: .cursor)
+        }
+
+        XCTAssertNil(try start(agentArguments: ["agent", "--force"]))
+        XCTAssertNil(try start(agentArguments: nil))
+        XCTAssertEqual(try start(agentArguments: ["agent", "-p", "hello"])?.state, .starting)
+        XCTAssertEqual(try start(agentArguments: ["agent", "--print", "hello"])?.state, .starting)
+    }
+
     func testCursorPromptUsesConversationAndWorkspaceRootAliases() throws {
         let payload = try decode("""
         {
@@ -909,14 +924,13 @@ final class AgentHookEventMapperTests: XCTestCase {
           "conversation_id": "cursor-conversation",
           "cwd": "",
           "workspace_roots": ["/tmp/AgentsNotch"],
-          "hook_event_name": "session_start"
+          "hook_event_name": "beforeSubmitPrompt"
         }
         """)
 
         XCTAssertEqual(payload.cwd, "/tmp/AgentsNotch")
         let event = try XCTUnwrap(AgentHookEventMapper.map(payload, provider: .cursor))
         XCTAssertEqual(event.workingDirectory, "/tmp/AgentsNotch")
-        XCTAssertEqual(event.task, "AgentsNotch")
     }
 
     func testObjectErrorAndNullHookEventNameAliasDoNotDropPayload() throws {

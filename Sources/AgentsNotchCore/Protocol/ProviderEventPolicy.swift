@@ -10,9 +10,18 @@ public enum ProviderEventPolicy {
         switch provider {
         case .grok:
             return GrokEventPolicy.shouldMapSessionStart
+        case .cursor:
+            return source == CursorEventPolicy.headlessSource
         default:
             return !isLifecycleReentry(source: source)
         }
+    }
+
+    /// Providers whose turn-end hooks can be skipped when the terminal closes
+    /// (Cursor omits `stop`/`sessionEnd`). Their terminal-hosted sessions
+    /// settle once the recorded agent process exits.
+    public static func settlesWhenOriginExits(provider: AgentProvider) -> Bool {
+        provider == .cursor
     }
 
     public static func toolPresentation(

@@ -58,10 +58,13 @@ enum HookProcessIO {
         }
     }
 
+    /// The agent that ran this hook, past any `$SHELL -c` wrapper.
+    static let agentProcessIdentifier = AgentProcessIdentity.agentProcess(forHookParent: getppid())
+
     static func origin() -> AgentOrigin? {
         AgentOrigin.captured(
             environment: ProcessInfo.processInfo.environment,
-            processIdentifier: getppid()
+            processIdentifier: agentProcessIdentifier
         )
     }
 
