@@ -149,6 +149,14 @@ public final class AgentActivityService {
             }
         }
 
+        // SessionEnd for a session we never saw has nothing to end. Recording
+        // it would turn an idle open/close (Cursor, Grok) into a history row.
+        if sessionsByID[event.sessionId] == nil,
+           event.metadata?["hookEvent"].flatMap(HookEventName.init(rawEventName:)) == .sessionEnd
+        {
+            return false
+        }
+
         let advancesCurrentState: Bool
         if let existingIndex = sessionsByID[event.sessionId] {
             advancesCurrentState = sessions[existingIndex].apply(event)
@@ -318,6 +326,52 @@ public final class AgentActivityService {
         }
         guard changed else { return }
         commitSessionChanges(orderSessions: true, attentionRefresh: .always)
+    }
+
+    /// Terminal-hosted sessions whose provider can skip its turn-end hooks
+    /// and whose agent process can be checked.
+    public var hasExitWatchedSessions: Bool {
+        sessions.contains(where: Self.isExitWatched)
+    }
+
+    /// Completes exit-watched sessions whose agent process is gone, e.g. a
+    /// Cursor CLI whose terminal was closed before `stop`/`sessionEnd` fired.
+    public func completeSessionsWithExitedOrigins(
+        processAlive: (Int32) -> Bool = { pid in
+            guard pid > 0 else { return false }
+            return kill(pid, 0) == 0
+        },
+        processStartedAt: ((Int32) -> Date?)? = nil
+    ) {
+        let resolveProcessStart = processStartedAt ?? { pid in
+            AgentProcessIdentity.startedAt(for: pid)
+        }
+        var changed = false
+        for index in sessions.indices where Self.isExitWatched(sessions[index]) {
+            guard let origin = sessions[index].origin,
+                  !origin.matchesRunningProcess(
+                      processAlive: processAlive,
+                      currentStartedAt: resolveProcessStart
+                  )
+            else { continue }
+            let parentID = sessions[index].id
+            let completedAt = sessions[index].updatedAt
+            sessions[index].complete(as: .completed, at: completedAt)
+            completeActiveDescendants(of: parentID, as: .completed, at: completedAt)
+            changed = true
+        }
+        guard changed else { return }
+        commitSessionChanges(orderSessions: true, attentionRefresh: .always)
+    }
+
+    /// Only terminal-hosted origins (a TTY) are watched: GUI hosts such as the
+    /// Cursor editor may run hooks from helpers whose lifetime is not the
+    /// session's.
+    nonisolated private static func isExitWatched(_ session: AgentSession) -> Bool {
+        session.isActive
+            && ProviderEventPolicy.settlesWhenOriginExits(provider: session.provider)
+            && session.origin?.processIdentifier != nil
+            && session.origin?.tty != nil
     }
 
     /// Completes sessions still stuck in `.unknown` after the reconnect grace

@@ -423,4 +423,60 @@ extension AgentActivityServiceTests {
 
         XCTAssertTrue(service.sessions.isEmpty)
     }
+
+    @MainActor
+    func testSessionEndForUnseenSessionCreatesNoRow() {
+        let service = AgentActivityService()
+        let end = AgentEvent(
+            type: .completed,
+            sessionId: "cursor:idle",
+            provider: .cursor,
+            activity: "Session ended",
+            state: .completed,
+            metadata: ["hookEvent": "sessionEnd"]
+        )
+
+        XCTAssertFalse(service.ingest(end))
+        XCTAssertTrue(service.sessions.isEmpty)
+
+        service.ingest(AgentEvent(
+            type: .started,
+            sessionId: "cursor:idle",
+            provider: .cursor,
+            activity: "Session started",
+            state: .starting,
+            metadata: ["hookEvent": "sessionStart"]
+        ))
+        service.ingest(end)
+        XCTAssertEqual(service.sessions.first?.state, .completed)
+    }
+
+    @MainActor
+    func testExitedTerminalCursorSessionsSettleWithoutTurnEndHooks() {
+        func session(_ id: String, provider: AgentProvider, pid: Int32, tty: String?) -> AgentSession {
+            AgentSession(event: AgentEvent(
+                type: .activity,
+                sessionId: id,
+                provider: provider,
+                activity: "Thinking",
+                state: .thinking,
+                origin: AgentOrigin(processIdentifier: pid, tty: tty)
+            ))
+        }
+        let service = AgentActivityService(sessions: [
+            session("cursor:closed", provider: .cursor, pid: 1_001, tty: "/dev/ttys001"),
+            session("cursor:open", provider: .cursor, pid: 1_002, tty: "/dev/ttys002"),
+            session("cursor:editor", provider: .cursor, pid: 1_003, tty: nil),
+            session("claude-code:closed", provider: .claudeCode, pid: 1_004, tty: "/dev/ttys004"),
+        ])
+        XCTAssertTrue(service.hasExitWatchedSessions)
+
+        service.completeSessionsWithExitedOrigins(processAlive: { $0 == 1_002 })
+
+        let states = Dictionary(uniqueKeysWithValues: service.sessions.map { ($0.id, $0.state) })
+        XCTAssertEqual(states["cursor:closed"], .completed)
+        XCTAssertEqual(states["cursor:open"], .thinking)
+        XCTAssertEqual(states["cursor:editor"], .thinking)
+        XCTAssertEqual(states["claude-code:closed"], .thinking)
+    }
 }

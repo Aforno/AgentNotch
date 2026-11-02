@@ -46,6 +46,7 @@ final class AppRuntime {
     private var replyServer: UnixReplyServer?
     /// Completes sessions still in `.unknown` when no live hook confirms them.
     private var unknownGraceTask: Task<Void, Never>?
+    private var originExitWatchTask: Task<Void, Never>?
     private var historyPruneTask: Task<Void, Never>?
     private var socketRetryTask: Task<Void, Never>?
     private var replyRetryTask: Task<Void, Never>?
@@ -61,6 +62,7 @@ final class AppRuntime {
     /// How long restored unverified runners stay in `.unknown` before the app
     /// assumes they ended without a hook. Live events cancel this per session.
     static let unknownSessionGracePeriod: Duration = .seconds(90)
+    private static let originExitPollInterval: Duration = .seconds(3)
     private static let integratedProviders: [AgentProvider] = [
         .codex,
         .claudeCode,
@@ -411,6 +413,7 @@ final class AppRuntime {
         activity.onSessionsChanged = { [weak self] _ in
             self?.schedulePersist()
             self?.scheduleHistoryPrune()
+            self?.watchOriginExits()
         }
         isRestoring = false
         let bufferedEvents = startupEvents
@@ -420,6 +423,7 @@ final class AppRuntime {
         }
         scheduleUnknownSessionGracePeriod(generation: generation)
         scheduleHistoryPrune()
+        watchOriginExits()
     }
 
     private func startProviderMonitoring(generation: Int) async -> Bool {
@@ -443,6 +447,8 @@ final class AppRuntime {
         activity.onSessionsChanged = nil
         unknownGraceTask?.cancel()
         unknownGraceTask = nil
+        originExitWatchTask?.cancel()
+        originExitWatchTask = nil
         historyPruneTask?.cancel()
         historyPruneTask = nil
         persistScheduler.cancelPending()
@@ -527,6 +533,23 @@ final class AppRuntime {
                   generation == self.lifecycleGeneration
             else { return }
             self.activity.completeUnknownSessions()
+        }
+    }
+
+    /// Polls exit-watched sessions (Cursor CLI) while any are active, so a
+    /// closed terminal settles the row even though no hook reports it.
+    private func watchOriginExits() {
+        guard originExitWatchTask == nil, acceptsEvents, activity.hasExitWatchedSessions else { return }
+        originExitWatchTask = Task { @MainActor [weak self] in
+            while true {
+                try? await Task.sleep(for: Self.originExitPollInterval)
+                guard let self, !Task.isCancelled, self.acceptsEvents else { return }
+                self.activity.completeSessionsWithExitedOrigins()
+                guard self.activity.hasExitWatchedSessions else {
+                    self.originExitWatchTask = nil
+                    return
+                }
+            }
         }
     }
 

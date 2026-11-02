@@ -175,6 +175,49 @@ public struct AgentOrigin: Codable, Hashable, Sendable {
 }
 
 package enum AgentProcessIdentity {
+    private static let shellNames: Set<String> = ["sh", "bash", "zsh", "dash", "fish", "ksh"]
+
+    /// The agent behind a hook process's parent. Some providers (Cursor) run
+    /// hook commands through a short-lived `$SHELL -c` wrapper; recording the
+    /// wrapper would make the origin look dead as soon as the hook returns.
+    package static func agentProcess(forHookParent processIdentifier: Int32) -> Int32 {
+        var current = processIdentifier
+        for _ in 0..<2 {
+            guard let info = bsdInfo(for: current),
+                  shellNames.contains(commandName(info)),
+                  info.pbi_ppid > 1
+            else { break }
+            current = Int32(info.pbi_ppid)
+        }
+        return current
+    }
+
+    /// The process's argv, or nil when it is gone or not readable.
+    package static func arguments(for processIdentifier: Int32) -> [String]? {
+        guard processIdentifier > 0 else { return nil }
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, processIdentifier]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else {
+            return nil
+        }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return nil }
+        let argc = buffer.withUnsafeBytes { Int($0.loadUnaligned(as: Int32.self)) }
+        // Layout: argc, exec path, NUL padding, then argc NUL-terminated args.
+        var strings = buffer[MemoryLayout<Int32>.size..<size]
+            .split(separator: 0, omittingEmptySubsequences: true)
+            .map { String(decoding: $0, as: UTF8.self) }
+        guard !strings.isEmpty else { return nil }
+        strings.removeFirst()
+        return Array(strings.prefix(argc))
+    }
+
+    private static func commandName(_ info: proc_bsdinfo) -> String {
+        withUnsafeBytes(of: info.pbi_comm) { bytes in
+            String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+        }
+    }
+
     package static func startedAt(for processIdentifier: Int32) -> Date? {
         guard let info = bsdInfo(for: processIdentifier) else { return nil }
         return Date(

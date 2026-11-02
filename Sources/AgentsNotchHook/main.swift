@@ -33,6 +33,12 @@ do {
     if payload.hookEventName.nonEmpty == nil, let eventName = invocation.eventName?.nonEmpty {
         payload.hookEventName = eventName
     }
+    if invocation.provider == .cursor {
+        CursorEventPolicy.markHeadlessStart(
+            &payload,
+            agentArguments: AgentProcessIdentity.arguments(for: HookProcessIO.agentProcessIdentifier)
+        )
+    }
     let enriched = ProviderHookEnricher.enrich(payload, provider: invocation.provider)
     var answered = false
     if var event = AgentHookEventMapper.map(

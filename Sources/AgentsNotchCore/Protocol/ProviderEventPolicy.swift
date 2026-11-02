@@ -11,13 +11,17 @@ public enum ProviderEventPolicy {
         case .grok:
             return GrokEventPolicy.shouldMapSessionStart
         case .cursor:
-            // Cursor fires sessionStart when the CLI or a composer opens, but
-            // skips sessionEnd when the terminal is closed. Surface the session
-            // on its first prompt so an idle open/close never looks like work.
-            return false
+            return source == CursorEventPolicy.headlessSource
         default:
             return !isLifecycleReentry(source: source)
         }
+    }
+
+    /// Providers whose turn-end hooks can be skipped when the terminal closes
+    /// (Cursor omits `stop`/`sessionEnd`). Their terminal-hosted sessions
+    /// settle once the recorded agent process exits.
+    public static func settlesWhenOriginExits(provider: AgentProvider) -> Bool {
+        provider == .cursor
     }
 
     public static func toolPresentation(
