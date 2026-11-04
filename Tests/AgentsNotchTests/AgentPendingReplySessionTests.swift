@@ -2,7 +2,7 @@ import AgentsNotchCore
 import XCTest
 
 final class AgentPendingReplySessionTests: XCTestCase {
-    func testWaitingEventKeepsPendingReplyUntilSocketLivenessReconciliation() {
+    func testRoutineActivityKeepsPendingWaitUntilSocketLivenessReconciliation() {
         let replyId = UUID()
         var session = AgentSession(event: AgentEvent(
             type: .waiting,
@@ -24,14 +24,22 @@ final class AgentPendingReplySessionTests: XCTestCase {
             type: .activity,
             sessionId: "codex:thr",
             provider: .codex,
-            activity: "Allowed",
+            activity: "Another tool finished",
             state: .running,
             timestamp: Date().addingTimeInterval(1)
         ))
-        XCTAssertEqual(session.state, .running)
+        XCTAssertEqual(session.state, .waitingForUser)
+        XCTAssertEqual(session.currentActivity, "Needs command approval")
         XCTAssertEqual(session.pendingReply?.replyId, replyId)
         session.retainPendingReplies { _ in false }
         XCTAssertNil(session.pendingReply)
+        _ = session.apply(AgentEvent(
+            type: .toolCompleted,
+            sessionId: session.id,
+            provider: session.provider,
+            timestamp: Date().addingTimeInterval(2)
+        ))
+        XCTAssertEqual(session.state, .running)
     }
 
     @MainActor
@@ -58,6 +66,34 @@ final class AgentPendingReplySessionTests: XCTestCase {
 
         XCTAssertNil(service.session(id: "codex:thr")?.pendingReply)
         XCTAssertEqual(service.session(id: "codex:thr")?.pendingReplies.count, 0)
+    }
+
+    @MainActor
+    func testReorderedPendingReplyStillPromotesAttention() {
+        let service = AgentActivityService()
+        let toolTime = Date(timeIntervalSince1970: 101)
+        service.ingest(AgentEvent(
+            type: .toolCompleted,
+            sessionId: "codex:concurrent",
+            provider: .codex,
+            timestamp: toolTime
+        ))
+        let pending = AgentPendingReply(
+            replyId: UUID(), kind: .permission, prompt: "Allow?", grants: [.deny, .allow]
+        )
+        service.ingest(AgentEvent(
+            type: .waiting,
+            sessionId: "codex:concurrent",
+            provider: .codex,
+            activity: "Needs command approval",
+            timestamp: toolTime.addingTimeInterval(-1),
+            pendingReply: pending
+        ))
+
+        XCTAssertEqual(service.attentionCount, 1)
+        XCTAssertEqual(service.attentionSession?.pendingReply, pending)
+        XCTAssertEqual(service.attentionSession?.currentActivity, "Needs command approval")
+        XCTAssertEqual(service.attentionSession?.updatedAt, toolTime)
     }
 
     @MainActor

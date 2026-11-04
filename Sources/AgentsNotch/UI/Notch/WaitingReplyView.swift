@@ -165,7 +165,7 @@ struct WaitingReplyView: View {
                         .foregroundStyle(NotchWindowPalette.secondaryText)
                 }
                 .lineLimit(1)
-                Text(session.currentActivity)
+                Text(privacyModeEnabled ? session.state.displayName : session.currentActivity)
                     .font(NotchWindowFont.caption)
                     .foregroundStyle(NotchWindowPalette.tertiaryText)
                     .lineLimit(1)
@@ -243,7 +243,7 @@ struct WaitingReplyView: View {
     }
 
     private var projectName: String {
-        session.projectName ?? session.displayTitle
+        session.projectName ?? (privacyModeEnabled ? "Private activity" : session.displayTitle)
     }
 }
 

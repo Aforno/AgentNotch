@@ -27,6 +27,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
     public var hasOfficialSessionTitle: Bool
     /// Sticky helper classification so an official title or the event ring cannot un-hide it.
     public var isInternalHelper: Bool
+    /// Survives event-history eviction so an old Stop cannot settle a newer turn.
+    private var latestTurnStartedAt: Date?
 
     public init(event: AgentEvent) {
         id = event.sessionId
@@ -57,6 +59,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         hasOfficialSessionTitle = event.hasOfficialSessionTitle
         isInternalHelper = AgentTaskTitle.isInternalHelper(task, provider: provider)
             || event.task.map { AgentTaskTitle.isInternalHelper($0, provider: event.provider) } == true
+        latestTurnStartedAt = event.isUserPromptSubmit ? event.timestamp : nil
         applyWorkflowUpdate(event.workflowUpdate, at: event.timestamp)
         reconcilePlanWithTerminalState(at: event.timestamp)
     }
@@ -79,7 +82,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
 
     @discardableResult
     public mutating func apply(_ event: AgentEvent) -> Bool {
-        if shouldIgnoreGrokTurnSettlement(event) {
+        if isTerminalBeforeCurrentTurn(event) || shouldIgnoreGrokTurnSettlement(event) {
             recordRecentEvent(event)
             return false
         }
@@ -90,6 +93,12 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
             updatedAt: updatedAt,
             event: event
         ).advancesCurrentState
+
+        // A prompt can arrive after its first tool event. It still establishes
+        // the turn boundary even when it cannot replace the newer activity.
+        if event.isUserPromptSubmit {
+            latestTurnStartedAt = max(latestTurnStartedAt ?? .distantPast, event.timestamp)
+        }
 
         if advancesCurrentState {
             applyAdvancingEvent(event)
@@ -138,6 +147,12 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 event: event
             ) {
                 self = .hold(.terminalResurrection)
+                return
+            }
+            // A registered reply may arrive after a concurrent tool event.
+            // Its unanswered prompt still needs attention on an active session.
+            if event.resolvedState == .waitingForUser, event.pendingReply != nil {
+                self = .advance
                 return
             }
             if event.timestamp >= updatedAt || Self.reorderedTerminal(isTerminal: isTerminal, eventIsTerminal: eventIsTerminal) {
@@ -203,8 +218,16 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         provider = event.provider
         let eventProjectName = resolvedProjectName(for: event.workingDirectory)
         applyTask(from: event, projectName: eventProjectName)
-        if let activity = event.activity?.nonEmpty { currentActivity = activity }
-        state = event.resolvedState
+        // Other tools may finish while a permission hook is still blocked.
+        // Only reply resolution/disconnect or a terminal event ends that wait.
+        let keepsPendingWait = state == .waitingForUser
+            && !pendingReplies.isEmpty
+            && event.resolvedState.isActive
+            && event.resolvedState != .waitingForUser
+        if !keepsPendingWait {
+            if let activity = event.activity?.nonEmpty { currentActivity = activity }
+            state = event.resolvedState
+        }
         // Keep session clocks monotonic when an older terminal overrides active.
         updatedAt = max(updatedAt, event.timestamp)
         // Treat empty/whitespace cwd as absent so hook defaults of "" cannot
@@ -378,6 +401,14 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         return promptId != latestPromptId && startedPromptIds.contains(promptId)
     }
 
+    /// Reordered completion still wins within a turn, but never across a newer prompt.
+    private func isTerminalBeforeCurrentTurn(_ event: AgentEvent) -> Bool {
+        guard event.resolvedState == .completed || event.resolvedState == .failed,
+              let latestTurnStartedAt
+        else { return false }
+        return event.timestamp < latestTurnStartedAt
+    }
+
     private mutating func recordRecentEvent(_ event: AgentEvent) {
         recentEvents.append(event)
         recentEvents.sort { $0.timestamp > $1.timestamp }
@@ -543,6 +574,7 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
         case workingDirectory, projectName, recentFiles, recentEvents, applicationURL, origin
         case parentSessionId, agentRole, plan, workflows, pendingReply, pendingReplies
         case hasOfficialSessionTitle, isInternalHelper
+        case latestTurnStartedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -567,6 +599,8 @@ public struct AgentSession: Codable, Identifiable, Hashable, Sendable {
                 .sorted { $0.timestamp > $1.timestamp }
                 .prefix(Self.recentEventLimit)
         )
+        latestTurnStartedAt = try values.decodeIfPresent(Date.self, forKey: .latestTurnStartedAt)
+            ?? recentEvents.filter(\.isUserPromptSubmit).map(\.timestamp).max()
         applicationURL = try values.decodeIfPresent(URL.self, forKey: .applicationURL)
         origin = try values.decodeIfPresent(AgentOrigin.self, forKey: .origin)
         parentSessionId = try values.decodeIfPresent(String.self, forKey: .parentSessionId)

@@ -94,7 +94,7 @@ final class AppRuntimeTests: XCTestCase {
     }
 
     @MainActor
-    func testAnswerFromNotchDeliversReplyAndClearsWaitingSession() async throws {
+    func testAnswerFromNotchSurvivesConcurrentToolActivityAndClearsWaitingSession() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("an-answer-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -142,7 +142,16 @@ final class AppRuntimeTests: XCTestCase {
             state: .waitingForUser,
             pendingReply: pending
         ))
+        runtime.activity.ingest(AgentEvent(
+            type: .toolCompleted,
+            sessionId: "codex:thr-answer",
+            provider: .codex,
+            activity: "Another tool finished",
+            metadata: ["hookEvent": "PostToolUse", "toolCallId": "other-tool"]
+        ))
         let session = try XCTUnwrap(runtime.activity.session(id: "codex:thr-answer"))
+        XCTAssertEqual(runtime.activity.attentionCount, 1)
+        XCTAssertEqual(session.currentActivity, "Needs command approval")
         XCTAssertTrue(runtime.canAnswer(session))
         runtime.answer(session, decision: .allow)
         // Answering resolves the prompt on the spot. Asserting before the hook

@@ -35,7 +35,7 @@ public enum AgentReplyPromptBuilder {
                 replyId: replyId,
                 kind: .question,
                 prompt: questions.count == 1
-                    ? ProviderEventPolicy.concise(questions[0].text, limit: 160)
+                    ? questions[0].text
                     : "Answer \(questions.count) questions",
                 detail: nil,
                 options: questions.count == 1 ? questions[0].options : [],
@@ -49,7 +49,7 @@ public enum AgentReplyPromptBuilder {
                 replyId: replyId,
                 kind: .plan,
                 prompt: "Exit plan mode and start editing?",
-                detail: plan.map { ProviderEventPolicy.concise($0, limit: 400) },
+                detail: plan,
                 grants: [.deny, .allow]
             )
         default:
@@ -61,7 +61,7 @@ public enum AgentReplyPromptBuilder {
         payload: AgentHookPayload,
         replyId: UUID
     ) -> AgentPendingReply {
-        let command = payload.toolInput?["command"]?.stringValue?.nonEmpty
+        let command = originalText(payload.toolInput?["command"]?.stringValue)
         let file = payload.toolInput?["file_path"]?.stringValue
             ?? payload.toolInput?["filePath"]?.stringValue
             ?? payload.toolInput?["path"]?.stringValue
@@ -76,7 +76,7 @@ public enum AgentReplyPromptBuilder {
             replyId: replyId,
             kind: .permission,
             prompt: prompt,
-            detail: detail.map { ProviderEventPolicy.concise($0, limit: 400) },
+            detail: detail,
             grants: [.deny, .allow]
         )
     }
@@ -85,7 +85,7 @@ public enum AgentReplyPromptBuilder {
         guard let values = value?.arrayValue, values.count <= 4 else { return [] }
         return values.compactMap { entry in
             guard let object = entry.objectValue,
-                  let question = object["question"]?.stringValue?.nonEmpty
+                  let question = originalText(object["question"]?.stringValue)
             else { return nil }
             let options = options(from: object["options"])
             guard !options.isEmpty else { return nil }
@@ -116,17 +116,23 @@ public enum AgentReplyPromptBuilder {
     private static func options(from value: JSONValue?) -> [AgentPromptOption] {
         guard let values = value?.arrayValue else { return [] }
         return values.enumerated().compactMap { index, entry in
-            if let label = entry.stringValue?.nonEmpty {
+            if let label = originalText(entry.stringValue) {
                 return AgentPromptOption(id: "option-\(index)", label: label)
             }
             let object = entry.objectValue
-            let label = object?["label"]?.stringValue?.nonEmpty
-                ?? object?["title"]?.stringValue?.nonEmpty
-                ?? object?["text"]?.stringValue?.nonEmpty
+            let label = originalText(object?["label"]?.stringValue)
+                ?? originalText(object?["title"]?.stringValue)
+                ?? originalText(object?["text"]?.stringValue)
             guard let label else { return nil }
             // Keep a stable internal ID while the decision mapper returns labels.
             let id = "option-\(index)"
-            return AgentPromptOption(id: id, label: ProviderEventPolicy.concise(label, limit: 48))
+            return AgentPromptOption(id: id, label: label)
         }
+    }
+
+    /// Approval text and answer keys must retain the provider's exact value.
+    private static func originalText(_ value: String?) -> String? {
+        guard let value, value.nonEmpty != nil else { return nil }
+        return value
     }
 }
