@@ -31,7 +31,7 @@ EXPECTED_VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/AgentsNotch"
 HOOK_BINARY="$APP_BUNDLE/Contents/Resources/bin/agentnotch-hook"
-PROVIDER_ICONS="$APP_BUNDLE/Contents/Resources/AgentsNotch_AgentsNotch.bundle/ProviderIcons.xcassets"
+PROVIDER_RESOURCES="$APP_BUNDLE/Contents/Resources/AgentsNotch_AgentsNotch.bundle"
 
 for required_path in "$INFO_PLIST" "$APP_BINARY" "$HOOK_BINARY"; do
   if [[ ! -f "$required_path" ]]; then
@@ -40,8 +40,11 @@ for required_path in "$INFO_PLIST" "$APP_BINARY" "$HOOK_BINARY"; do
   fi
 done
 
-if [[ ! -d "$PROVIDER_ICONS" ]]; then
-  echo "missing provider icon resource bundle: $PROVIDER_ICONS" >&2
+# SwiftPM can copy raw SVGs or use Xcode's compiled asset catalog layout.
+if [[ ! -d "$PROVIDER_RESOURCES/ProviderIcons.xcassets" && \
+      ! -f "$PROVIDER_RESOURCES/Contents/Resources/Assets.car" && \
+      ! -f "$PROVIDER_RESOURCES/Assets.car" ]]; then
+  echo "missing provider icon resources: $PROVIDER_RESOURCES" >&2
   exit 1
 fi
 

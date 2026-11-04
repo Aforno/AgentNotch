@@ -39,6 +39,16 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   provider name when a session has no project.
 - The Privacy mode description now says notifications hide the project too.
 
+### Fixed
+
+- Approval prompts retain full multiline commands and plans. Question options
+  preserve their original labels so selecting a long answer does not send a denial.
+- Concurrent tool activity no longer hides an unanswered notch approval.
+- Delayed completion and failure events from an older turn no longer settle a
+  newer turn or its child agents.
+- Privacy mode hides activity text and fallback task titles in the reply header.
+- Release verification accepts compiled icon catalogs as well as raw SwiftPM assets.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added

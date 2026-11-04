@@ -43,6 +43,34 @@ final class ProviderDecisionMapperTests: XCTestCase {
         XCTAssertNil(output["updatedInput"])
     }
 
+    func testQuestionPromptLabelsRoundTripWithoutBecomingDenials() throws {
+        var payload = try decode(questionFixture)
+        let question = "  Which migration strategy?\nKeep the existing records?  "
+        let label = "  Keep the existing database and migrate all records to the new schema\nThen verify the migration.  "
+        payload.toolInput = .object(["questions": .array([.object([
+            "question": .string(question),
+            "options": .array([.object(["label": .string(label)])]),
+        ])])])
+        let pending = try XCTUnwrap(AgentReplyPromptBuilder.make(payload: payload, replyId: UUID()))
+        let displayedQuestion = try XCTUnwrap(pending.questions?.first)
+        let displayedOption = try XCTUnwrap(displayedQuestion.options.first)
+        let output = try hookOutput(ProviderDecisionMapper.jsonObject(
+            provider: .claudeCode,
+            payload: payload,
+            reply: AgentReply(
+                replyId: pending.replyId,
+                decision: .option,
+                optionId: displayedOption.id,
+                answers: [displayedQuestion.text: [displayedOption.label]]
+            )
+        ))
+
+        XCTAssertEqual(pending.prompt, question)
+        XCTAssertEqual(output["permissionDecision"] as? String, "allow")
+        let input = try XCTUnwrap(output["updatedInput"] as? [String: Any])
+        XCTAssertEqual(input["answers"] as? [String: String], [question: label])
+    }
+
     func testClaudeExitPlanModeAllowPreservesInputAndDenyOmitsIt() throws {
         let payload = try decode(planFixture)
         let allowed = try hookOutput(ProviderDecisionMapper.jsonObject(

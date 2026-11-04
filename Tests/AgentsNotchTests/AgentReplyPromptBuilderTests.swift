@@ -51,6 +51,32 @@ final class AgentReplyPromptBuilderTests: XCTestCase {
         XCTAssertEqual(pending.questions?.first?.text, "Which migration strategy?")
     }
 
+    func testPermissionPromptPreservesMultilineAndLongCommands() throws {
+        var payload = try decode(#"{"session_id":"command","hook_event_name":"PermissionRequest","tool_name":"Bash"}"#)
+        let commands = [
+            "printf 'first line'\nprintf 'second line'",
+            "printf '" + String(repeating: "x", count: 500) + "' && printf 'final command'",
+            "cat <<'EOF'\n  indented content  \nEOF\n",
+        ]
+        for command in commands {
+            payload.toolInput = .object(["command": .string(command)])
+            let pending = try XCTUnwrap(AgentReplyPromptBuilder.make(payload: payload, replyId: UUID()))
+
+            XCTAssertEqual(pending.detail, command)
+            XCTAssertTrue(pending.allowsAllow)
+        }
+    }
+
+    func testPlanApprovalPreservesTheWholePlan() throws {
+        var payload = try decode(#"{"session_id":"plan","hook_event_name":"PreToolUse","tool_name":"ExitPlanMode"}"#)
+        let plan = "## Plan\n" + String(repeating: "Detailed implementation step.\n", count: 20)
+        payload.toolInput = .object(["plan": .string(plan)])
+        let pending = try XCTUnwrap(AgentReplyPromptBuilder.make(payload: payload, replyId: UUID()))
+
+        XCTAssertEqual(pending.detail, plan)
+        XCTAssertTrue(pending.allowsAllow)
+    }
+
     func testExitPlanModeUsesPlanGrants() throws {
         let payload = try decode("""
         {
