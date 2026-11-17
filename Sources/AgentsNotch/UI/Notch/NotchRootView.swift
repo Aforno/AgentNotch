@@ -264,7 +264,7 @@ struct NotchRootView: View {
             NotchShape(bottomRadius: shownRadius)
                 .fill(NotchWindowPalette.background)
                 .overlay {
-                    NotchShape(bottomRadius: shownRadius)
+                    NotchShape(bottomRadius: shownRadius, openTop: true)
                         .stroke(NotchWindowPalette.attention.opacity(0.9 * attentionGlow), lineWidth: 3)
                         .blur(radius: 2)
                 }
