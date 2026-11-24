@@ -32,26 +32,49 @@ public enum CodexApprovalContextResolver {
     }
 
     private static func reviewer(inTranscriptAt url: URL, matchingTurnId: String) -> String? {
-        guard let data = Data.jsonlTail(at: url, maxBytes: maximumTranscriptTailBytes),
-              !data.isEmpty
-        else {
-            return nil
-        }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard var end = try? handle.seekToEnd() else { return nil }
 
         let decoder = JSONDecoder()
-        for line in data.lines(containing: turnContextBytes).reversed() {
-            guard let record = try? decoder.decode(TranscriptRecord.self, from: Data(line)),
-                  record.type == "turn_context",
-                  let context = record.payload
-            else {
+        // A record may span several reads. Keep its fragments newest first so
+        // large tool outputs are assembled once instead of copied at every cut.
+        var fragments: [Data] = []
+        while end > 0 {
+            let count = Int(min(end, UInt64(maximumTranscriptTailBytes)))
+            end -= UInt64(count)
+            guard (try? handle.seek(toOffset: end)) != nil,
+                  let chunk = try? handle.read(upToCount: count),
+                  chunk.count == count
+            else { return nil }
+
+            let recordsStart: Data.Index
+            if end == 0 {
+                recordsStart = chunk.startIndex
+            } else if let newline = chunk.firstNewline {
+                recordsStart = newline + 1
+            } else {
+                fragments.append(chunk)
                 continue
             }
 
-            if !context.matches(turnId: matchingTurnId) {
-                continue
+            var records = chunk[recordsStart...]
+            for fragment in fragments.reversed() {
+                records.append(fragment)
+            }
+            for line in records.lines(containing: turnContextBytes).reversed() {
+                guard let record = try? decoder.decode(TranscriptRecord.self, from: line),
+                      record.type == "turn_context",
+                      let context = record.payload,
+                      context.matches(turnId: matchingTurnId)
+                else { continue }
+                return context.approvalsReviewer
             }
 
-            return context.approvalsReviewer
+            fragments.removeAll(keepingCapacity: true)
+            if recordsStart > chunk.startIndex {
+                fragments.append(chunk[..<(recordsStart - 1)])
+            }
         }
 
         return nil

@@ -32,8 +32,9 @@ receive `{}` followed by a newline. Keep this in sync with
 - `HookEventName` is the only event alias table. `AgentHookEventMapper` is the
   single event mapper. `ProviderEventPolicy` owns skip rules.
 - Codex maps plan and workflow tools, resolves titles from the last 4 MiB of
-  `session_index.jsonl`, and uses a fail-open, bounded 4 MiB transcript-tail
-  read only when a permission payload omits `approvals_reviewer`. Remove that
+  `session_index.jsonl`, and searches the transcript backward in 4 MiB chunks for
+  the matching turn only when a permission payload omits `approvals_reviewer`.
+  Missing reviewer context leaves the request visible. Remove that
   bridge when Codex supplies the reviewer directly. `Interrupt` settles a user
   interrupt. Codex has no `StopCancelled` or `StopFailure` event.
 - Grok becomes visible on its first agent turn, strips `<user_query>` wrappers,

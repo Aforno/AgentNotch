@@ -41,6 +41,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Codex Auto mode now stays quiet when a long turn pushes its automatic
+  approval setting beyond the last 4 MiB of the transcript.
+
 - Approval prompts retain full multiline commands and plans. Question options
   preserve their original labels so selecting a long answer does not send a denial.
 - Concurrent tool activity no longer hides an unanswered notch approval.
