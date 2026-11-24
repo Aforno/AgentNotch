@@ -75,6 +75,26 @@ final class UpdateServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testSwitchDiscardsPreparedInstallationAndIgnoresLateCallbacks() {
+        let service = UpdateService()
+        let driver = SparkleUpdateDriver()
+        driver.service = service
+        var choices: [SPUUserUpdateChoice] = []
+        service.noteDownloaded(version: "1.0") { choices.append($0) }
+
+        service.discardPreviousOffer()
+        service.install()
+        driver.showUpdaterError(NSError(domain: "old feed", code: 1)) {}
+        driver.dismissUpdateInstallation()
+        XCTAssertEqual(choices, [.skip])
+        XCTAssertEqual(service.state, .checking)
+        XCTAssertNil(service.lastError)
+
+        driver.showReady(toInstallAndRelaunch: { choices.append($0) })
+        XCTAssertEqual(choices, [.skip, .skip])
+    }
+
+    @MainActor
     func testAdHocPackageNeverStartsSparkle() throws {
         let bundle = try makePackagedBundle(manualUpdates: true)
         let service = UpdateService(bundle: bundle)
@@ -113,7 +133,8 @@ final class UpdateServiceTests: XCTestCase {
                 acknowledged = true
             }
             XCTAssertTrue(acknowledged, "\(reason)")
-            XCTAssertEqual(service.state, .upToDate, "\(reason)")
+            let waitingForStable = reason == .onNewerThanLatestVersion && UpdateChannel.current == .stable
+            XCTAssertEqual(service.state, waitingForStable ? .awaitingStableRelease : .upToDate, "\(reason)")
         }
     }
 
