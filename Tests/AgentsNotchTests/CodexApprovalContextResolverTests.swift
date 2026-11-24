@@ -54,6 +54,28 @@ final class CodexApprovalContextResolverTests: XCTestCase {
         XCTAssertTrue(try requiresUserInput(turnId: "missing"))
     }
 
+    func testAutomaticReviewerBeyondTailWithContextSplitAcrossReads() throws {
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-approval-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: transcript) }
+
+        let context = #"{"type":"turn_context","payload":{"turn_id":"target","approvals_reviewer":"auto_review"}}"#
+        let chunkSize = CodexApprovalContextResolver.maximumTranscriptTailBytes
+        var data = Data((context + "\n" + #"{"type":"response_item","output":""#).utf8)
+        // Place the older read boundary inside "turn_context" and make the
+        // intervening tool output itself longer than one read.
+        let trailer = Data(#""}"#.utf8)
+        data.append(Data(repeating: 0x61, count: 2 * chunkSize + 12 - data.count - trailer.count))
+        data.append(trailer)
+        try data.write(to: transcript)
+
+        let payload = try decode("""
+        {"session_id":"s","hook_event_name":"PermissionRequest",
+         "transcript_path":"\(transcript.path)","turn_id":"target"}
+        """)
+        XCTAssertFalse(CodexApprovalContextResolver.permissionRequestRequiresUserInput(for: payload))
+    }
+
     private func decode(_ json: String) throws -> AgentHookPayload {
         try JSONDecoder().decode(AgentHookPayload.self, from: Data(json.utf8))
     }
