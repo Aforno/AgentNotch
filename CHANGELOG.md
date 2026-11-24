@@ -6,6 +6,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-24
+
 ### Added
 
 - The notch briefly shows "Claude finished · repo" (or failed) when a
@@ -15,9 +17,21 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   last event arrived.
 - Debug builds have a Notch Gallery (Settings → Debug) that renders every
   notch presentation side by side.
+- Settings → General has an Update channel picker. Nightly checks the signed
+  appcast that the nightly workflow now publishes to the rolling `nightly`
+  release. Stable stays the default.
+- Observer-only Google Antigravity integration. Install writes a named
+  `agentnotch` hook to `~/.gemini/config/hooks.json` and maps PreInvocation,
+  PostToolUse, and Stop. PreToolUse is omitted because a missing `decision`
+  denies the tool. Stop writes `{"decision":"stop"}`. PostToolUse matches
+  `.*` because `*` is not valid regex.
 
 ### Changed
 
+- Switching between Stable and Nightly discards the previous channel's update
+  offer and checks the selected feed once, even with automatic checks off. If
+  the installed build is ahead of Stable, Settings says when the next update
+  arrives. Manual-update previews open the selected channel's download page.
 - Unsigned betas show manual update instructions and View Downloads in Settings
   instead of starting Sparkle or offering automatic checks and update channels.
   Unsigned prereleases no longer change the Homebrew cask. Installation docs,
@@ -38,12 +52,23 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   finished and in which project, and the waiting pill no longer repeats the
   provider name when a session has no project.
 - The Privacy mode description now says notifications hide the project too.
+- Codex hooks no longer decode every record in the 4 MiB tail of
+  `session_index.jsonl` or the session transcript. The relay searches raw bytes
+  for the session ID or `turn_context` first. The title lookup drops from about
+  60 ms to 2 ms, and the approval lookup from 17 ms to 2 ms.
+- Hover feedback now covers Settings, Setup, and the custom dropdown: pill and
+  icon buttons, pane tabs, filter chips, group disclosure, and menu options all
+  answer the pointer, and menu options track the pointer as well as the arrow
+  keys.
+- The empty notch list separates its state from the action it offers, so "No
+  active agents" and "Browse recent" no longer read as one sentence.
+- Thread detail measures its own chrome instead of assuming fixed heights, and
+  shares one scroll-fade implementation with the reply surface.
 
 ### Fixed
 
 - Codex Auto mode now stays quiet when a long turn pushes its automatic
   approval setting beyond the last 4 MiB of the transcript.
-
 - Approval prompts retain full multiline commands and plans. Question options
   preserve their original labels so selecting a long answer does not send a denial.
 - Concurrent tool activity no longer hides an unanswered notch approval.
@@ -51,29 +76,6 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   newer turn or its child agents.
 - Privacy mode hides activity text and fallback task titles in the reply header.
 - Release verification accepts compiled icon catalogs as well as raw SwiftPM assets.
-
-## [0.3.0] - 2026-09-23
-
-### Added
-
-- Settings → General has an Update channel picker. Nightly checks the signed
-  appcast that the nightly workflow now publishes to the rolling `nightly`
-  release. Stable stays the default.
-- Observer-only Google Antigravity integration. Install writes a named
-  `agentnotch` hook to `~/.gemini/config/hooks.json` and maps PreInvocation,
-  PostToolUse, and Stop. PreToolUse is omitted because a missing `decision`
-  denies the tool. Stop writes `{"decision":"stop"}`. PostToolUse matches
-  `.*` because `*` is not valid regex.
-
-### Changed
-
-- Codex hooks no longer decode every record in the 4 MiB tail of
-  `session_index.jsonl` or the session transcript. The relay searches raw bytes
-  for the session ID or `turn_context` first. The title lookup drops from about
-  60 ms to 2 ms, and the approval lookup from 17 ms to 2 ms.
-
-### Fixed
-
 - The Codex approval lookup no longer drops the first transcript record when
   the 4 MiB tail starts exactly at a record boundary, and no longer reads past
   the tail limit when Codex appends mid-read. A dropped `turn_context` could
@@ -102,17 +104,6 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   than compounding two opacities into unreadable grey.
 - The Activity Center relative timestamp moved up to the 10pt floor the type
   scale documents.
-
-### Changed
-
-- Hover feedback now covers Settings, Setup, and the custom dropdown: pill and
-  icon buttons, pane tabs, filter chips, group disclosure, and menu options all
-  answer the pointer, and menu options track the pointer as well as the arrow
-  keys.
-- The empty notch list separates its state from the action it offers, so "No
-  active agents" and "Browse recent" no longer read as one sentence.
-- Thread detail measures its own chrome instead of assuming fixed heights, and
-  shares one scroll-fade implementation with the reply surface.
 
 ## [0.2.1] - 2026-09-03
 
