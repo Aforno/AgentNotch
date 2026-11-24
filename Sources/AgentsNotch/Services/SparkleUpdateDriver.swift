@@ -6,6 +6,18 @@ import Sparkle
 final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     weak var service: UpdateService?
 
+    private var activeService: UpdateService? {
+        service?.channelCheckPending == true ? nil : service
+    }
+
+    private var cancellation: (() -> Void)?
+
+    func cancelCurrentOperation() {
+        let cancel = cancellation
+        cancellation = nil
+        cancel?()
+    }
+
     private var expectedContentLength: UInt64 = 0
     private var receivedContentLength: UInt64 = 0
 
@@ -21,8 +33,9 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
-        service?.noteUserInitiatedCheck()
-        _ = cancellation
+        activeService?.noteUserInitiatedCheck()
+        self.cancellation = cancellation
+        if activeService == nil { cancelCurrentOperation() }
     }
 
     func showUpdateFound(
@@ -30,20 +43,30 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
         state: SPUUserUpdateState,
         reply: @escaping (SPUUserUpdateChoice) -> Void
     ) {
+        cancellation = nil
+        // Sparkle can resume a staged archive before it consults the selected feed.
+        if let archive = appcastItem.fileURL,
+           let channel = UpdateChannel.archiveChannel(for: archive), channel != UpdateChannel.current {
+            service?.discardPreviousOffer()
+        }
+        guard let activeService else {
+            reply(state.stage == .notDownloaded ? .dismiss : .skip)
+            return
+        }
         if appcastItem.isInformationOnlyUpdate {
             reply(.dismiss)
-            service?.noteCheckFailed("This update cannot be installed from inside Agent Notch.")
+            activeService.noteCheckFailed("This update cannot be installed from inside Agent Notch.")
             return
         }
 
         let version = appcastItem.displayVersionString
         switch state.stage {
         case .notDownloaded:
-            service?.noteUpdateAvailable(version: version, download: reply)
+            activeService.noteUpdateAvailable(version: version, download: reply)
         case .downloaded:
-            service?.noteDownloaded(version: version, install: reply)
+            activeService.noteDownloaded(version: version, install: reply)
         case .installing:
-            service?.noteInstalling(install: reply)
+            activeService.noteInstalling(install: reply)
         @unknown default:
             reply(.dismiss)
         }
@@ -56,23 +79,26 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
         switch sparkleNoUpdateOutcome(error) {
         case .currentVersion:
-            service?.noteNoUpdate()
+            activeService?.noteNoUpdate()
+        case .newerThanLatest:
+            activeService?.noteNoUpdate(aheadOfSelectedRelease: true)
         case let .unavailable(message):
-            service?.noteCheckFailed(message)
+            activeService?.noteCheckFailed(message)
         }
         acknowledgement()
     }
 
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
-        service?.noteUpdaterError(error.localizedDescription)
+        activeService?.noteUpdaterError(error.localizedDescription)
         acknowledgement()
     }
 
     func showDownloadInitiated(cancellation: @escaping () -> Void) {
         expectedContentLength = 0
         receivedContentLength = 0
-        service?.noteDownloadStarted()
-        _ = cancellation
+        activeService?.noteDownloadStarted()
+        self.cancellation = cancellation
+        if activeService == nil { cancelCurrentOperation() }
     }
 
     func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {
@@ -86,22 +112,28 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showDownloadDidStartExtractingUpdate() {
-        service?.noteDownloadProgress(1)
+        cancellation = nil
+        activeService?.noteDownloadProgress(1)
     }
 
     func showExtractionReceivedProgress(_ progress: Double) {
-        service?.noteDownloadProgress(1)
+        activeService?.noteDownloadProgress(1)
     }
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        service?.noteReadyToInstall(install: reply)
+        cancellation = nil
+        guard let activeService else {
+            reply(.skip)
+            return
+        }
+        activeService.noteReadyToInstall(install: reply)
     }
 
     func showInstallingUpdate(
         withApplicationTerminated applicationTerminated: Bool,
         retryTerminatingApplication: @escaping () -> Void
     ) {
-        service?.noteInstalling()
+        activeService?.noteInstalling()
         _ = applicationTerminated
         _ = retryTerminatingApplication
     }
@@ -111,23 +143,25 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     }
 
     func dismissUpdateInstallation() {
+        cancellation = nil
         expectedContentLength = 0
         receivedContentLength = 0
-        service?.noteSessionEnded()
+        activeService?.noteSessionEnded()
     }
 
     func showUpdateInFocus() {
-        service?.presentStatusSurface()
+        activeService?.presentStatusSurface()
     }
 
     private func reportDownloadProgress() {
         guard expectedContentLength > 0 else { return }
         let percent = Double(receivedContentLength) / Double(expectedContentLength)
-        service?.noteDownloadProgress(percent)
+        activeService?.noteDownloadProgress(percent)
     }
 }
 
 enum SparkleNoUpdateOutcome: Equatable {
+    case newerThanLatest
     case currentVersion
     case unavailable(String)
 }
@@ -138,7 +172,9 @@ func sparkleNoUpdateOutcome(_ error: Error) -> SparkleNoUpdateOutcome {
     let nsError = error as NSError
     if let reason = sparkleNoUpdateReason(from: nsError) {
         switch reason {
-        case .onLatestVersion, .onNewerThanLatestVersion:
+        case .onNewerThanLatestVersion:
+            return .newerThanLatest
+        case .onLatestVersion:
             return .currentVersion
         case .unknown, .systemIsTooOld, .systemIsTooNew, .hardwareDoesNotSupportARM64:
             return .unavailable(sparklePresentedMessage(nsError))

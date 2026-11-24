@@ -8,8 +8,9 @@ import Sparkle
 final class UpdateService {
     static let packagedOnlyMessage = "Source builds update manually. Rebuild from source or download the latest beta."
     static let manualUpdatesMessage = "This beta updates manually. Download the latest ZIP, quit Agent Notch, and replace the app in Applications."
-    static let downloadsURL = URL(string: "https://github.com/Aforno/AgentNotch/releases")!
+    var isManualPreview: Bool { bundle.object(forInfoDictionaryKey: "AgentNotchManualUpdates") as? Bool == true }
 
+    private(set) var channelCheckPending = false
     private(set) var state: UpdateState = .idle
     private(set) var lastError: String?
 
@@ -64,6 +65,7 @@ final class UpdateService {
 
         let driver = SparkleUpdateDriver()
         driver.service = self
+        feedDelegate.service = self
         let updater = SPUUpdater(
             hostBundle: bundle,
             applicationBundle: bundle,
@@ -99,17 +101,38 @@ final class UpdateService {
         }
     }
 
-    /// Re-checks against the newly selected feed. The channel itself is read from defaults.
+    /// Retire the previous Sparkle session before checking the newly selected feed.
     func channelDidChange() {
         start()
-        guard let updater, updater.automaticallyChecksForUpdates else { return }
-        updater.checkForUpdatesInBackground()
+        guard updater != nil else { return }
+        discardPreviousOffer()
+        checkSelectedChannelIfPending()
+    }
+
+    func discardPreviousOffer() {
+        channelCheckPending = true
+        state = .checking
+        lastError = nil
+        let download = foundReply
+        let install = installReply
+        foundReply = nil
+        installReply = nil
+        driver?.cancelCurrentOperation()
+        download?(.dismiss)
+        // Skipping a prepared installation cancels Sparkle's install-on-quit.
+        install?(.skip)
+    }
+
+    func checkSelectedChannelIfPending() {
+        guard channelCheckPending, let updater, !updater.sessionInProgress else { return }
+        channelCheckPending = false
+        updater.checkForUpdates()
     }
 
     func check() {
         presentStatusSurface()
         start()
-        guard let updater else { return }
+        guard let updater, !channelCheckPending else { return }
         lastError = nil
         updater.checkForUpdates()
     }
@@ -156,8 +179,11 @@ final class UpdateService {
         apply(.downloadComplete)
     }
 
-    func noteNoUpdate() {
+    func noteNoUpdate(aheadOfSelectedRelease: Bool = false) {
         apply(.noUpdate)
+        if state == .upToDate, aheadOfSelectedRelease, UpdateChannel.current == .stable {
+            state = .awaitingStableRelease
+        }
     }
 
     func noteCheckFailed(_ message: String) {

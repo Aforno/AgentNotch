@@ -63,8 +63,9 @@ seconds when packaging starts. This becomes `CFBundleVersion`, replacing the
 independent `GITHUB_RUN_NUMBER` counters. Sparkle compares this value, so both
 workflows use the same time-based ordering. Apps on the Stable channel check the
 stable appcast; apps on the Nightly channel check the nightly appcast. Switching
-from Nightly back to Stable takes effect at the next stable release, since
-Sparkle does not downgrade.
+channels clears any pending offer and checks the selected feed once, even with
+automatic checks disabled. If the installed build is ahead of Stable, Settings
+links to the latest stable release for manual installation.
 
 The `Release` workflow requires these repository Actions secrets:
 
@@ -116,8 +117,8 @@ git push origin "v$(cat VERSION)"
 
 The workflow ad-hoc signs the app, marks the GitHub release as a prerelease,
 and puts a notarization and Gatekeeper warning at the top of its notes.
-Unsigned builds use manual updates: Settings → General shows View Downloads
-and replacement instructions instead of automatic checks and update channels.
+Unsigned builds use manual updates. In Settings → General, Release channel
+selects which release page View Downloads opens.
 They publish no Sparkle appcast and do not update the Homebrew cask. Include
 the [beta tester guide](BETA_TESTING.md) when sharing a preview. After
 the release succeeds, remove the temporary opt-in so later tags default back to

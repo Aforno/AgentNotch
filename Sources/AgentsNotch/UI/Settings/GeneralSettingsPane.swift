@@ -74,11 +74,17 @@ struct GeneralSettingsPane: View {
     private var updatesSection: some View {
         SettingsSection(title: "Updates") {
             if case let .unavailable(message) = runtime.updates.state {
+                if runtime.updates.isManualPreview {
+                    releaseChannelPicker
+                }
                 SettingsControlRow(
                     title: "Version \(runtime.updates.currentVersion)",
                     detail: message
                 ) {
-                    SettingsUpdateControl(updates: runtime.updates)
+                    SettingsUpdateControl(
+                        updates: runtime.updates,
+                        channel: UpdateChannel(rawValue: updateChannel.wrappedValue) ?? .stable
+                    )
                 }
             } else {
                 SettingsToggleRow(
@@ -86,16 +92,31 @@ struct GeneralSettingsPane: View {
                     detail: "Downloads and installs only when you ask.",
                     isOn: automaticallyCheckForUpdates
                 )
-                SettingsMenuRow(
-                    title: "Update channel",
-                    detail: "Nightly builds track main and may be unstable.",
-                    selection: updateChannel,
-                    options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
-                )
-                SettingsControlRow(title: "Version \(runtime.updates.currentVersion)") {
+                releaseChannelPicker
+                SettingsControlRow(
+                    title: "Version \(runtime.updates.currentVersion)",
+                    detail: runtime.updates.state == .awaitingStableRelease
+                        ? "This build is newer than the latest stable release. Your next update will be from Stable."
+                        : nil
+                ) {
                     SettingsUpdateControl(updates: runtime.updates)
                 }
             }
         }
+    }
+
+    private var releaseChannelPicker: some View {
+        SettingsMenuRow(
+            title: "Release channel",
+            detail: "Nightly builds track main and may be unstable.",
+            selection: updateChannel,
+            options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
+        )
+        .disabled(installationInProgress)
+    }
+
+    private var installationInProgress: Bool {
+        if case .installing = runtime.updates.state { return true }
+        return false
     }
 }

@@ -3,6 +3,7 @@
 enum UpdateState: Equatable {
     case idle
     case checking
+    case awaitingStableRelease
     case upToDate
     case available(version: String)
     case downloading(version: String, percent: Double)

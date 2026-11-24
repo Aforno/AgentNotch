@@ -79,6 +79,7 @@ struct HistorySettingsSection: View {
 
 struct SettingsUpdateControl: View {
     let updates: UpdateService
+    var channel: UpdateChannel = .stable
 
     @ViewBuilder
     var body: some View {
@@ -88,6 +89,9 @@ struct SettingsUpdateControl: View {
                 .buttonStyle(NotchPillButtonStyle())
         case .checking:
             ProgressView().controlSize(.small)
+        case .awaitingStableRelease:
+            Link("Download latest stable", destination: UpdateChannel.stable.releasePage)
+                .buttonStyle(NotchPillButtonStyle())
         case .upToDate:
             Label("Up to date", systemImage: "checkmark.circle.fill")
                 .font(NotchWindowFont.caption)
@@ -123,7 +127,7 @@ struct SettingsUpdateControl: View {
                 .help(message)
                 .accessibilityHint(message)
         case let .unavailable(message):
-            Link("View Downloads", destination: UpdateService.downloadsURL)
+            Link("View Downloads", destination: updates.isManualPreview ? channel.releasePage : UpdateChannel.downloadsURL)
                 .buttonStyle(NotchPillButtonStyle())
                 .help(message)
         }
