@@ -50,7 +50,7 @@ fi
 
 if [[ -z "$SHA256" ]]; then
   if [[ -z "$CHECKSUM_FILE" ]]; then
-    CHECKSUM_FILE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.zip.sha256"
+    CHECKSUM_FILE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.dmg.sha256"
   fi
   if [[ ! -f "$CHECKSUM_FILE" ]]; then
     echo "checksum file not found: $CHECKSUM_FILE" >&2
@@ -70,7 +70,13 @@ if [[ ! -f "$CASK" ]]; then
   exit 1
 fi
 
-python3 - "$CASK" "$VERSION" "$SHA256" <<'PY'
+# Older release workflows can still pass a checksum for a published ZIP.
+EXTENSION=dmg
+if [[ "$CHECKSUM_FILE" == *.zip.sha256 ]]; then
+  EXTENSION=zip
+fi
+
+python3 - "$CASK" "$VERSION" "$SHA256" "$EXTENSION" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -78,6 +84,7 @@ import sys
 path = Path(sys.argv[1])
 version = sys.argv[2]
 sha256 = sys.argv[3]
+extension = sys.argv[4]
 text = path.read_text()
 
 
@@ -111,8 +118,15 @@ updated, sha_count = re.subn(
     count=1,
     flags=re.M,
 )
-if version_count != 1 or sha_count != 1:
-    raise SystemExit("cask must contain one version stanza and one sha256 stanza")
+updated, url_count = re.subn(
+    r'^(  url "https://github\.com/Aforno/AgentNotch/releases/download/v#\{version\}/Agent-Notch-#\{version\}-macOS-arm64\.)'
+    r'(?:zip|dmg)"$',
+    rf'\g<1>{extension}"',
+    updated,
+    flags=re.M,
+)
+if version_count != 1 or sha_count != 1 or url_count != 1:
+    raise SystemExit("cask must contain one version, sha256, and Agent Notch release URL stanza")
 if updated != text:
     path.write_text(updated)
 print(f"Cask {path} -> {version} ({sha256})")

@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
-APP_BUNDLE="$ROOT_DIR/dist/Agent Notch.app"
-ARCHIVE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.zip"
-CHECKSUM="$ARCHIVE.sha256"
+DIST_DIR="$ROOT_DIR/dist"
+APP_BUNDLE="$DIST_DIR/Agent Notch.app"
+DMG_NAME="Agent-Notch-$VERSION-macOS-arm64.dmg"
 SIGN_IDENTITY=""
 USE_ADHOC=false
 NOTARIZE=false
@@ -86,34 +86,64 @@ if [[ "$NOTARIZE" == true && -z "$KEYCHAIN_PROFILE" ]]; then
   fi
 fi
 
-rm -f "$ARCHIVE" "$CHECKSUM"
 "$ROOT_DIR/script/validate_version.sh"
 "$ROOT_DIR/script/stage_app.sh" \
   --configuration release \
   --arch arm64 \
   --sign "$SIGN_IDENTITY"
-"$ROOT_DIR/script/verify_release.sh" --app "$APP_BUNDLE"
 
-ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ARCHIVE"
-unzip -tq "$ARCHIVE" >/dev/null
+WORK_DIR="$(mktemp -d "$DIST_DIR/.package.XXXXXX")"
+IMAGE_ROOT="$WORK_DIR/image"
+MOUNT_POINT="$WORK_DIR/mount"
+DMG="$WORK_DIR/$DMG_NAME"
+MOUNTED=false
+
+cleanup() {
+  if [[ "$MOUNTED" == true ]]; then
+    hdiutil detach "$MOUNT_POINT" || return
+  fi
+  rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
+mkdir "$IMAGE_ROOT" "$MOUNT_POINT"
+ditto "$APP_BUNDLE" "$IMAGE_ROOT/Agent Notch.app"
+ln -s /Applications "$IMAGE_ROOT/Applications"
+hdiutil create -srcfolder "$IMAGE_ROOT" -volname "Agent Notch" \
+  -fs HFS+ -format UDZO "$DMG"
+
+hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_POINT" "$DMG"
+MOUNTED=true
+if [[ ! -L "$MOUNT_POINT/Applications" || "$(readlink "$MOUNT_POINT/Applications")" != /Applications ]]; then
+  echo "disk image must contain an Applications shortcut" >&2
+  exit 1
+fi
+"$ROOT_DIR/script/verify_release.sh" --app "$MOUNT_POINT/Agent Notch.app"
+hdiutil detach "$MOUNT_POINT"
+MOUNTED=false
+
+if [[ "$USE_ADHOC" != true ]]; then
+  codesign --sign "$SIGN_IDENTITY" --timestamp "$DMG"
+  codesign --verify --verbose=2 "$DMG"
+fi
 
 if [[ "$NOTARIZE" == true ]]; then
   if [[ -n "$KEYCHAIN_PROFILE" ]]; then
-    xcrun notarytool submit "$ARCHIVE" --keychain-profile "$KEYCHAIN_PROFILE" --wait
+    xcrun notarytool submit "$DMG" --keychain-profile "$KEYCHAIN_PROFILE" --wait
   else
-    xcrun notarytool submit "$ARCHIVE" \
+    xcrun notarytool submit "$DMG" \
       --key "$API_KEY_PATH" \
       --key-id "$API_KEY_ID" \
       --issuer "$API_ISSUER_ID" \
       --wait
   fi
-  xcrun stapler staple "$APP_BUNDLE"
-  "$ROOT_DIR/script/verify_release.sh" --app "$APP_BUNDLE" --require-notarized
-  rm -f "$ARCHIVE"
-  ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ARCHIVE"
-  unzip -tq "$ARCHIVE" >/dev/null
+  xcrun stapler staple "$DMG"
+  xcrun stapler validate "$DMG"
+  spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG"
 fi
 
-(cd "$(dirname "$ARCHIVE")" && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")")
-echo "Created $ARCHIVE"
-echo "Created $CHECKSUM"
+hdiutil verify "$DMG"
+(cd "$WORK_DIR" && shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256")
+mv -f "$DMG" "$DMG.sha256" "$DIST_DIR/"
+echo "Created $DIST_DIR/$DMG_NAME"
+echo "Created $DIST_DIR/$DMG_NAME.sha256"

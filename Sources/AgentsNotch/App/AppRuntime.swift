@@ -127,9 +127,6 @@ final class AppRuntime {
         #if DEBUG
         simulator = DebugEventSimulator(activity: activity)
         #endif
-        updates.willInstall = { [weak self] in
-            self?.stop()
-        }
         updates.presentStatus = { [weak self] in
             self?.openSettings(pane: .general)
         }

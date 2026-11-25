@@ -8,6 +8,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Signed builds can automatically install updates and relaunch when users enable
+  Install automatically in Settings → General.
 - The notch briefly shows "Claude finished · repo" (or failed) when a
   top-level agent ends. Click it to open the session.
 - A soft orange glow runs around the notch when a new prompt arrives.
@@ -18,6 +20,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Release and nightly downloads use a DMG with a drag-to-Applications shortcut.
+- Installing an available update takes one click in Settings.
 - Unsigned betas show manual update instructions and View Downloads in Settings
   instead of starting Sparkle or offering automatic checks and update channels.
   Unsigned prereleases no longer change the Homebrew cask. Installation docs,

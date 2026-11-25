@@ -17,13 +17,11 @@ enum UpdateEvent: Equatable {
     case checkStarted
     case noUpdate
     case updateAvailable(version: String)
-    case checkFailed(String)
+    case failed(String)
     case downloadStarted
     case downloadProgress(Double)
-    case downloadFailed(String)
     case downloadComplete
     case installStarted
-    case installFailed(String)
     case sessionEnded
 }
 
@@ -57,15 +55,9 @@ func reduceUpdateState(_ state: UpdateState, _ event: UpdateEvent) -> UpdateStat
             return .available(version: version)
         }
 
-    case let .checkFailed(message):
-        switch state {
-        case .downloaded(let version), .installing(let version):
-            return .downloaded(version: version)
-        case .downloading, .unavailable:
-            return state
-        default:
-            return .failed(message)
-        }
+    case let .failed(message):
+        if case .unavailable = state { return state }
+        return .failed(message)
 
     case .downloadStarted:
         if case let .available(version) = state {
@@ -78,16 +70,6 @@ func reduceUpdateState(_ state: UpdateState, _ event: UpdateEvent) -> UpdateStat
             return .downloading(version: version, percent: min(1, max(0, percent)))
         }
         return state
-
-    case let .downloadFailed(message):
-        switch state {
-        case let .downloading(version, _):
-            return .available(version: version)
-        case .unavailable:
-            return state
-        default:
-            return .failed(message)
-        }
 
     case .downloadComplete:
         switch state {
@@ -105,24 +87,10 @@ func reduceUpdateState(_ state: UpdateState, _ event: UpdateEvent) -> UpdateStat
             return state
         }
 
-    case let .installFailed(message):
-        switch state {
-        case let .installing(version), let .downloaded(version):
-            return .downloaded(version: version)
-        case .unavailable:
-            return state
-        default:
-            return .failed(message)
-        }
-
     case .sessionEnded:
         switch state {
-        case .checking:
+        case .checking, .available, .downloading, .downloaded, .installing:
             return .idle
-        case let .downloading(version, _):
-            return .available(version: version)
-        case .installing(let version):
-            return .downloaded(version: version)
         default:
             return state
         }

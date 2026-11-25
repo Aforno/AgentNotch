@@ -1,9 +1,10 @@
 # Releasing Agent Notch
 
-Production releases are Apple Silicon ZIP archives. They are signed with a
-Developer ID Application certificate, notarized by Apple, stapled, and shipped
-with a SHA-256 checksum. Unsigned prereleases are ad-hoc signed and labeled as
-previews. Never present them as notarized builds.
+Production releases are Apple Silicon disk images with an Applications shortcut
+for drag-to-install. The app and DMG are signed with a Developer ID Application
+certificate. Apple notarizes the DMG, which carries the stapled ticket and ships
+with a SHA-256 checksum. Unsigned prereleases contain ad-hoc signed apps and
+are labeled as previews. Never present them as notarized builds.
 
 ## Prepare the release
 
@@ -39,13 +40,14 @@ AGENT_NOTCH_BUILD_NUMBER=1 ./script/package_release.sh \
   --keychain-profile agent-notch-notary
 ```
 
-The script builds the release configuration for arm64, signs nested code
-(including Sparkle) and the app with hardened runtime, verifies the bundle,
-notarizes and staples it, re-verifies Gatekeeper acceptance, and writes the ZIP
-plus `.sha256` file under `dist/`.
+The script builds the release configuration for arm64 and signs nested code
+(including Sparkle) and the app with hardened runtime. It verifies the
+contents of the mounted DMG, then signs, notarizes, and staples the DMG.
+It checks Gatekeeper acceptance before writing the final DMG and its
+`.sha256` file under `dist/`.
 
-Signed releases also publish a Sparkle `appcast.xml`. Generate it from the ZIP
-with the EdDSA private key that matches `Resources/SparklePublicEDKey`:
+Signed releases also publish a Sparkle `appcast.xml`. Generate it from the
+final DMG with the EdDSA private key that matches `Resources/SparklePublicEDKey`:
 
 ```sh
 SPARKLE_ED_PRIVATE_KEY="$(cat /path/to/sparkle-ed-private-key)" \
@@ -53,7 +55,7 @@ SPARKLE_ED_PRIVATE_KEY="$(cat /path/to/sparkle-ed-private-key)" \
 ```
 
 The private key is the 32-byte EdDSA seed, base64-encoded. Never commit it. The
-appcast enclosure URL is the GitHub release asset for that ZIP. In-app updates
+appcast enclosure URL is the GitHub release asset for that DMG. In-app updates
 read `https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml`.
 
 ## GitHub release workflow
@@ -80,21 +82,22 @@ The `Release` workflow requires these repository Actions secrets:
 
 Push a signed `vX.Y.Z` tag only after CI passes. All tags share one `release`
 concurrency group, so one GitHub release runs at a time. The workflow validates
-that the tag matches `VERSION`, imports the temporary certificate, builds and
-notarizes the app, creates the checksum, signs a Sparkle appcast, and publishes
-the ZIP, checksum, and `appcast.xml` to the GitHub release. After the GitHub
-files are up, it points `Casks/agent-notch.rb` at that ZIP and checksum and
+that the tag matches `VERSION`, imports the temporary certificate, builds the
+app, notarizes the DMG, creates the checksum, signs a Sparkle appcast, and publishes
+the DMG, checksum, and `appcast.xml` to the GitHub release. After the GitHub
+files are up, it points `Casks/agent-notch.rb` at that DMG and checksum and
 pushes the cask bump to the default branch unless the cask already names a
 newer version. Homebrew users on this tap pick that up with `brew update`.
-Packaged apps check the appcast on launch and once a day, then wait for the
-user to download and restart. The cask sets `auto_updates true` so Homebrew
+Packaged apps check the appcast on launch and once a day. Users can install and
+relaunch with one click or opt into automatic installation in Settings. The cask
+sets `auto_updates true` so Homebrew
 does not fight the in-app updater.
 
 If the cask commit cannot push, update it locally from the published checksum:
 
 ```sh
 ./script/update_cask.sh --version "$(tr -d '[:space:]' < VERSION)" \
-  --checksum-file "dist/Agent-Notch-$(tr -d '[:space:]' < VERSION)-macOS-arm64.zip.sha256"
+  --checksum-file "dist/Agent-Notch-$(tr -d '[:space:]' < VERSION)-macOS-arm64.dmg.sha256"
 ```
 
 Do not rewrite the cask SHA-256 during release prep. The checksum belongs to the
@@ -130,7 +133,7 @@ gh variable delete RELEASE_MODE --repo Aforno/AgentNotch
 
 For a local tester handoff without publishing a GitHub release, run
 `./script/package_release.sh --adhoc` after the release checks. Share both
-the ZIP and its `.sha256`, identify the source commit, and explicitly label
+the DMG and its `.sha256`, identify the source commit, and explicitly label
 the build as an unsigned beta that is not notarized by Apple.
 
 ## Nightly builds
@@ -143,10 +146,10 @@ Automated nightly builds run via `.github/workflows/nightly.yml`:
 - Can also run manually via `workflow_dispatch`; `force` defaults to `true`
   to rebuild an already published commit. Set it to `false` to use the same skip
   check as scheduled runs.
-- Packaging creates a versioned ZIP in `dist/` and copies it to
-  `Agent-Notch-Nightly-macOS-arm64.zip`. Only the fixed Nightly ZIP, its
+- Packaging creates a versioned DMG in `dist/` and copies it to
+  `Agent-Notch-Nightly-macOS-arm64.dmg`. Only the fixed Nightly DMG, its
   `.sha256` checksum, and (for signed builds) `appcast.xml` are published to the
-  rolling `nightly` GitHub prerelease. The ZIP and checksum are also kept in the
+  rolling `nightly` GitHub prerelease. The DMG and checksum are also kept in the
   Actions artifact for 7 days. Obsolete versioned release assets are removed.
 - Signs and notarizes if Developer ID credentials are configured in repository
   secrets; falls back to an ad-hoc signed preview if secrets are unavailable or

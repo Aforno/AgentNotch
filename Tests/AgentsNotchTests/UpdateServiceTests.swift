@@ -3,20 +3,6 @@ import Sparkle
 import XCTest
 
 final class UpdateStateMachineTests: XCTestCase {
-    func testDownloadFailureReturnsToAvailable() {
-        var state = UpdateState.available(version: "0.3.0")
-        state = reduceUpdateState(state, .downloadStarted)
-        state = reduceUpdateState(state, .downloadFailed("network down"))
-        XCTAssertEqual(state, .available(version: "0.3.0"))
-    }
-
-    func testInstallFailureKeepsDownloadedUpdate() {
-        var state = UpdateState.downloaded(version: "0.3.0")
-        state = reduceUpdateState(state, .installStarted)
-        state = reduceUpdateState(state, .installFailed("relaunch failed"))
-        XCTAssertEqual(state, .downloaded(version: "0.3.0"))
-    }
-
     func testCheckDoesNotClearDownloadedUpdate() {
         var state = UpdateState.downloaded(version: "0.3.0")
         state = reduceUpdateState(state, .checkStarted)
@@ -46,41 +32,78 @@ final class UpdateStateMachineTests: XCTestCase {
 
 final class UpdateServiceTests: XCTestCase {
     @MainActor
-    func testDownloadAndInstallWaitForUserActionsAndInvokeEachReplyOnce() {
-        let service = UpdateService()
+    func testSingleInstallActionDownloadsThenRelaunchesWhenReady() throws {
+        let service = UpdateService(preferences: try makePreferences())
         var downloads: [SPUUserUpdateChoice] = []
         var installs: [SPUUserUpdateChoice] = []
-        var preparations = 0
-        service.willInstall = { preparations += 1 }
 
         service.noteUpdateAvailable(version: "0.3.0") { downloads.append($0) }
         XCTAssertEqual(service.state, .available(version: "0.3.0"))
         XCTAssertTrue(downloads.isEmpty)
-        service.download()
-        service.download()
+        service.downloadAndInstall()
+        service.downloadAndInstall()
         XCTAssertEqual(downloads, [.install])
         XCTAssertEqual(service.state, .downloading(version: "0.3.0", percent: 0))
 
         service.noteDownloadProgress(0.42)
         XCTAssertEqual(service.state, .downloading(version: "0.3.0", percent: 0.42))
-        service.noteReadyToInstall { installs.append($0) }
-        XCTAssertEqual(service.state, .downloaded(version: "0.3.0"))
         XCTAssertTrue(installs.isEmpty)
-        XCTAssertEqual(preparations, 0)
-        service.install()
+        service.noteReadyToInstall { installs.append($0) }
         service.install()
         XCTAssertEqual(installs, [.install])
-        XCTAssertEqual(preparations, 1)
         XCTAssertEqual(service.state, .installing(version: "0.3.0"))
     }
 
     @MainActor
-    func testSwitchDiscardsPreparedInstallationAndIgnoresLateCallbacks() {
-        let service = UpdateService()
+    func testAutomaticInstallRequiresOptInThroughRelaunch() throws {
+        let preferences = try makePreferences()
+        let service = UpdateService(preferences: preferences)
+        var downloads: [SPUUserUpdateChoice] = []
+        var installs: [SPUUserUpdateChoice] = []
+
+        preferences.set(true, forKey: AppPreferences.Key.automaticallyInstallUpdates)
+        service.noteUpdateAvailable(version: "0.3.0") { downloads.append($0) }
+        XCTAssertTrue(downloads.isEmpty)
+
+        preferences.set(true, forKey: AppPreferences.Key.automaticallyCheckForUpdates)
+        service.automaticInstallationPreferenceDidChange()
+        XCTAssertEqual(downloads, [.install])
+
+        preferences.set(false, forKey: AppPreferences.Key.automaticallyInstallUpdates)
+        service.noteReadyToInstall { installs.append($0) }
+        XCTAssertEqual(installs, [.skip])
+        service.noteSessionEnded()
+
+        preferences.set(true, forKey: AppPreferences.Key.automaticallyInstallUpdates)
+        service.noteUpdateAvailable(version: "0.4.0") { downloads.append($0) }
+        service.noteReadyToInstall { installs.append($0) }
+        XCTAssertEqual(downloads, [.install, .install])
+        XCTAssertEqual(installs, [.skip, .install])
+        XCTAssertEqual(service.state, .installing(version: "0.4.0"))
+    }
+
+    @MainActor
+    func testFailedDownloadClearsConsentAndLeavesRetryState() throws {
+        let service = UpdateService(preferences: try makePreferences())
+        service.noteUpdateAvailable(version: "1.0") { _ in }
+        service.downloadAndInstall()
+        service.noteFailure("Download interrupted")
+        service.noteSessionEnded()
+        XCTAssertEqual(service.state, .failed("Download interrupted"))
+
+        var installs: [SPUUserUpdateChoice] = []
+        service.noteReadyToInstall(version: "1.0") { installs.append($0) }
+        XCTAssertEqual(service.state, .downloaded(version: "1.0"))
+        XCTAssertTrue(installs.isEmpty)
+    }
+
+    @MainActor
+    func testSwitchDiscardsPreparedInstallationAndIgnoresLateCallbacks() throws {
+        let service = UpdateService(preferences: try makePreferences())
         let driver = SparkleUpdateDriver()
         driver.service = service
         var choices: [SPUUserUpdateChoice] = []
-        service.noteDownloaded(version: "1.0") { choices.append($0) }
+        service.noteReadyToInstall(version: "1.0") { choices.append($0) }
 
         service.discardPreviousOffer()
         service.install()
@@ -88,7 +111,6 @@ final class UpdateServiceTests: XCTestCase {
         driver.dismissUpdateInstallation()
         XCTAssertEqual(choices, [.skip])
         XCTAssertEqual(service.state, .checking)
-        XCTAssertNil(service.lastError)
 
         driver.showReady(toInstallAndRelaunch: { choices.append($0) })
         XCTAssertEqual(choices, [.skip, .skip])
@@ -103,7 +125,6 @@ final class UpdateServiceTests: XCTestCase {
         service.channelDidChange()
         service.check()
         XCTAssertEqual(service.state, .unavailable(UpdateService.manualUpdatesMessage))
-        XCTAssertNil(service.lastError)
     }
 
     @MainActor
@@ -117,7 +138,7 @@ final class UpdateServiceTests: XCTestCase {
         let service = UpdateService()
         service.start()
         service.setAutomaticChecksEnabled(true)
-        service.download()
+        service.downloadAndInstall()
         service.install()
         XCTAssertEqual(service.state, .unavailable(UpdateService.packagedOnlyMessage))
     }
@@ -154,8 +175,14 @@ final class UpdateServiceTests: XCTestCase {
             let context = String(describing: reason)
             XCTAssertTrue(acknowledged, context)
             XCTAssertEqual(service.state, .failed("This update cannot be installed."), context)
-            XCTAssertEqual(service.lastError, "This update cannot be installed.", context)
         }
+    }
+
+    private func makePreferences() throws -> UserDefaults {
+        let name = "AgentNotch.UpdateTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        addTeardownBlock { UserDefaults(suiteName: name)?.removePersistentDomain(forName: name) }
+        return defaults
     }
 
     func testMissingOrUnknownReasonFallsBackToDescription() {

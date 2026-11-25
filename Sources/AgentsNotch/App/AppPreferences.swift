@@ -7,6 +7,7 @@ enum AppPreferences {
         static let attentionNotificationSoundEnabled = "attentionNotificationSoundEnabled"
         static let attentionNotificationsEnabled = "attentionNotificationsEnabled"
         static let automaticallyCheckForUpdates = "automaticallyCheckForUpdates"
+        static let automaticallyInstallUpdates = "automaticallyInstallUpdates"
         static let debugMode = "debugMode"
         static let displayPreference = "displayPreference"
         static let failureNotificationsEnabled = "failureNotificationsEnabled"
@@ -26,6 +27,7 @@ enum AppPreferences {
             Key.attentionNotificationSoundEnabled: false,
             Key.attentionNotificationsEnabled: false,
             Key.automaticallyCheckForUpdates: true,
+            Key.automaticallyInstallUpdates: false,
             Key.displayPreference: DisplayPreference.primary.rawValue,
             Key.failureNotificationsEnabled: false,
             Key.globalActivityShortcut: GlobalActivityShortcut.off.rawValue,

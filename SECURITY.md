@@ -56,8 +56,9 @@ It modifies only its own entries in supported provider hook configuration.
   source, or send analytics or telemetry. The one Codex exception is a
   backward transcript lookup in 4 MiB reads to identify the reviewer for a
   PermissionRequest. Missing context keeps the request visible.
-- Update checks fetch only the GitHub Releases Sparkle appcast. The ZIP is
-  downloaded after the user chooses Download. Sparkle verifies the EdDSA
+- Update checks fetch only the GitHub Releases Sparkle appcast. The DMG is
+  downloaded when the user chooses Install or opts into automatic installation.
+  Sparkle verifies the EdDSA
   signature against the baked-in public key and the Developer ID signature
   before replacing the running app. System profile data is not sent.
 - Integration changes are atomic and idempotent, preserve unrelated settings,

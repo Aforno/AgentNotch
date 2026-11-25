@@ -18,8 +18,8 @@ body:
     attributes:
       label: Installation method
       options:
-        - Unsigned beta or nightly ZIP
-        - Signed release ZIP
+        - Unsigned beta or nightly download
+        - Signed release download
         - Homebrew
         - Built from source
     validations:

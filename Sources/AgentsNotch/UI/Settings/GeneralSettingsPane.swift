@@ -8,6 +8,7 @@ struct GeneralSettingsPane: View {
     let notchEnabled: Binding<Bool>
     let showVirtualNotch: Binding<Bool>
     let automaticallyCheckForUpdates: Binding<Bool>
+    let automaticallyInstallUpdates: Binding<Bool>
     let updateChannel: Binding<String>
     let displayPreference: Binding<String>
     let globalActivityShortcut: Binding<String>
@@ -89,19 +90,33 @@ struct GeneralSettingsPane: View {
             } else {
                 SettingsToggleRow(
                     title: "Check automatically",
-                    detail: "Downloads and installs only when you ask.",
                     isOn: automaticallyCheckForUpdates
                 )
+                SettingsToggleRow(
+                    title: "Install automatically",
+                    detail: "Download updates and relaunch Agent Notch when they're ready.",
+                    isOn: automaticallyInstallUpdates
+                )
+                .disabled(!automaticallyCheckForUpdates.wrappedValue || installationInProgress)
                 releaseChannelPicker
                 SettingsControlRow(
                     title: "Version \(runtime.updates.currentVersion)",
-                    detail: runtime.updates.state == .awaitingStableRelease
-                        ? "This build is newer than the latest stable release. Your next update will be from Stable."
-                        : nil
+                    detail: updateStatusDetail
                 ) {
                     SettingsUpdateControl(updates: runtime.updates)
                 }
             }
+        }
+    }
+
+    private var updateStatusDetail: String? {
+        switch runtime.updates.state {
+        case .awaitingStableRelease:
+            "This build is newer than the latest stable release. Your next update will be from Stable."
+        case let .failed(message):
+            message
+        default:
+            nil
         }
     }
 

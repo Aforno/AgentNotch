@@ -18,15 +18,17 @@ Requirements: Apple Silicon Mac and macOS 14 or later.
 ### Unsigned beta
 
 Start with the [Nightly beta](https://github.com/Aforno/AgentNotch/releases/tag/nightly).
-Download `Agent-Notch-Nightly-macOS-arm64.zip` and its matching `.sha256` file
-into the same folder. In Terminal, change to that folder and verify the ZIP:
+Download `Agent-Notch-Nightly-macOS-arm64.dmg` and its matching `.sha256` file
+into the same folder. In Terminal, change to that folder and verify the DMG:
 
 ```sh
-shasum -a 256 -c Agent-Notch-Nightly-macOS-arm64.zip.sha256
+shasum -a 256 -c Agent-Notch-Nightly-macOS-arm64.dmg.sha256
 ```
 
-Continue only if it reports `OK`. Unzip the archive, move `Agent Notch.app`
-to `/Applications`, and open it. Unsigned previews are ad-hoc signed, have no
+Continue only if it reports `OK`. Open the DMG, drag `Agent Notch.app` onto
+the **Applications** shortcut, and launch it from Applications. For older ZIP
+releases, verify the matching `.zip.sha256` file and unzip before moving the app
+to Applications. Unsigned previews are ad-hoc signed, have no
 Apple Developer ID, and are not notarized by Apple. Check the release notes
 for the signing status of the build you download.
 
@@ -40,7 +42,7 @@ Activity Center or Settings. Displays without a hardware notch can use the
 virtual notch.
 
 Unsigned betas update manually. Use **Settings → General → View Downloads**,
-download and verify the new ZIP, quit Agent Notch from Settings, then replace
+download and verify the new DMG, quit Agent Notch from Settings, then replace
 the app in `/Applications` and reopen it. Your local history and preferences
 stay in place. Existing provider observers are refreshed on launch.
 
@@ -59,20 +61,22 @@ brew install --cask aforno/agentnotch/agent-notch
 Homebrew 6 does not trust a third-party tap when you add it. The fully
 qualified name trusts only this cask.
 
-Later cask bumps land on `main` for signed releases. Signed packaged builds
-also update themselves: Settings → General → Check for Updates, then Download,
-then Restart to Update.
+Later cask bumps land on `main` for signed releases. In signed packaged builds,
+go to **Settings → General → Updates**. Choose **Check for Updates**, then
+**Install** to download the update and relaunch. Turn on **Install automatically**
+to download and install future updates as soon as an automatic check finds one.
 Homebrew knows the app self-updates (`auto_updates true`). `brew upgrade --cask`
 is still available if you prefer it.
 
-For a manual signed install, download the ZIP and matching `.sha256` file from the
+For a manual signed install, download the DMG and matching `.sha256` file from the
 [GitHub releases page](../../releases). Verify it before you open the app:
 
 ```sh
-shasum -a 256 -c Agent-Notch-*-macOS-arm64.zip.sha256
+shasum -a 256 -c Agent-Notch-*-macOS-arm64.dmg.sha256
 ```
 
-Unzip the archive, move `Agent Notch.app` to `/Applications`, and open it.
+Open the DMG, drag `Agent Notch.app` onto the **Applications** shortcut, and
+launch it from Applications.
 Production releases are Developer ID signed and notarized. Unsigned previews
 are marked as prereleases; follow the beta instructions above.
 
@@ -288,9 +292,9 @@ waiting sessions stay waiting. Other actives enter a short `unknown`
 
 Session history stays on the machine. No analytics, no source upload, no remote
 telemetry. If update checking is on, the app fetches the Sparkle appcast from
-GitHub Releases at launch and at most once a day. Choosing Download fetches
-that release ZIP. Sparkle verifies the EdDSA signature and Developer ID before
-replacing the app. Notifications are opt-in and delivered by macOS.
+GitHub Releases at launch and once a day. Choosing Install or enabling automatic
+installation lets the app fetch the release DMG. Sparkle validates the update
+before replacing the app. Notifications are opt-in and delivered by macOS.
 
 ## Remove Agent Notch
 

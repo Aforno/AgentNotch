@@ -142,13 +142,13 @@ jobs:
           else
             ./script/package_release.sh --adhoc
           fi
-          cp "dist/Agent-Notch-$VERSION-macOS-arm64.zip" "dist/Agent-Notch-Nightly-macOS-arm64.zip"
-          (cd dist && shasum -a 256 "Agent-Notch-Nightly-macOS-arm64.zip" > "Agent-Notch-Nightly-macOS-arm64.zip.sha256")
+          cp "dist/Agent-Notch-$VERSION-macOS-arm64.dmg" "dist/Agent-Notch-Nightly-macOS-arm64.dmg"
+          (cd dist && shasum -a 256 "Agent-Notch-Nightly-macOS-arm64.dmg" > "Agent-Notch-Nightly-macOS-arm64.dmg.sha256")
           # The in-app Nightly channel reads this feed. Sparkle rejects ad-hoc builds,
           # so unsigned nightlies publish no appcast.
           if [[ "$CAN_SIGN" == "true" && -n "${SPARKLE_ED_PRIVATE_KEY:-}" ]]; then
             ./script/generate_appcast.sh \
-              --archive "dist/Agent-Notch-Nightly-macOS-arm64.zip" \
+              --archive "dist/Agent-Notch-Nightly-macOS-arm64.dmg" \
               --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/"
           fi
 
@@ -161,9 +161,9 @@ jobs:
           set -euo pipefail
           DATE="$(date -u +'%Y-%m-%d')"
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          NIGHTLY_ARCHIVE="dist/Agent-Notch-Nightly-macOS-arm64.zip"
+          NIGHTLY_DMG="dist/Agent-Notch-Nightly-macOS-arm64.dmg"
           NOTES_FILE="$RUNNER_TEMP/nightly-release-notes.md"
-          ASSETS_TO_PUBLISH=("$NIGHTLY_ARCHIVE" "$NIGHTLY_ARCHIVE.sha256")
+          ASSETS_TO_PUBLISH=("$NIGHTLY_DMG" "$NIGHTLY_DMG.sha256")
           if [[ -f dist/appcast.xml ]]; then
             ASSETS_TO_PUBLISH+=("dist/appcast.xml")
           fi
@@ -183,11 +183,11 @@ jobs:
           > [!WARNING]
           > This nightly build is ad-hoc signed and has not been notarized by Apple. macOS Gatekeeper may block or warn about it. Verify the published SHA-256 checksum before opening the app.
 
-          Download `Agent-Notch-Nightly-macOS-arm64.zip` and its matching `.sha256` file into the same folder. Run `shasum -a 256 -c Agent-Notch-Nightly-macOS-arm64.zip.sha256` there and continue only if it reports `OK`. Unzip and move `Agent Notch.app` to Applications.
+          Download `Agent-Notch-Nightly-macOS-arm64.dmg` and its matching `.sha256` file into the same folder. Run `shasum -a 256 -c Agent-Notch-Nightly-macOS-arm64.dmg.sha256` there and continue only if it reports `OK`. Open the DMG and drag `Agent Notch.app` onto the Applications shortcut.
 
           If blocked, try opening the app once, then use **System Settings → Privacy & Security → Open Anyway** and confirm the prompt. See [Apple's instructions](https://support.apple.com/en-us/102445).
 
-          **Updates are manual:** download and verify the new ZIP, quit Agent Notch from Settings → General, replace the app in Applications, and reopen it. History and preferences stay in place.
+          **Updates are manual:** download and verify the new DMG, quit Agent Notch from Settings → General, replace the app in Applications, and reopen it. History and preferences stay in place.
 
           Try the [beta tester guide](https://github.com/Aforno/AgentNotch/blob/main/docs/BETA_TESTING.md) and include this build's date and commit in feedback.
           EOF
@@ -218,18 +218,18 @@ jobs:
               --prerelease
           fi
 
-          # Remove assets left by older workflows that published versioned names, and
-          # any appcast that would point at a ZIP this run replaced without signing.
+          # Clean up legacy ZIPs, versioned DMGs, and any appcast left by a signed build.
           ASSETS="$(gh release view nightly --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
           while IFS= read -r asset; do
             case "$asset" in
-              Agent-Notch-Nightly-macOS-arm64.zip|Agent-Notch-Nightly-macOS-arm64.zip.sha256) ;;
+              Agent-Notch-Nightly-macOS-arm64.dmg|Agent-Notch-Nightly-macOS-arm64.dmg.sha256) ;;
               appcast.xml)
                 if [[ ! -f dist/appcast.xml ]]; then
                   gh release delete-asset nightly "$asset" --repo "$GITHUB_REPOSITORY" --yes
                 fi
                 ;;
-              Agent-Notch-*-macOS-arm64.zip|Agent-Notch-*-macOS-arm64.zip.sha256)
+              Agent-Notch-*-macOS-arm64.zip|Agent-Notch-*-macOS-arm64.zip.sha256|\
+              Agent-Notch-*-macOS-arm64.dmg|Agent-Notch-*-macOS-arm64.dmg.sha256)
                 gh release delete-asset nightly "$asset" --repo "$GITHUB_REPOSITORY" --yes
                 ;;
             esac
@@ -244,8 +244,8 @@ jobs:
         with:
           name: Agent-Notch-Nightly-macOS-arm64
           path: |
-            dist/Agent-Notch-Nightly-macOS-arm64.zip
-            dist/Agent-Notch-Nightly-macOS-arm64.zip.sha256
+            dist/Agent-Notch-Nightly-macOS-arm64.dmg
+            dist/Agent-Notch-Nightly-macOS-arm64.dmg.sha256
           retention-days: 7
 
       - name: Remove temporary signing keychain
