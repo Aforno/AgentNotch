@@ -52,6 +52,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Privacy mode hides activity text and fallback task titles in the reply header.
 - Release verification accepts compiled icon catalogs as well as raw SwiftPM assets.
 
+## [0.3.1] - 2026-11-25
+
+### Fixed
+
+- Agent Notch no longer crashes at startup when macOS returns notification
+  permission settings on a background queue.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added
