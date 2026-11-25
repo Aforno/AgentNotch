@@ -55,6 +55,6 @@ jobs:
       - name: Run release tests
         run: swift test -c release
 
-      - name: Verify release package structure
+      - name: Verify release disk image
         if: matrix.os == 'macos-15'
         run: ./script/package_release.sh --adhoc

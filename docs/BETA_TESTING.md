@@ -6,7 +6,7 @@ Unsigned previews are not notarized by Apple and update manually.
 ## Install
 
 Follow the [unsigned beta installation instructions](../README.md#unsigned-beta).
-Use the ZIP and checksum from the same release. Keep the release URL: nightly
+Use the DMG and checksum from the same release. Keep the release URL: nightly
 builds can share a version number, so the date and commit in the release notes
 identify the build you tested.
 
@@ -59,7 +59,7 @@ swift test -c release
 ./script/package_release.sh --adhoc
 ```
 
-Share the ZIP and matching `.sha256` from `dist/`, labeled **Unsigned Beta —
+Share the DMG and matching `.sha256` from `dist/`, labeled **Unsigned Beta —
 not notarized by Apple**, with the source commit. For GitHub downloads, use
 the existing Nightly workflow or the explicitly opted-in
 [unsigned prerelease workflow](RELEASING.md#unsigned-prerelease). Neither

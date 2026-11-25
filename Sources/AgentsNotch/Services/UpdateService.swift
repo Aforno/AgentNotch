@@ -7,15 +7,12 @@ import Sparkle
 @MainActor
 final class UpdateService {
     static let packagedOnlyMessage = "Source builds update manually. Rebuild from source or download the latest beta."
-    static let manualUpdatesMessage = "This beta updates manually. Download the latest ZIP, quit Agent Notch, and replace the app in Applications."
+    static let manualUpdatesMessage = "This beta updates manually. Download the latest release, quit Agent Notch, and replace the app in Applications."
     var isManualPreview: Bool { bundle.object(forInfoDictionaryKey: "AgentNotchManualUpdates") as? Bool == true }
 
     private(set) var channelCheckPending = false
     private(set) var state: UpdateState = .idle
-    private(set) var lastError: String?
 
-    /// Called just before Sparkle quits the process to swap in the new app.
-    var willInstall: (() -> Void)?
     /// Opens Settings → General so a user-initiated check has a visible result.
     var presentStatus: (() -> Void)?
 
@@ -24,12 +21,20 @@ final class UpdateService {
     private let feedDelegate = UpdateChannelFeedDelegate()
     private var foundReply: ((SPUUserUpdateChoice) -> Void)?
     private var installReply: ((SPUUserUpdateChoice) -> Void)?
+    private var userRequestedInstall = false
     private var started = false
     private let bundle: Bundle
+    private let preferences: UserDefaults
     private static let logger = Logger(subsystem: "com.afonsoferreira.AgentNotch", category: "updates")
 
-    init(bundle: Bundle = .main) {
+    init(bundle: Bundle = .main, preferences: UserDefaults = .standard) {
         self.bundle = bundle
+        self.preferences = preferences
+    }
+
+    private var automaticallyInstalls: Bool {
+        preferences.bool(forKey: AppPreferences.Key.automaticallyCheckForUpdates)
+            && preferences.bool(forKey: AppPreferences.Key.automaticallyInstallUpdates)
     }
 
     var currentVersion: String {
@@ -72,32 +77,49 @@ final class UpdateService {
             userDriver: driver,
             delegate: feedDelegate
         )
+        // Keep downloads in the custom driver so channel changes can cancel them.
         updater.automaticallyDownloadsUpdates = false
         updater.sendsSystemProfile = false
         do {
             try updater.start()
             // Only latch after Sparkle accepts the session so Retry can start() again.
             started = true
-            updater.automaticallyChecksForUpdates = UserDefaults.standard.bool(
+            updater.automaticallyChecksForUpdates = preferences.bool(
                 forKey: AppPreferences.Key.automaticallyCheckForUpdates
             )
             self.driver = driver
             self.updater = updater
-            if updater.automaticallyChecksForUpdates {
-                updater.checkForUpdatesInBackground()
-            }
+            checkInBackgroundIfIdle()
         } catch {
             Self.logger.error("Sparkle failed to start: \(error.localizedDescription, privacy: .public)")
             state = .failed(error.localizedDescription)
-            lastError = error.localizedDescription
         }
     }
 
     func setAutomaticChecksEnabled(_ enabled: Bool) {
         start()
         updater?.automaticallyChecksForUpdates = enabled
-        if enabled {
-            updater?.checkForUpdatesInBackground()
+        guard enabled else { return }
+        installPendingUpdateAutomatically()
+        checkInBackgroundIfIdle()
+    }
+
+    /// Apply new preferences to an existing offer or check in the background.
+    func automaticInstallationPreferenceDidChange() {
+        guard automaticallyInstalls else { return }
+        installPendingUpdateAutomatically()
+        checkInBackgroundIfIdle()
+    }
+
+    private func installPendingUpdateAutomatically() {
+        guard automaticallyInstalls else { return }
+        beginDownload()
+        install()
+    }
+
+    private func checkInBackgroundIfIdle() {
+        if let updater, updater.automaticallyChecksForUpdates, !updater.sessionInProgress {
+            updater.checkForUpdatesInBackground()
         }
     }
 
@@ -112,7 +134,7 @@ final class UpdateService {
     func discardPreviousOffer() {
         channelCheckPending = true
         state = .checking
-        lastError = nil
+        userRequestedInstall = false
         let download = foundReply
         let install = installReply
         foundReply = nil
@@ -133,7 +155,6 @@ final class UpdateService {
         presentStatusSurface()
         start()
         guard let updater, !channelCheckPending else { return }
-        lastError = nil
         updater.checkForUpdates()
     }
 
@@ -141,8 +162,14 @@ final class UpdateService {
         presentStatus?()
     }
 
-    func download() {
-        lastError = nil
+    /// A single user action authorizes both the download and the relaunch.
+    func downloadAndInstall() {
+        guard foundReply != nil else { return }
+        userRequestedInstall = true
+        beginDownload()
+    }
+
+    private func beginDownload() {
         guard let reply = foundReply else { return }
         foundReply = nil
         apply(.downloadStarted)
@@ -150,10 +177,9 @@ final class UpdateService {
     }
 
     func install() {
-        lastError = nil
         guard let reply = installReply else { return }
         installReply = nil
-        willInstall?()
+        userRequestedInstall = false
         apply(.installStarted)
         reply(.install)
     }
@@ -168,15 +194,7 @@ final class UpdateService {
     ) {
         foundReply = download
         apply(.updateAvailable(version: version))
-    }
-
-    func noteDownloaded(
-        version: String,
-        install: @escaping (SPUUserUpdateChoice) -> Void
-    ) {
-        installReply = install
-        apply(.updateAvailable(version: version))
-        apply(.downloadComplete)
+        if automaticallyInstalls { beginDownload() }
     }
 
     func noteNoUpdate(aheadOfSelectedRelease: Bool = false) {
@@ -186,21 +204,11 @@ final class UpdateService {
         }
     }
 
-    func noteCheckFailed(_ message: String) {
-        lastError = message
-        apply(.checkFailed(message))
-    }
-
-    func noteUpdaterError(_ message: String) {
-        lastError = message
-        switch state {
-        case .downloading:
-            apply(.downloadFailed(message))
-        case .installing, .downloaded:
-            apply(.installFailed(message))
-        default:
-            apply(.checkFailed(message))
-        }
+    func noteFailure(_ message: String) {
+        foundReply = nil
+        installReply = nil
+        userRequestedInstall = false
+        apply(.failed(message))
     }
 
     func noteDownloadStarted() {
@@ -211,28 +219,29 @@ final class UpdateService {
         apply(.downloadProgress(percent))
     }
 
-    func noteReadyToInstall(install: @escaping (SPUUserUpdateChoice) -> Void) {
+    func noteReadyToInstall(
+        version: String? = nil,
+        install: @escaping (SPUUserUpdateChoice) -> Void
+    ) {
+        let shouldInstall = userRequestedInstall || automaticallyInstalls
+        if let version {
+            apply(.updateAvailable(version: version))
+        } else if !shouldInstall {
+            // Automatic installation was turned off during this download.
+            // Sparkle can install a prepared update on quit unless it is canceled.
+            install(.skip)
+            return
+        }
         installReply = install
         apply(.downloadComplete)
-    }
-
-    func noteInstalling(install: ((SPUUserUpdateChoice) -> Void)? = nil) {
-        if let install {
-            willInstall?()
-            install(.install)
-        }
-        apply(.installStarted)
+        if shouldInstall { self.install() }
     }
 
     func noteSessionEnded() {
-        switch state {
-        case .available, .downloaded, .installing:
-            return
-        default:
-            foundReply = nil
-            installReply = nil
-            apply(.sessionEnded)
-        }
+        foundReply = nil
+        installReply = nil
+        userRequestedInstall = false
+        apply(.sessionEnded)
     }
 
     private func apply(_ event: UpdateEvent) {

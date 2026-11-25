@@ -55,18 +55,17 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
         }
         if appcastItem.isInformationOnlyUpdate {
             reply(.dismiss)
-            activeService.noteCheckFailed("This update cannot be installed from inside Agent Notch.")
+            activeService.noteFailure("This update cannot be installed from inside Agent Notch.")
             return
         }
 
         let version = appcastItem.displayVersionString
         switch state.stage {
-        case .notDownloaded:
+        // A cached download still needs to be extracted before it can be installed.
+        case .notDownloaded, .downloaded:
             activeService.noteUpdateAvailable(version: version, download: reply)
-        case .downloaded:
-            activeService.noteDownloaded(version: version, install: reply)
         case .installing:
-            activeService.noteInstalling(install: reply)
+            activeService.noteReadyToInstall(version: version, install: reply)
         @unknown default:
             reply(.dismiss)
         }
@@ -83,13 +82,13 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
         case .newerThanLatest:
             activeService?.noteNoUpdate(aheadOfSelectedRelease: true)
         case let .unavailable(message):
-            activeService?.noteCheckFailed(message)
+            activeService?.noteFailure(message)
         }
         acknowledgement()
     }
 
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
-        activeService?.noteUpdaterError(error.localizedDescription)
+        activeService?.noteFailure(error.localizedDescription)
         acknowledgement()
     }
 
@@ -129,14 +128,11 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
         activeService.noteReadyToInstall(install: reply)
     }
 
+    // The install reply already drives the progress UI. The app accepts Sparkle's quit request.
     func showInstallingUpdate(
-        withApplicationTerminated applicationTerminated: Bool,
-        retryTerminatingApplication: @escaping () -> Void
-    ) {
-        activeService?.noteInstalling()
-        _ = applicationTerminated
-        _ = retryTerminatingApplication
-    }
+        withApplicationTerminated _: Bool,
+        retryTerminatingApplication _: @escaping () -> Void
+    ) {}
 
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) {
         acknowledgement()

@@ -126,24 +126,24 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
-          ARCHIVE="dist/Agent-Notch-$VERSION-macOS-arm64.zip"
+          DMG="dist/Agent-Notch-$VERSION-macOS-arm64.dmg"
           if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
             NOTES_FILE="$RUNNER_TEMP/unsigned-prerelease-notes.md"
             cat > "$NOTES_FILE" <<'EOF'
           > [!WARNING]
           > This preview is ad-hoc signed and has not been notarized by Apple. macOS Gatekeeper may block or warn about it. Verify the published SHA-256 checksum before opening the app.
 
-          Download the ZIP and matching `.sha256` file into the same folder. Run `shasum -a 256 -c Agent-Notch-*-macOS-arm64.zip.sha256` there and continue only if it reports `OK`. Unzip and move `Agent Notch.app` to Applications.
+          Download the DMG and matching `.sha256` file into the same folder. Run `shasum -a 256 -c Agent-Notch-*-macOS-arm64.dmg.sha256` there and continue only if it reports `OK`. Open the DMG and drag `Agent Notch.app` onto the Applications shortcut.
 
           If blocked, try opening the app once, then use **System Settings → Privacy & Security → Open Anyway** and confirm the prompt. See [Apple's instructions](https://support.apple.com/en-us/102445).
 
-          **Updates are manual:** download and verify the new ZIP, quit Agent Notch from Settings → General, replace the app in Applications, and reopen it. History and preferences stay in place.
+          **Updates are manual:** download and verify the new DMG, quit Agent Notch from Settings → General, replace the app in Applications, and reopen it. History and preferences stay in place.
 
           Try the [beta tester guide](https://github.com/Aforno/AgentNotch/blob/main/docs/BETA_TESTING.md) and include this release URL in feedback.
           EOF
             gh release create "$GITHUB_REF_NAME" \
-              "$ARCHIVE" \
-              "$ARCHIVE.sha256" \
+              "$DMG" \
+              "$DMG.sha256" \
               --verify-tag \
               --generate-notes \
               --notes-file "$NOTES_FILE" \
@@ -151,8 +151,8 @@ jobs:
               --title "Agent Notch $VERSION (Unsigned Preview)"
           else
             gh release create "$GITHUB_REF_NAME" \
-              "$ARCHIVE" \
-              "$ARCHIVE.sha256" \
+              "$DMG" \
+              "$DMG.sha256" \
               "dist/appcast.xml" \
               --verify-tag \
               --generate-notes \
@@ -167,7 +167,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
-          CHECKSUM="$GITHUB_WORKSPACE/dist/Agent-Notch-$VERSION-macOS-arm64.zip.sha256"
+          CHECKSUM="$GITHUB_WORKSPACE/dist/Agent-Notch-$VERSION-macOS-arm64.dmg.sha256"
           git fetch origin "$DEFAULT_BRANCH"
           git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
           ./script/update_cask.sh --version "$VERSION" --checksum-file "$CHECKSUM"

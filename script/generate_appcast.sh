@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Sign a Sparkle appcast for the packaged GitHub ZIP.
+# Sign a Sparkle appcast for the packaged GitHub release.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
-ARCHIVE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.zip"
+ARCHIVE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.dmg"
 OUTPUT=""
 ED_KEY_FILE=""
 DOWNLOAD_PREFIX=""

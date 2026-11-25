@@ -97,9 +97,9 @@ struct SettingsUpdateControl: View {
                 .font(NotchWindowFont.caption)
                 .foregroundStyle(NotchWindowPalette.success)
         case let .available(version):
-            Button("Download \(version)") { updates.download() }
+            Button("Install \(version)") { updates.downloadAndInstall() }
                 .buttonStyle(NotchPillButtonStyle())
-                .help(updates.lastError ?? "Download this update, then restart to install it.")
+                .help("Download the update and relaunch Agent Notch.")
         case let .downloading(_, percent):
             HStack(spacing: 8) {
                 ProgressView(value: percent)
@@ -113,7 +113,7 @@ struct SettingsUpdateControl: View {
         case let .downloaded(version):
             Button("Restart to Update") { updates.install() }
                 .buttonStyle(NotchPillButtonStyle())
-                .help(updates.lastError ?? "Install \(version) and relaunch Agent Notch.")
+                .help("Install \(version) and relaunch Agent Notch.")
         case .installing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
