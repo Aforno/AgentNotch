@@ -9,6 +9,12 @@ final class UpdateService {
     static let packagedOnlyMessage = "Source builds update manually. Rebuild from source or download the latest beta."
     static let manualUpdatesMessage = "This beta updates manually. Download the latest release, quit Agent Notch, and replace the app in Applications."
     var isManualPreview: Bool { bundle.object(forInfoDictionaryKey: "AgentNotchManualUpdates") as? Bool == true }
+    var selectedChannel: UpdateChannel {
+        if bundle.object(forInfoDictionaryKey: "SUFeedURL") as? String == UpdateChannel.previewFeedURL {
+            return .preview
+        }
+        return UpdateChannel.selected(in: preferences)
+    }
 
     private(set) var channelCheckPending = false
     private(set) var state: UpdateState = .idle
@@ -45,7 +51,7 @@ final class UpdateService {
         unavailabilityMessage(in: .main) == nil
     }
 
-    /// Ad-hoc packaging opts into manual updates before Sparkle can start or fetch a feed.
+    /// Manual builds opt out before Sparkle can start or fetch a feed.
     static func unavailabilityMessage(in bundle: Bundle) -> String? {
         guard bundle.bundleIdentifier == "com.afonsoferreira.AgentNotch",
               bundle.bundlePath.hasSuffix(".app") else { return packagedOnlyMessage }
@@ -199,7 +205,7 @@ final class UpdateService {
 
     func noteNoUpdate(aheadOfSelectedRelease: Bool = false) {
         apply(.noUpdate)
-        if state == .upToDate, aheadOfSelectedRelease, UpdateChannel.current == .stable {
+        if state == .upToDate, aheadOfSelectedRelease, selectedChannel == .stable {
             state = .awaitingStableRelease
         }
     }

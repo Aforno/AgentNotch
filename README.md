@@ -17,7 +17,7 @@ Requirements: Apple Silicon Mac and macOS 14 or later.
 
 ### Unsigned beta
 
-Start with the [Nightly beta](https://github.com/Aforno/AgentNotch/releases/tag/nightly).
+Start with the [Nightly Preview](https://github.com/Aforno/AgentNotch/releases/tag/nightly-preview).
 Download `Agent-Notch-Nightly-macOS-arm64.dmg` and its matching `.sha256` file
 into the same folder. In Terminal, change to that folder and verify the DMG:
 
@@ -41,10 +41,10 @@ There is no Dock icon or permanent menu-bar extra: hover over the notch to open
 Activity Center or Settings. Displays without a hardware notch can use the
 virtual notch.
 
-Unsigned betas update manually. Use **Settings → General → View Downloads**,
-download and verify the new DMG, quit Agent Notch from Settings, then replace
-the app in `/Applications` and reopen it. Your local history and preferences
-stay in place. Existing provider observers are refreshed on launch.
+Preview builds with in-app updates use **Settings → General → Updates**.
+If your build shows **View Downloads**, download and verify the new DMG, quit
+Agent Notch from Settings, then replace the app in `/Applications` and reopen
+it. Your local history and preferences stay in place.
 
 For a short first-use check and feedback instructions, see the
 [beta tester guide](docs/BETA_TESTING.md).

@@ -98,7 +98,13 @@ struct GeneralSettingsPane: View {
                     isOn: automaticallyInstallUpdates
                 )
                 .disabled(!automaticallyCheckForUpdates.wrappedValue || installationInProgress)
-                releaseChannelPicker
+                if runtime.updates.selectedChannel == .preview {
+                    SettingsControlRow(title: "Release channel") {
+                        Text(UpdateChannel.preview.title)
+                    }
+                } else {
+                    releaseChannelPicker
+                }
                 SettingsControlRow(
                     title: "Version \(runtime.updates.currentVersion)",
                     detail: updateStatusDetail
@@ -125,7 +131,7 @@ struct GeneralSettingsPane: View {
             title: "Release channel",
             detail: "Nightly builds track main and may be unstable.",
             selection: updateChannel,
-            options: UpdateChannel.allCases.map { ($0.rawValue, $0.title) }
+            options: UpdateChannel.selectableChannels.map { ($0.rawValue, $0.title) }
         )
         .disabled(installationInProgress)
     }

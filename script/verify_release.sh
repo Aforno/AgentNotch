@@ -4,9 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/dist/Agent Notch.app"
 REQUIRE_NOTARIZED=false
+PREVIEW_UPDATES=false
 
 usage() {
-  echo "usage: $0 [--app PATH] [--require-notarized]" >&2
+  echo "usage: $0 [--app PATH] [--require-notarized] [--preview-updates]" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -18,6 +19,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --require-notarized)
       REQUIRE_NOTARIZED=true
+      shift
+      ;;
+    --preview-updates)
+      PREVIEW_UPDATES=true
       shift
       ;;
     *)
@@ -67,14 +72,19 @@ if ! APPLE_EVENTS_USAGE_DESCRIPTION="$(
 fi
 
 EXPECTED_SPARKLE_KEY="$(tr -d '[:space:]' < "$ROOT_DIR/Resources/SparklePublicEDKey")"
+EXPECTED_SPARKLE_FEED="https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml"
+if [[ "$PREVIEW_UPDATES" == true ]]; then
+  EXPECTED_SPARKLE_KEY="${SPARKLE_PREVIEW_ED_PUBLIC_KEY:?missing preview update public key}"
+  EXPECTED_SPARKLE_FEED="https://github.com/Aforno/AgentNotch/releases/download/nightly-preview/appcast.xml"
+fi
 ACTUAL_SPARKLE_KEY="$(plutil -extract SUPublicEDKey raw "$INFO_PLIST")"
 ACTUAL_SPARKLE_FEED="$(plutil -extract SUFeedURL raw "$INFO_PLIST")"
 if [[ "$ACTUAL_SPARKLE_KEY" != "$EXPECTED_SPARKLE_KEY" ]]; then
-  echo "bundle Sparkle public key does not match Resources/SparklePublicEDKey" >&2
+  echo "bundle Sparkle public key does not match the release configuration" >&2
   exit 1
 fi
-if [[ "$ACTUAL_SPARKLE_FEED" != "https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml" ]]; then
-  echo "bundle Sparkle feed URL is not the GitHub latest appcast" >&2
+if [[ "$ACTUAL_SPARKLE_FEED" != "$EXPECTED_SPARKLE_FEED" ]]; then
+  echo "bundle Sparkle feed URL does not match the release configuration" >&2
   exit 1
 fi
 if [[ "$(plutil -extract SUAutomaticallyUpdate raw "$INFO_PLIST")" != "false" ]]; then
@@ -107,14 +117,19 @@ fi
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
 SIGNING_DETAILS="$(codesign --display --verbose=2 "$APP_BUNDLE" 2>&1)"
-if [[ "$SIGNING_DETAILS" == *"Signature=adhoc"* ]]; then
-  if [[ "$(plutil -extract AgentNotchManualUpdates raw "$INFO_PLIST")" != "true" || \
-        "$(plutil -extract SUEnableAutomaticChecks raw "$INFO_PLIST")" != "false" ]]; then
-    echo "ad-hoc previews must use manual updates" >&2
-    exit 1
-  fi
-elif [[ "$(plutil -extract AgentNotchManualUpdates raw "$INFO_PLIST")" != "false" ]]; then
-  echo "signed releases must allow in-app updates" >&2
+EXPECTED_MANUAL_UPDATES=false
+EXPECTED_AUTOMATIC_CHECKS=true
+if [[ "$PREVIEW_UPDATES" == true && "$SIGNING_DETAILS" != *"Signature=adhoc"* ]]; then
+  echo "preview update packages must be ad-hoc signed" >&2
+  exit 1
+elif [[ "$PREVIEW_UPDATES" != true && "$SIGNING_DETAILS" == *"Signature=adhoc"* ]]; then
+  EXPECTED_MANUAL_UPDATES=true
+  EXPECTED_AUTOMATIC_CHECKS=false
+fi
+if [[ "$(plutil -extract AgentNotchManualUpdates raw "$INFO_PLIST")" != "$EXPECTED_MANUAL_UPDATES" || \
+      "$(plutil -extract SUEnableAutomaticChecks raw "$INFO_PLIST")" != "$EXPECTED_AUTOMATIC_CHECKS" || \
+      "$(plutil -extract SUVerifyUpdateBeforeExtraction raw "$INFO_PLIST")" != "$PREVIEW_UPDATES" ]]; then
+  echo "bundle Sparkle settings do not match the release configuration" >&2
   exit 1
 fi
 

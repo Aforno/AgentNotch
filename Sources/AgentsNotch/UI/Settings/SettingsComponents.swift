@@ -127,10 +127,15 @@ struct SettingsUpdateControl: View {
                 .help(message)
                 .accessibilityHint(message)
         case let .unavailable(message):
-            Link("View Downloads", destination: updates.isManualPreview ? channel.releasePage : UpdateChannel.downloadsURL)
+            Link("View Downloads", destination: manualDownloadURL)
                 .buttonStyle(NotchPillButtonStyle())
                 .help(message)
         }
+    }
+
+    private var manualDownloadURL: URL {
+        guard updates.isManualPreview else { return UpdateChannel.downloadsURL }
+        return channel == .nightly ? UpdateChannel.preview.releasePage : channel.releasePage
     }
 }
 

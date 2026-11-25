@@ -120,9 +120,9 @@ git push origin "v$(cat VERSION)"
 
 The workflow ad-hoc signs the app, marks the GitHub release as a prerelease,
 and puts a notarization and Gatekeeper warning at the top of its notes.
-Unsigned builds use manual updates. In Settings → General, Release channel
-selects which release page View Downloads opens.
-They publish no Sparkle appcast and do not update the Homebrew cask. Include
+With preview update keys configured, tagged previews subscribe to the rolling
+Nightly Preview feed. Otherwise the build uses manual updates. Tagged
+previews leave the Homebrew cask unchanged. Include
 the [beta tester guide](BETA_TESTING.md) when sharing a preview. After
 the release succeeds, remove the temporary opt-in so later tags default back to
 the signed release path:
@@ -136,20 +136,39 @@ For a local tester handoff without publishing a GitHub release, run
 the DMG and its `.sha256`, identify the source commit, and explicitly label
 the build as an unsigned beta that is not notarized by Apple.
 
+### Enable in-app preview updates
+
+Use Sparkle's `generate_keys --account agentnotch-preview` to generate a
+dedicated Ed25519 key pair. Set the printed public key as the repository
+Actions variable `SPARKLE_PREVIEW_ED_PUBLIC_KEY`. Export the corresponding
+private seed with `generate_keys --account agentnotch-preview -x PATH` to a
+private file and set its contents as the Actions secret
+`SPARKLE_PREVIEW_ED_PRIVATE_KEY`. Keep a secure backup of the seed. Installed
+previews pin its public key and need a manual reinstall if the key is lost.
+
+Run the Nightly workflow once with `force` enabled to publish
+`nightly-preview/appcast.xml`. If Developer ID credentials are also
+configured, set `NIGHTLY_RELEASE_MODE=unsigned` to publish to that channel.
+Existing manual previews need one manual install of an updater-enabled build.
+To test the path, install one Nightly Preview, publish a higher build number
+with the same key, then check, install, and confirm the app relaunches from
+Applications. First installation remains subject to Gatekeeper.
+
 ## Nightly builds
 
 Automated nightly builds run via `.github/workflows/nightly.yml`:
 
-- Runs daily at 02:00 UTC and skips when `HEAD` matches `nightly-published`,
-  the commit marker written after release publishing and asset cleanup succeed.
+- Runs daily at 02:00 UTC and skips when `HEAD` matches the selected
+  channel's publish marker (`nightly-published` or `nightly-preview-published`).
+  The marker is written after release publishing and asset cleanup succeed.
   Failed publishing is retried on the next scheduled run regardless of commit age.
 - Can also run manually via `workflow_dispatch`; `force` defaults to `true`
   to rebuild an already published commit. Set it to `false` to use the same skip
   check as scheduled runs.
 - Packaging creates a versioned DMG in `dist/` and copies it to
   `Agent-Notch-Nightly-macOS-arm64.dmg`. Only the fixed Nightly DMG, its
-  `.sha256` checksum, and (for signed builds) `appcast.xml` are published to the
-  rolling `nightly` GitHub prerelease. The DMG and checksum are also kept in the
+  `.sha256` checksum, and any generated `appcast.xml` are published to the
+  rolling `nightly` or `nightly-preview` prerelease. The DMG and checksum are also kept in the
   Actions artifact for 7 days. Obsolete versioned release assets are removed.
 - Signs and notarizes if Developer ID credentials are configured in repository
   secrets; falls back to an ad-hoc signed preview if secrets are unavailable or
@@ -159,5 +178,6 @@ Automated nightly builds run via `.github/workflows/nightly.yml`:
   release when `SPARKLE_ED_PRIVATE_KEY` is set. Apps on the Nightly update
   channel (Settings → General) read
   `https://github.com/Aforno/AgentNotch/releases/download/nightly/appcast.xml`.
-  Ad-hoc nightlies remove that appcast, because Sparkle would reject the build.
+- Ad-hoc nightlies publish to `nightly-preview`. With the preview key pair,
+  they publish an appcast whose archives carry Ed25519 signatures.
 - Does not modify `Casks/agent-notch.rb`.
