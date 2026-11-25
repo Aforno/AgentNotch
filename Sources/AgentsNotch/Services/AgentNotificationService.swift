@@ -36,7 +36,7 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
         // completion-based API so a MainActor-isolated center is not sent
         // across isolation on Swift 6.1 / macOS 15.
         let granted = await withCheckedContinuation { continuation in
-            center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+            center.requestAuthorization(options: [.alert, .badge, .sound]) { @Sendable granted, _ in
                 continuation.resume(returning: granted)
             }
         }
@@ -82,7 +82,8 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
 
     func refreshAuthorizationStatus() {
         guard let center else { return }
-        center.getNotificationSettings { [weak self] settings in
+        // UserNotifications can invoke this callback off the main actor.
+        center.getNotificationSettings { @Sendable [weak self] settings in
             let status = settings.authorizationStatus
             Task { @MainActor in
                 self?.authorizationStatus = status
@@ -145,7 +146,7 @@ final class AgentNotificationService: NSObject, UNUserNotificationCenterDelegate
         if soundEnabled {
             content.sound = .default
         }
-        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
+        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { @Sendable error in
             if let error {
                 Self.logger.error("Failed to schedule notification \(id): \(error.localizedDescription)")
             }
