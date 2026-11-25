@@ -43,7 +43,8 @@ It modifies only its own entries in supported provider hook configuration.
   answers. If no answer arrives within 120 seconds, the provider shows its own
   prompt.
 - Release artifacts cross a separate trust boundary and must match reviewed
-  source, version metadata, Developer ID signing, and Apple notarization.
+  source and version metadata. Production releases use Developer ID signing
+  and Apple notarization.
 
 ## Security invariants
 
@@ -58,16 +59,17 @@ It modifies only its own entries in supported provider hook configuration.
   PermissionRequest. Missing context keeps the request visible.
 - Update checks fetch only the GitHub Releases Sparkle appcast. The DMG is
   downloaded when the user chooses Install or opts into automatic installation.
-  Sparkle verifies the EdDSA
-  signature against the baked-in public key and the Developer ID signature
-  before replacing the running app. System profile data is not sent.
+  Preview updates use a separate feed and public key. Sparkle verifies the
+  preview archive's Ed25519 signature before extraction. System profile data
+  is not sent.
 - Integration changes are atomic and idempotent, preserve unrelated settings,
   preserve restrictive file permissions and symlinked dotfiles, and remove
   only Agent Notch entries.
 - Untrusted event content is rendered as data. It must not become shell input,
   hook configuration, executable code, or automatic navigation.
-- Published binaries are release builds with debug-only UI removed, signed
-  inside-out with hardened runtime, notarized, stapled, and checksummed.
+- Published binaries are release builds with debug-only UI removed and ship
+  with checksums. Production releases add hardened runtime, notarization,
+  and stapling. Previews use ad-hoc signing.
 - Credentials and signing material must never enter source, artifacts, or logs.
 
 ## Reportable findings and severity context

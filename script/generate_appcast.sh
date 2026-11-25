@@ -8,6 +8,7 @@ ARCHIVE="$ROOT_DIR/dist/Agent-Notch-$VERSION-macOS-arm64.dmg"
 OUTPUT=""
 ED_KEY_FILE=""
 DOWNLOAD_PREFIX=""
+PREVIEW_UPDATES=false
 SPARKLE_VERSION="2.9.6"
 SPARKLE_TARBALL_SHA256="52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-Aforno/AgentNotch}"
@@ -15,7 +16,7 @@ GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-Aforno/AgentNotch}"
 usage() {
   cat >&2 <<'USAGE'
 usage: generate_appcast.sh [--archive PATH] [--output PATH] [--ed-key-file PATH]
-                           [--download-url-prefix URL]
+                           [--download-url-prefix URL] [--preview-updates]
 USAGE
 }
 
@@ -46,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       VERSION="$2"
       shift 2
       ;;
+    --preview-updates)
+      PREVIEW_UPDATES=true
+      shift
+      ;;
     *)
       usage
       exit 2
@@ -68,6 +73,8 @@ fi
 PRIVATE_KEY=""
 if [[ -n "$ED_KEY_FILE" ]]; then
   PRIVATE_KEY="$(tr -d '[:space:]' < "$ED_KEY_FILE")"
+elif [[ "$PREVIEW_UPDATES" == true ]]; then
+  PRIVATE_KEY="$(printf '%s' "${SPARKLE_PREVIEW_ED_PRIVATE_KEY:?missing preview update signing key}" | tr -d '[:space:]')"
 elif [[ -n "${SPARKLE_ED_PRIVATE_KEY:-}" ]]; then
   PRIVATE_KEY="$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | tr -d '[:space:]')"
 else
@@ -75,16 +82,31 @@ else
   exit 1
 fi
 
-python3 - "$PRIVATE_KEY" <<'PY'
+printf '%s\n' "$PRIVATE_KEY" | python3 -c '
 import base64, sys
-key = sys.argv[1]
 try:
-    decoded = base64.b64decode(key)
+    decoded = base64.b64decode(sys.stdin.readline().strip(), validate=True)
 except Exception as error:
     raise SystemExit(f"Sparkle private key is not valid base64: {error}") from error
 if len(decoded) != 32:
     raise SystemExit(f"Sparkle private key must decode to 32 bytes, not {len(decoded)}")
-PY
+'
+
+if [[ "$PREVIEW_UPDATES" == true ]]; then
+  # Sparkle signs with the seed even if it does not match the public key in the app.
+  printf '%s\n' "$PRIVATE_KEY" | swift -e '
+import CryptoKit
+import Foundation
+
+guard let input = readLine(),
+      let seed = Data(base64Encoded: input),
+      let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: seed),
+      key.publicKey.rawRepresentation.base64EncodedString() == CommandLine.arguments[1] else {
+    FileHandle.standardError.write(Data("Preview Sparkle public and private keys do not match.\n".utf8))
+    exit(1)
+}
+' "${SPARKLE_PREVIEW_ED_PUBLIC_KEY:?missing preview update public key}"
+fi
 
 TOOLS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agentnotch-sparkle-tools.XXXXXX")"
 ARCHIVES_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agentnotch-sparkle-archives.XXXXXX")"
@@ -111,7 +133,11 @@ chmod +x "$GENERATE_APPCAST"
 
 cp "$ARCHIVE" "$ARCHIVES_DIR/$(basename "$ARCHIVE")"
 if [[ -z "$DOWNLOAD_PREFIX" ]]; then
-  DOWNLOAD_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/"
+  if [[ "$PREVIEW_UPDATES" == true ]]; then
+    DOWNLOAD_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly-preview/"
+  else
+    DOWNLOAD_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/"
+  fi
 fi
 printf '%s\n' "$PRIVATE_KEY" | "$GENERATE_APPCAST" \
   --ed-key-file - \

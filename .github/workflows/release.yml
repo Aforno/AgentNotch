@@ -92,6 +92,7 @@ jobs:
           rm -f "$CERTIFICATE_PATH"
 
       - name: Package, notarize, and staple
+        id: package
         env:
           RELEASE_MODE: ${{ vars.RELEASE_MODE }}
           SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
@@ -99,12 +100,20 @@ jobs:
           API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          SPARKLE_PREVIEW_ED_PUBLIC_KEY: ${{ vars.SPARKLE_PREVIEW_ED_PUBLIC_KEY }}
+          SPARKLE_PREVIEW_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_PREVIEW_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           # Use the same time-based build number as nightly releases.
           export AGENT_NOTCH_BUILD_NUMBER="$(date -u +%s)"
           if [[ "$RELEASE_MODE" == "unsigned-prerelease" ]]; then
-            ./script/package_release.sh --adhoc
+            if [[ -n "$SPARKLE_PREVIEW_ED_PUBLIC_KEY" || -n "$SPARKLE_PREVIEW_ED_PRIVATE_KEY" ]]; then
+              : "${SPARKLE_PREVIEW_ED_PRIVATE_KEY:?missing preview update signing key}"
+              ./script/package_release.sh --adhoc --preview-updates
+              echo "preview_updates=true" >> "$GITHUB_OUTPUT"
+            else
+              ./script/package_release.sh --adhoc
+            fi
             exit 0
           fi
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
@@ -123,6 +132,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_MODE: ${{ vars.RELEASE_MODE }}
+          PREVIEW_UPDATES: ${{ steps.package.outputs.preview_updates }}
         run: |
           set -euo pipefail
           VERSION="$(tr -d '[:space:]' < VERSION)"
@@ -137,10 +147,13 @@ jobs:
 
           If blocked, try opening the app once, then use **System Settings → Privacy & Security → Open Anyway** and confirm the prompt. See [Apple's instructions](https://support.apple.com/en-us/102445).
 
-          **Updates are manual:** download and verify the new DMG, quit Agent Notch from Settings → General, replace the app in Applications, and reopen it. History and preferences stay in place.
-
           Try the [beta tester guide](https://github.com/Aforno/AgentNotch/blob/main/docs/BETA_TESTING.md) and include this release URL in feedback.
           EOF
+            if [[ "$PREVIEW_UPDATES" == "true" ]]; then
+              printf '\nGet updates from **Settings → General → Updates** via the Nightly Preview feed.\n' >> "$NOTES_FILE"
+            else
+              printf '\n**Updates are manual.** Quit Agent Notch and replace it in Applications with the latest verified DMG.\n' >> "$NOTES_FILE"
+            fi
             gh release create "$GITHUB_REF_NAME" \
               "$DMG" \
               "$DMG.sha256" \

@@ -45,9 +45,9 @@ final class SparkleUpdateDriver: NSObject, SPUUserDriver {
     ) {
         cancellation = nil
         // Sparkle can resume a staged archive before it consults the selected feed.
-        if let archive = appcastItem.fileURL,
-           let channel = UpdateChannel.archiveChannel(for: archive), channel != UpdateChannel.current {
-            service?.discardPreviousOffer()
+        if let service, let archive = appcastItem.fileURL,
+           let channel = UpdateChannel.archiveChannel(for: archive), channel != service.selectedChannel {
+            service.discardPreviousOffer()
         }
         guard let activeService else {
             reply(state.stage == .notDownloaded ? .dismiss : .skip)

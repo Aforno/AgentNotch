@@ -1,7 +1,8 @@
 # Agent Notch beta testing
 
 Agent Notch is a pre-1.0 beta for Apple Silicon Macs running macOS 14 or later.
-Unsigned previews are not notarized by Apple and update manually.
+Unsigned previews are not notarized by Apple. Release notes indicate whether
+a build supports in-app updates.
 
 ## Install
 
@@ -26,10 +27,10 @@ identify the build you tested.
    state appears in Activity Center. Try the session's open action.
 5. Quit using **Settings → General → Quit Agent Notch**, then reopen the app.
    Check that history remains and new tasks still report activity.
-6. Open **Settings → General → View Downloads**. For an unsigned beta, this
-   should open the release downloads page; updates are installed by quitting
-   and replacing the app in Applications. Check history after a manual update
-   when another build becomes available.
+6. Open **Settings → General → Updates**. If the build shows **Check for
+   Updates**, install the next available preview from there and confirm the app
+   relaunches with your history intact. If it shows **View Downloads**, quit
+   and replace the app in Applications with the newer build.
 7. When finished testing, remove the observer in **Settings → Integrations**.
    Other hooks should remain. Run another task in the provider to check that
    it still works normally. You can reinstall the observer to keep using it.

@@ -9,9 +9,10 @@ MIN_SYSTEM_VERSION="14.0"
 CONFIGURATION="debug"
 BUILD_ARCH=""
 SIGN_IDENTITY="-"
+PREVIEW_UPDATES=false
 
 usage() {
-  echo "usage: $0 [--configuration debug|release] [--arch arm64] [--sign IDENTITY]" >&2
+  echo "usage: $0 [--configuration debug|release] [--arch arm64] [--sign IDENTITY] [--preview-updates]" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -31,6 +32,10 @@ while [[ $# -gt 0 ]]; do
       SIGN_IDENTITY="$2"
       shift 2
       ;;
+    --preview-updates)
+      PREVIEW_UPDATES=true
+      shift
+      ;;
     *)
       usage
       exit 2
@@ -47,19 +52,26 @@ VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
 BUILD_NUMBER="${AGENT_NOTCH_BUILD_NUMBER:-1}"
 MANUAL_UPDATES=false
 AUTOMATIC_UPDATE_CHECKS=true
-if [[ "$SIGN_IDENTITY" == "-" ]]; then
-  MANUAL_UPDATES=true
-  AUTOMATIC_UPDATE_CHECKS=false
-fi
 SPARKLE_PUBLIC_KEY_FILE="$ROOT_DIR/Resources/SparklePublicEDKey"
 SPARKLE_FEED_URL="https://github.com/Aforno/AgentNotch/releases/latest/download/appcast.xml"
 SPARKLE_PUBLIC_KEY="$(tr -d '[:space:]' < "$SPARKLE_PUBLIC_KEY_FILE")"
+if [[ "$PREVIEW_UPDATES" == true ]]; then
+  if [[ "$SIGN_IDENTITY" != "-" || "$CONFIGURATION" != release || -z "${SPARKLE_PREVIEW_ED_PUBLIC_KEY:-}" ]]; then
+    echo "--preview-updates requires an ad-hoc release build and SPARKLE_PREVIEW_ED_PUBLIC_KEY" >&2
+    exit 2
+  fi
+  SPARKLE_FEED_URL="https://github.com/Aforno/AgentNotch/releases/download/nightly-preview/appcast.xml"
+  SPARKLE_PUBLIC_KEY="$SPARKLE_PREVIEW_ED_PUBLIC_KEY"
+elif [[ "$SIGN_IDENTITY" == "-" ]]; then
+  MANUAL_UPDATES=true
+  AUTOMATIC_UPDATE_CHECKS=false
+fi
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   echo "VERSION must contain a semantic version" >&2
   exit 1
 fi
 if [[ ! "$SPARKLE_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]+=*$ ]]; then
-  echo "Resources/SparklePublicEDKey must contain a base64 EdDSA public key" >&2
+  echo "Sparkle public key must be base64-encoded" >&2
   exit 1
 fi
 python3 - "$SPARKLE_PUBLIC_KEY" <<'PY'
@@ -173,6 +185,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$SPARKLE_FEED_URL</string>
   <key>SUPublicEDKey</key>
   <string>$SPARKLE_PUBLIC_KEY</string>
+  <key>SUVerifyUpdateBeforeExtraction</key>
+  <$PREVIEW_UPDATES/>
   <key>SUEnableAutomaticChecks</key>
   <$AUTOMATIC_UPDATE_CHECKS/>
   <key>SUAutomaticallyUpdate</key>

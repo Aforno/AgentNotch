@@ -8,6 +8,7 @@ APP_BUNDLE="$DIST_DIR/Agent Notch.app"
 DMG_NAME="Agent-Notch-$VERSION-macOS-arm64.dmg"
 SIGN_IDENTITY=""
 USE_ADHOC=false
+PREVIEW_UPDATES=false
 NOTARIZE=false
 KEYCHAIN_PROFILE=""
 API_KEY_PATH=""
@@ -17,6 +18,7 @@ API_ISSUER_ID=""
 usage() {
   cat >&2 <<'USAGE'
 usage: package_release.sh (--identity IDENTITY | --adhoc) [--notarize]
+                          [--preview-updates]
                           [--keychain-profile PROFILE]
                           [--api-key-path PATH --api-key-id ID --api-issuer-id ID]
 USAGE
@@ -31,6 +33,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --adhoc)
       USE_ADHOC=true
+      shift
+      ;;
+    --preview-updates)
+      PREVIEW_UPDATES=true
       shift
       ;;
     --notarize)
@@ -75,6 +81,14 @@ fi
 if [[ "$USE_ADHOC" == true ]]; then
   SIGN_IDENTITY="-"
 fi
+PREVIEW_ARGS=()
+if [[ "$PREVIEW_UPDATES" == true ]]; then
+  if [[ "$USE_ADHOC" != true ]]; then
+    echo "--preview-updates requires --adhoc" >&2
+    exit 2
+  fi
+  PREVIEW_ARGS+=(--preview-updates)
+fi
 if [[ "$NOTARIZE" == true && "$SIGN_IDENTITY" == "-" ]]; then
   echo "notarization requires a Developer ID Application identity" >&2
   exit 2
@@ -90,7 +104,7 @@ fi
 "$ROOT_DIR/script/stage_app.sh" \
   --configuration release \
   --arch arm64 \
-  --sign "$SIGN_IDENTITY"
+  --sign "$SIGN_IDENTITY" ${PREVIEW_ARGS[@]+"${PREVIEW_ARGS[@]}"}
 
 WORK_DIR="$(mktemp -d "$DIST_DIR/.package.XXXXXX")"
 IMAGE_ROOT="$WORK_DIR/image"
@@ -118,7 +132,7 @@ if [[ ! -L "$MOUNT_POINT/Applications" || "$(readlink "$MOUNT_POINT/Applications
   echo "disk image must contain an Applications shortcut" >&2
   exit 1
 fi
-"$ROOT_DIR/script/verify_release.sh" --app "$MOUNT_POINT/Agent Notch.app"
+"$ROOT_DIR/script/verify_release.sh" --app "$MOUNT_POINT/Agent Notch.app" ${PREVIEW_ARGS[@]+"${PREVIEW_ARGS[@]}"}
 hdiutil detach "$MOUNT_POINT"
 MOUNTED=false
 

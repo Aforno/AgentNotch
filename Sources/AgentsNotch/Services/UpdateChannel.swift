@@ -2,17 +2,21 @@ import Foundation
 import Sparkle
 
 /// Which GitHub release feed Sparkle checks. Stable uses `SUFeedURL` from Info.plist.
-enum UpdateChannel: String, CaseIterable, Identifiable {
+enum UpdateChannel: String, Identifiable {
     case stable
     case nightly
+    case preview
 
     static let nightlyFeedURL = "https://github.com/Aforno/AgentNotch/releases/download/nightly/appcast.xml"
+    static let previewFeedURL = "https://github.com/Aforno/AgentNotch/releases/download/nightly-preview/appcast.xml"
+    static let selectableChannels: [Self] = [.stable, .nightly]
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .stable: "Stable"
         case .nightly: "Nightly"
+        case .preview: "Preview"
         }
     }
 
@@ -21,6 +25,7 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
         switch self {
         case .stable: nil
         case .nightly: Self.nightlyFeedURL
+        case .preview: Self.previewFeedURL
         }
     }
 
@@ -30,20 +35,21 @@ enum UpdateChannel: String, CaseIterable, Identifiable {
         switch self {
         case .stable: Self.downloadsURL.appendingPathComponent("latest")
         case .nightly: Self.downloadsURL.appendingPathComponent("tag/nightly")
+        case .preview: Self.downloadsURL.appendingPathComponent("tag/nightly-preview")
         }
     }
 
-    /// Recognizes archives published by the stable and rolling nightly workflows.
+    /// Recognizes archives by their release tag, including cached Sparkle offers.
     static func archiveChannel(for url: URL) -> Self? {
         let release = url.deletingLastPathComponent()
         guard release.deletingLastPathComponent().lastPathComponent == "download" else { return nil }
         if release.lastPathComponent == "nightly" { return .nightly }
+        if release.lastPathComponent == "nightly-preview" { return .preview }
         return release.lastPathComponent.hasPrefix("v") ? .stable : nil
     }
 
-    static var current: UpdateChannel {
-        UserDefaults.standard.string(forKey: AppPreferences.Key.updateChannel)
-            .flatMap(UpdateChannel.init(rawValue:)) ?? .stable
+    static func selected(in preferences: UserDefaults) -> Self {
+        preferences.string(forKey: AppPreferences.Key.updateChannel) == nightly.rawValue ? .nightly : .stable
     }
 }
 
@@ -56,6 +62,6 @@ final class UpdateChannelFeedDelegate: NSObject, SPUUpdaterDelegate {
     }
 
     func feedURLString(for updater: SPUUpdater) -> String? {
-        UpdateChannel.current.feedURLString
+        service?.selectedChannel.feedURLString
     }
 }

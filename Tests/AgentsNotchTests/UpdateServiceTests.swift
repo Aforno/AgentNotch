@@ -134,6 +134,22 @@ final class UpdateServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPreviewUsesItsOwnFeedDespiteSavedNightlyPreference() throws {
+        let bundle = try makePackagedBundle(manualUpdates: false, feed: UpdateChannel.previewFeedURL)
+        let preferences = try makePreferences()
+        preferences.set(UpdateChannel.nightly.rawValue, forKey: AppPreferences.Key.updateChannel)
+        let service = UpdateService(bundle: bundle, preferences: preferences)
+
+        XCTAssertNil(UpdateService.unavailabilityMessage(in: bundle))
+        XCTAssertEqual(service.selectedChannel, .preview)
+        let archive = try XCTUnwrap(URL(string: UpdateChannel.previewFeedURL))
+            .deletingLastPathComponent().appendingPathComponent("Agent-Notch-Nightly-macOS-arm64.dmg")
+        XCTAssertEqual(UpdateChannel.archiveChannel(for: archive), .preview)
+        service.noteNoUpdate(aheadOfSelectedRelease: true)
+        XCTAssertEqual(service.state, .upToDate)
+    }
+
+    @MainActor
     func testSourceBuildCannotStartOrInstallUpdates() {
         let service = UpdateService()
         service.start()
@@ -154,7 +170,7 @@ final class UpdateServiceTests: XCTestCase {
                 acknowledged = true
             }
             XCTAssertTrue(acknowledged, "\(reason)")
-            let waitingForStable = reason == .onNewerThanLatestVersion && UpdateChannel.current == .stable
+            let waitingForStable = reason == .onNewerThanLatestVersion && service.selectedChannel == .stable
             XCTAssertEqual(service.state, waitingForStable ? .awaitingStableRelease : .upToDate, "\(reason)")
         }
     }
@@ -200,7 +216,7 @@ final class UpdateServiceTests: XCTestCase {
     }
 
     /// Models packaged metadata and an embedded framework without starting a real updater.
-    private func makePackagedBundle(manualUpdates: Bool) throws -> Bundle {
+    private func makePackagedBundle(manualUpdates: Bool, feed: String = "https://example.com/appcast.xml") throws -> Bundle {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let app = directory.appendingPathComponent("Agent Notch.app", isDirectory: true)
@@ -213,7 +229,7 @@ final class UpdateServiceTests: XCTestCase {
         let info: [String: Any] = [
             "CFBundleIdentifier": "com.afonsoferreira.AgentNotch",
             "CFBundlePackageType": "APPL",
-            "SUFeedURL": "https://example.com/appcast.xml",
+            "SUFeedURL": feed,
             "SUPublicEDKey": "test-key",
             "AgentNotchManualUpdates": manualUpdates,
         ]
